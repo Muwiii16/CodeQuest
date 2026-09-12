@@ -1,0 +1,9 @@
+# Copy this file to supabase.properties (same folder) and fill in your own
+# project's values from Supabase: Project Settings -> API.
+# supabase.properties is gitignored — never commit real keys.
+
+# Full REST base URL, including the /rest/v1/ suffix.
+supabase.url=https://YOUR_PROJECT_REF.supabase.co/rest/v1/
+
+# The anon/public API key (NOT the service_role key).
+supabase.anonKey=YOUR_ANON_KEY
