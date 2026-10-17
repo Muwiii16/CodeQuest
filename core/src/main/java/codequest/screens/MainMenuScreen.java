@@ -1,79 +1,55 @@
 package codequest.screens;
 
-import com.badlogic.gdx.Gdx;
+import codequest.Main;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
-import codequest.Main;
+import com.badlogic.gdx.utils.Align;
 
-/** Port of the Swing prototype's MainMenuPanel. */
+/** The student's main menu: Campaign, Class Test, Cosmetics, Certificates. */
 public class MainMenuScreen extends BaseScreen {
 
-    public MainMenuScreen(Main game, String username, int unlockedStage) {
-        setBackground("images/background.png");
+    public MainMenuScreen(Main game, String username) {
+        setBackground(Art.BG_MENU);
 
-        Image title = new Image(new TextureRegionDrawable(new TextureRegion(texture("images/titles/game_title.png"))));
-        float titleWidth = 800f;
+        Image title = new Image(new TextureRegionDrawable(new TextureRegion(texture(Art.LOGO))));
+        float titleWidth = 1000f;
         float titleHeight = titleWidth * (title.getDrawable().getMinHeight() / title.getDrawable().getMinWidth());
-        placeTopLeft(title, (VIRTUAL_WIDTH - titleWidth) / 2f, 150f - titleHeight / 2f, titleWidth, titleHeight);
+        placeTopLeft(title, (VIRTUAL_WIDTH - titleWidth) / 2f, 170f - titleHeight / 2f, titleWidth, titleHeight);
         stage.addActor(title);
 
-        float btnWidth = 720f;
-        float btnHeight = 180f;
+        float btnWidth = 560f;
+        float btnHeight = 140f;
         float btnX = (VIRTUAL_WIDTH - btnWidth) / 2f;
-        float startY = 330f;
-        float spacing = 130f;
+        float startY = 290f;
+        float spacing = 165f;
 
-        ImageButton startBtn = imageButton("images/buttons/start_btn_def.png", "images/buttons/start_btn_hover.png");
-        ImageButton howToBtn = imageButton("images/buttons/htp_btn_def.png", "images/buttons/htp_btn_hover.png");
-        ImageButton codexBtn = imageButton("images/buttons/codex_btn_def.png", "images/buttons/codex_btn_hover.png");
-        ImageButton ldbBtn = imageButton("images/buttons/ldb_btn_def.png", "images/buttons/ldb_btn_hover.png");
-        ImageButton exitBtn = imageButton("images/buttons/exit_btn_def.png", "images/buttons/exit_btn_hover.png");
+        menuButton("campaign", btnX, startY, btnWidth, btnHeight, () -> game.setScreen(new CampaignScreen(game, username)));
+        menuButton("class_test", btnX, startY + spacing, btnWidth, btnHeight,
+                () -> game.setScreen(new ClassTestScreen(game, username)));
+        menuButton("cosmetics", btnX, startY + spacing * 2, btnWidth, btnHeight,
+                () -> game.setScreen(new CosmeticsScreen(game, username)));
+        menuButton("certificates", btnX, startY + spacing * 3, btnWidth, btnHeight,
+                () -> game.setScreen(new CertificatesScreen(game, username)));
 
-        placeTopLeft(startBtn, btnX, startY, btnWidth, btnHeight);
-        placeTopLeft(howToBtn, btnX, startY + spacing, btnWidth, btnHeight);
-        placeTopLeft(codexBtn, btnX, startY + spacing * 2, btnWidth, btnHeight);
-        placeTopLeft(ldbBtn, btnX, startY + spacing * 3, btnWidth, btnHeight);
-        placeTopLeft(exitBtn, btnX, startY + spacing * 4, btnWidth, btnHeight);
+        text("Student:  " + username, VIRTUAL_WIDTH - 620, 28, 380, 40, 1.5f, new Color(0.8f, 0.87f, 1f, 1f), Align.right);
+        solidButton("Log out", VIRTUAL_WIDTH - 220, 20, 180, 56, new Color(0.2f, 0.26f, 0.5f, 1f),
+                () -> game.setScreen(new LoginScreen(game)));
+    }
 
-        startBtn.addListener(new ClickListener() {
+    private void menuButton(String name, float x, float y, float w, float h, Runnable action) {
+        ImageButton button = imageButton(Art.def(name), Art.hover(name));
+        placeTopLeft(button, x, y, w, h);
+        button.addListener(new ClickListener() {
             @Override
-            public void clicked(InputEvent event, float x, float y) {
-                game.setScreen(new StageSelectScreen(game, username, unlockedStage));
+            public void clicked(InputEvent event, float cx, float cy) {
+                action.run();
             }
         });
-        howToBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                game.setScreen(new HowToPlayScreen(game, username, unlockedStage));
-            }
-        });
-        codexBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                game.setScreen(new CodexScreen(game, username, unlockedStage));
-            }
-        });
-        ldbBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                game.setScreen(new LeaderboardScreen(game, username));
-            }
-        });
-        exitBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.exit();
-            }
-        });
-
-        stage.addActor(startBtn);
-        stage.addActor(howToBtn);
-        stage.addActor(codexBtn);
-        stage.addActor(ldbBtn);
-        stage.addActor(exitBtn);
+        stage.addActor(button);
     }
 }

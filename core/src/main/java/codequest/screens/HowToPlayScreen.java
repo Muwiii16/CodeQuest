@@ -22,16 +22,17 @@ public class HowToPlayScreen extends BaseScreen {
     private final ImageButton nextBtn;
     private final Label pageIndicator;
 
-    public HowToPlayScreen(Main game, String username, int unlockedStage) {
+    /** onBack is what the Back button does (the guide can be opened before logging in). */
+    public HowToPlayScreen(Main game, Runnable onBack) {
         for (int i = 0; i < TOTAL_PAGES; i++) {
-            pages[i] = new TextureRegionDrawable(new TextureRegion(texture("images/HowToPlay" + (i + 1) + ".png")));
+            pages[i] = new TextureRegionDrawable(new TextureRegion(texture(Art.howToPlayPage(i + 1))));
         }
 
         pageImage = new Image(pages[0]);
         pageImage.setBounds(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         stage.addActor(pageImage);
 
-        Image titleGraphic = new Image(new TextureRegionDrawable(new TextureRegion(texture("images/titles/htp_title.png"))));
+        Image titleGraphic = new Image(new TextureRegionDrawable(new TextureRegion(texture(Art.TITLE_HOW_TO_PLAY))));
         float titleWidth = 700f;
         float titleHeight = titleWidth * (titleGraphic.getDrawable().getMinHeight() / titleGraphic.getDrawable().getMinWidth());
         placeTopLeft(titleGraphic, (VIRTUAL_WIDTH - titleWidth) / 2f, 90f - titleHeight / 2f, titleWidth, titleHeight);
@@ -47,17 +48,17 @@ public class HowToPlayScreen extends BaseScreen {
         float prevX = VIRTUAL_WIDTH - 620f;
         float nextX = VIRTUAL_WIDTH - 320f;
 
-        ImageButton backBtn = imageButton("images/buttons/back_btn_def.png", "images/buttons/back_btn_hover.png");
+        ImageButton backBtn = imageButton(Art.def("back_small"), Art.hover("back_small"));
         placeTopLeft(backBtn, backX, topY, btnWidth, btnHeight);
         backBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                game.setScreen(new MainMenuScreen(game, username, unlockedStage));
+                onBack.run();
             }
         });
         stage.addActor(backBtn);
 
-        prevBtn = imageButton("images/buttons/prev_btn_def.png", "images/buttons/prev_btn_hover.png");
+        prevBtn = imageButton(Art.def("prev"), Art.hover("prev"));
         placeTopLeft(prevBtn, prevX, topY, btnWidth, btnHeight);
         prevBtn.addListener(new ClickListener() {
             @Override
@@ -70,7 +71,7 @@ public class HowToPlayScreen extends BaseScreen {
         });
         stage.addActor(prevBtn);
 
-        nextBtn = imageButton("images/buttons/next_btn_def.png", "images/buttons/next_btn_hover.png");
+        nextBtn = imageButton(Art.def("next"), Art.hover("next"));
         placeTopLeft(nextBtn, nextX, topY, btnWidth, btnHeight);
         nextBtn.addListener(new ClickListener() {
             @Override

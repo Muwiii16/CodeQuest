@@ -11,8 +11,13 @@ import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -35,6 +40,8 @@ public abstract class BaseScreen implements Screen {
 
     private final List<Texture> ownedTextures = new ArrayList<>();
     private BitmapFont sharedFont;
+    private Texture whiteTexture;
+    private final List<BitmapFont> extraFonts = new ArrayList<>();
 
     protected BaseScreen() {
         stage = new Stage(new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
@@ -86,6 +93,155 @@ public abstract class BaseScreen implements Screen {
             sharedFont = new BitmapFont();
         }
         return sharedFont;
+    }
+
+    /** Index to pass to {@link #clearFrom(int)} later: everything added after this point is rebuildable. */
+    protected int mark() {
+        return stage.getActors().size;
+    }
+
+    protected void clearFrom(int mark) {
+        while (stage.getActors().size > mark) {
+            Actor a = stage.getActors().peek();
+            a.remove();
+        }
+    }
+
+    // ── plain-shape UI helpers (flat colour rects, text, buttons, inputs) ──
+
+    private TextureRegionDrawable whiteDrawable() {
+        if (whiteTexture == null) {
+            whiteTexture = solidTexture(Color.WHITE);
+        }
+        return new TextureRegionDrawable(new TextureRegion(whiteTexture));
+    }
+
+    /** A flat colored rectangle (a tinted 1x1 white texture), added to the stage. */
+    protected Image rect(float x, float yFromTop, float w, float h, Color color) {
+        Image image = new Image(whiteDrawable());
+        image.setColor(color);
+        placeTopLeft(image, x, yFromTop, w, h);
+        stage.addActor(image);
+        return image;
+    }
+
+    /** A text label inside the given box (top-left coordinates), added to the stage. */
+    protected Label text(String text, float x, float yFromTop, float w, float h, float scale, Color color, int align) {
+        Label label = new Label(text, new Label.LabelStyle(defaultFont(), color));
+        label.setFontScale(scale);
+        label.setAlignment(align);
+        label.setTouchable(Touchable.disabled);
+        placeTopLeft(label, x, yFromTop, w, h);
+        stage.addActor(label);
+        return label;
+    }
+
+    /** A multi-line text box on a dark box with a hint shown while empty. */
+    protected com.badlogic.gdx.scenes.scene2d.ui.TextArea textArea(String hint, float x, float yFromTop, float w, float h) {
+        rect(x, yFromTop, w, h, new Color(0.04f, 0.05f, 0.1f, 1f));
+        Texture cursor = solidTexture(Color.WHITE);
+        TextField.TextFieldStyle style = new TextField.TextFieldStyle();
+        style.font = scaledFont(1.5f);
+        style.fontColor = Color.WHITE;
+        style.messageFontColor = new Color(0.6f, 0.62f, 0.7f, 1f);
+        TextureRegionDrawable pad = new TextureRegionDrawable(new TextureRegion(solidTexture(new Color(0, 0, 0, 0))));
+        pad.setLeftWidth(16f);
+        pad.setTopHeight(12f);
+        style.background = pad;
+        style.cursor = new TextureRegionDrawable(new TextureRegion(cursor));
+        style.selection = new TextureRegionDrawable(new TextureRegion(cursor));
+        com.badlogic.gdx.scenes.scene2d.ui.TextArea area = new com.badlogic.gdx.scenes.scene2d.ui.TextArea("", style);
+        area.setMessageText(hint);
+        placeTopLeft(area, x, yFromTop, w, h);
+        stage.addActor(area);
+        return area;
+    }
+
+    private Label toastLabel;
+
+    /** A short status line at the bottom of the screen that fades away after a few seconds. */
+    protected void toast(String message, boolean ok) {
+        if (toastLabel != null) {
+            toastLabel.remove();
+        }
+        toastLabel = text(message, 0, 1030, VIRTUAL_WIDTH, 40, 1.6f,
+                ok ? new Color(0.55f, 0.9f, 0.65f, 1f) : new Color(1f, 0.55f, 0.5f, 1f), Align.center);
+        toastLabel.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence(
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.delay(4f),
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.removeActor()));
+    }
+
+    /** A flat colored button with a border and a hover color; returns the clickable fill. */
+    protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Runnable action) {
+        return solidButton(text, x, yFromTop, w, h, fill, Color.WHITE, action);
+    }
+
+    protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Color textColor,
+            Runnable action) {
+        Color border = new Color(Math.min(1f, fill.r + 0.25f), Math.min(1f, fill.g + 0.25f),
+                Math.min(1f, fill.b + 0.25f), 1f);
+        Color hover = new Color(Math.min(1f, fill.r + 0.12f), Math.min(1f, fill.g + 0.12f),
+                Math.min(1f, fill.b + 0.12f), 1f);
+        rect(x, yFromTop, w, h, border).setTouchable(Touchable.disabled);
+        Image body = rect(x + 3, yFromTop + 3, w - 6, h - 6, fill);
+        body.addListener(new ClickListener() {
+            @Override
+            public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
+                body.setColor(hover);
+            }
+
+            @Override
+            public void exit(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor to) {
+                body.setColor(fill);
+            }
+
+            @Override
+            public void clicked(InputEvent event, float cx, float cy) {
+                action.run();
+            }
+        });
+        text(text, x, yFromTop, w, h, Math.min(1.9f, h / 38f), textColor, Align.center);
+        return body;
+    }
+
+    /** A text input on a dark box with a hint shown while empty. */
+    protected TextField textField(String hint, boolean password, float x, float yFromTop, float w, float h) {
+        return textField(hint, password, x, yFromTop, w, h, new Color(0.04f, 0.05f, 0.1f, 1f),
+                new Color(1f, 1f, 1f, 0.25f), Color.WHITE, new Color(0.6f, 0.62f, 0.7f, 1f));
+    }
+
+    /** Same input with custom colors (box, underline, typed text, hint text), e.g. for light panels. */
+    protected TextField textField(String hint, boolean password, float x, float yFromTop, float w, float h,
+            Color box, Color underline, Color textColor, Color hintColor) {
+        rect(x, yFromTop, w, h, box);
+        rect(x, yFromTop + h - 3, w, 3, underline);
+        Texture cursor = solidTexture(Color.WHITE);
+        TextField.TextFieldStyle style = new TextField.TextFieldStyle();
+        style.font = scaledFont(Math.min(1.8f, h / 34f));
+        style.fontColor = textColor;
+        style.messageFontColor = hintColor;
+        TextureRegionDrawable pad = new TextureRegionDrawable(new TextureRegion(solidTexture(new Color(0, 0, 0, 0))));
+        pad.setLeftWidth(16f);
+        style.background = pad;
+        style.cursor = new TextureRegionDrawable(new TextureRegion(cursor));
+        style.selection = new TextureRegionDrawable(new TextureRegion(cursor));
+        TextField field = new TextField("", style);
+        field.setMessageText(hint);
+        if (password) {
+            field.setPasswordCharacter('*');
+            field.setPasswordMode(true);
+        }
+        placeTopLeft(field, x, yFromTop, w, h);
+        stage.addActor(field);
+        return field;
+    }
+
+    /** A separate default-style font at the given scale (for TextFields, which can't scale per-widget). */
+    protected BitmapFont scaledFont(float scale) {
+        BitmapFont font = new BitmapFont();
+        font.getData().setScale(scale);
+        extraFonts.add(font);
+        return font;
     }
 
     /** A non-interactive, semi-transparent image for a locked/disabled slot (e.g. a locked stage). */
@@ -156,5 +312,6 @@ public abstract class BaseScreen implements Screen {
         if (sharedFont != null) {
             sharedFont.dispose();
         }
+        extraFonts.forEach(BitmapFont::dispose);
     }
 }
