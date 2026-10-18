@@ -145,4 +145,58 @@ class StageRunTest {
         assertTrue(run.nextChallenge().isEmpty());
         assertTrue(run.isFinished());
     }
+
+    @Test
+    void classTestPointsDependOnSpeedAndStreak() {
+        StageRun run = new StageRun(stage(1, 4), Difficulty.NORMAL, StageRun.Mode.CLASS_TEST, new FakeProvider());
+        run.nextChallenge();
+        StageRun.Outcome first = run.answer("ok", 1f);
+        assertEquals(1000, first.points());
+        assertEquals(1, first.streak());
+        run.nextChallenge();
+        StageRun.Outcome second = run.answer("ok", 0f);
+        assertEquals(StageRun.SPEED_POINTS_MIN + StageRun.STREAK_BONUS_STEP, second.points());
+        assertEquals(2, second.streak());
+        assertEquals(first.points() + second.points(), run.score());
+    }
+
+    @Test
+    void classTestMissResetsStreakGivesNoPointsAndCostsNoHealth() {
+        StageRun run = new StageRun(stage(1, 3), Difficulty.NORMAL, StageRun.Mode.CLASS_TEST, new FakeProvider());
+        run.nextChallenge();
+        run.answer("ok", 1f);
+        run.nextChallenge();
+        StageRun.Outcome miss = run.answer("wrong", 1f);
+        assertFalse(miss.correct());
+        assertEquals(0, miss.points());
+        assertEquals(0, miss.damage());
+        assertEquals(0, miss.streak());
+        assertEquals(StageRun.MAX_HP, run.hp());
+        assertEquals(1, run.bestStreak());
+    }
+
+    @Test
+    void classTestNeverEndsEarlyEvenIfEverythingIsWrong() {
+        StageRun run = new StageRun(stage(4, 3), Difficulty.NORMAL, StageRun.Mode.CLASS_TEST, new FakeProvider());
+        answerAll(run, "wrong");
+        assertFalse(run.isFailed());
+        assertTrue(run.isFinished());
+        assertEquals(0, run.score());
+    }
+
+    @Test
+    void streakBonusGrowsThenCaps() {
+        assertEquals(0, StageRun.streakBonus(1));
+        assertEquals(100, StageRun.streakBonus(2));
+        assertEquals(400, StageRun.streakBonus(5));
+        assertEquals(500, StageRun.streakBonus(6));
+        assertEquals(500, StageRun.streakBonus(20));
+    }
+
+    @Test
+    void speedPointsAreClampedToTheirRange() {
+        assertEquals(StageRun.SPEED_POINTS_MAX, StageRun.speedPoints(2f));
+        assertEquals(StageRun.SPEED_POINTS_MIN, StageRun.speedPoints(-1f));
+        assertEquals(750, StageRun.speedPoints(0.5f));
+    }
 }

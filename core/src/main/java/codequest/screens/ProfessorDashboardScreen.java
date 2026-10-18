@@ -4,6 +4,7 @@ import codequest.Main;
 import codequest.data.CampaignData.ClassInfo;
 import codequest.data.ProfessorData;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.utils.Align;
 
 import java.util.List;
@@ -13,23 +14,27 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
 
     private static final int PAGE_SIZE = 6;
 
-    private final List<ClassInfo> classes;
+    private List<ClassInfo> classes = List.of();
     private final int base;
     private int page;
 
     public ProfessorDashboardScreen(Main game, String username) {
         super(game, username, "My Sections", null);
-        ProfessorData data = new ProfessorData();
-        classes = data.listClasses(data.professorId(username));
         solidButton("+  Create class", VIRTUAL_WIDTH - 480, 135, 420, 66, GOOD,
                 () -> game.setScreen(new ProfessorClassCreationScreen(game, username)));
-        text(classes.size() + (classes.size() == 1 ? " section" : " sections"), 60, 140, 600, 56, 1.8f, MUTED, Align.left);
         base = mark();
-        rebuild();
+        load("Loading your sections...", () -> {
+            ProfessorData data = new ProfessorData();
+            return data.listClasses(data.professorId(username));
+        }, list -> {
+            classes = list;
+            rebuild();
+        });
     }
 
     private void rebuild() {
         clearFrom(base);
+        text(classes.size() + (classes.size() == 1 ? " section" : " sections"), 60, 140, 600, 56, 1.8f, MUTED, Align.left);
         if (classes.isEmpty()) {
             card(60, 240, VIRTUAL_WIDTH - 120, 220);
             text("You do not handle any sections yet.\nClick \"Create class\" to set up your first one.", 100, 240,
@@ -48,7 +53,7 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
             float x = x0 + (slot % 3) * (cardW + gap);
             float y = 240 + (slot / 3) * (cardH + gap);
             solidButton("", x, y, cardW, cardH, CARD, () -> game.setScreen(new ProfessorSectionScreen(game, username, c)));
-            rect(x + 3, y + 3, cardW - 6, 8, AMBER).setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+            rect(x + 3, y + 3, cardW - 6, 8, AMBER).setTouchable(Touchable.disabled);
             text(c.sectionName(), x + 40, y + 50, cardW - 80, 70, 3.2f, Color.WHITE, Align.left);
             text(c.courseCode() + "   -   " + c.language(), x + 40, y + 135, cardW - 80, 40, 1.8f, AMBER, Align.left);
             text(c.studentCount() + (c.studentCount() == 1 ? " student" : " students") + "   -   " + c.lessonCount()

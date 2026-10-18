@@ -14,10 +14,12 @@ import codequest.content.StaticChallengeProvider;
 import codequest.data.ClassTestData;
 import codequest.data.DatabaseManager;
 import codequest.data.Lesson;
+import codequest.data.Poller;
+import codequest.data.RunCache;
+import codequest.session.RunReplay;
 import codequest.session.RunSummary;
 import codequest.game.GameMap;
 import codequest.session.CodeBlock;
-import codequest.session.Grades;
 import codequest.session.SectionResult;
 import codequest.session.StageRun;
 import com.badlogic.gdx.Gdx;
@@ -44,6 +46,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * The CodeQuest gameplay screen: an avatar auto-walks the path; as it nears a
@@ -81,6 +86,7 @@ public class PlayScreen extends InputAdapter implements Screen {
     private static final Rect QUIT_BTN = new Rect(SIDEBAR_X + 20, 980, 480, 60);
     private static final Rect CERT_BTN = new Rect(480, 880, 420, 80);
     private static final Rect CONTINUE_PAIRED = new Rect(1020, 880, 420, 80);
+    private static final Color GOLD_TEXT = new Color(1f, 0.82f, 0.3f, 1f);
     private static final Rect CONTINUE_ALONE = new Rect(760, 880, 400, 80);
 
     private final Main game;
@@ -93,7 +99,27 @@ public class PlayScreen extends InputAdapter implements Screen {
     private final DatabaseManager db = new DatabaseManager();
     private Color skinTint = Color.WHITE;
     private Color trailColor;
-    private String rewardLine = "";
+    private volatile String rewardLine = "";
+
+    // The answers so far and the seed the questions are drawn with are saved locally after every answer, so a
+    // class test or a campaign lesson can be resumed after the game was closed.
+    private final String cacheKey;
+    private final long seed;
+    private final List<RunReplay.Answer> answers = new ArrayList<>();
+    private final long studentId;
+    private final ClassTestData tests = new ClassTestData();
+    private final ExecutorService uploader;
+    private volatile boolean saveDone = true;
+
+    // class test only: live standings
+    private record Live(List<ClassTestData.Participant> participants, String status) {
+    }
+
+    private final Poller<Live> standings;
+    private int liveRank;
+    private int liveTotal;
+    private int pointsBehind;
+    private boolean timesUp;
 
     private final StageRun run;
     private final GameMap map;
@@ -127,31 +153,79 @@ public class PlayScreen extends InputAdapter implements Screen {
     private float feedbackTimer;
     private boolean saved;
 
-    /** Campaign play of a lesson. */
-    public PlayScreen(Main game, String username, Lesson lesson) {
-        this(game, username, lesson, null);
+    /** Everything the screen needs from the database, fetched beforehand (see {@link #open}) so starting never freezes. */
+    public record PlayData(List<Challenge> authored, long studentId, Map<String, Long> equipped,
+            List<DatabaseManager.Cosmetic> catalog) {
+
+        static PlayData fetch(DatabaseManager db, String username, Lesson lesson) {
+            CompletableFuture<List<Challenge>> questions = CompletableFuture
+                    .supplyAsync(() -> db.getStageChallenges(lesson.stageId()));
+            CompletableFuture<Object[]> student = CompletableFuture.supplyAsync(() -> {
+                long id = db.profileId(username);
+                return new Object[] { id, id < 0 ? Map.<String, Long>of() : db.getEquippedCosmetics(id) };
+            });
+            CompletableFuture<List<DatabaseManager.Cosmetic>> catalog = CompletableFuture.supplyAsync(db::getCatalog);
+            Object[] s = student.join();
+            @SuppressWarnings("unchecked")
+            Map<String, Long> equipped = (Map<String, Long>) s[1];
+            return new PlayData(questions.join(), (Long) s[0], equipped, catalog.join());
+        }
     }
 
-    /** testSession != null plays the lesson as a class test: fixed difficulty, same questions for everyone. */
-    public PlayScreen(Main game, String username, Lesson lesson, ClassTestData.Session testSession) {
+    /**
+     * Starts a lesson: a loading screen fetches the questions and the student's look in the background, then the
+     * game opens. testSession != null plays it as a class test (fixed difficulty, same questions for everyone);
+     * resume continues from the answers saved on this computer. A null lesson is looked up from the session.
+     */
+    public static void open(Main game, String username, Lesson lesson, ClassTestData.Session testSession,
+            boolean resume, Runnable onFail) {
+        DatabaseManager db = new DatabaseManager();
+        LoadingScreen.open(game, "Loading the lesson...", () -> {
+            Lesson l = lesson != null ? lesson
+                    : new codequest.data.CampaignData().lesson(testSession.stageId()).orElseThrow();
+            return Map.entry(l, PlayData.fetch(db, username, l));
+        }, loaded -> game.setScreen(new PlayScreen(game, username, loaded.getKey(), testSession, resume,
+                loaded.getValue())), onFail);
+    }
+
+    private PlayScreen(Main game, String username, Lesson lesson, ClassTestData.Session testSession, boolean resume,
+            PlayData data) {
         this.game = game;
         this.username = username;
         this.lesson = lesson;
         this.testSession = testSession;
         this.classTest = testSession != null;
         this.startDifficulty = lesson.difficulty();
-        this.rng = classTest ? new Random(testSession.id()) : new Random();
+        this.studentId = data.studentId();
+        this.cacheKey = classTest ? RunCache.classTestKey(testSession.id()) : RunCache.campaignKey(lesson.stageId());
+
+        Optional<RunCache.Saved> savedRun = resume ? RunCache.load(cacheKey, username) : Optional.empty();
+        this.seed = classTest ? testSession.id() : savedRun.map(RunCache.Saved::seed).orElseGet(() -> new Random().nextLong());
+        this.rng = new Random(seed);
 
         Stage stage = DefaultStages.forNumber(DefaultStages.layoutFor(lesson.number()));
         this.towerCount = stage.towerCount();
         // D4 (campaign content) first; the built-in questions only cover what D4 does not have yet.
-        List<Challenge> authored = db.getStageChallenges(lesson.stageId());
-        ChallengeProvider provider = new FallbackChallengeProvider(
-                classTest ? new PooledChallengeProvider(authored, testSession.id()) : new PooledChallengeProvider(authored),
+        ChallengeProvider provider = new FallbackChallengeProvider(new PooledChallengeProvider(data.authored(), seed),
                 new StaticChallengeProvider());
         this.run = new StageRun(stage, startDifficulty, classTest ? StageRun.Mode.CLASS_TEST : StageRun.Mode.CAMPAIGN,
                 provider, lesson.adaptive());
-        loadLook();
+        applyLook(data);
+
+        this.uploader = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "codequest-play-upload");
+            t.setDaemon(true);
+            return t;
+        });
+        if (classTest) {
+            this.standings = new Poller<>(() -> {
+                List<ClassTestData.Participant> ps = tests.participants(testSession.id());
+                String status = tests.session(testSession.id()).map(s -> tests.endIfOver(s, ps)).orElse("active");
+                return new Live(ps, status);
+            }, 2000);
+        } else {
+            this.standings = null;
+        }
 
         this.map = new GameMap(DefaultStages.layoutFor(lesson.number()), (int) MAP_WIDTH);
         this.pts = map.getWaypoints();
@@ -174,6 +248,55 @@ public class PlayScreen extends InputAdapter implements Screen {
                         section.towerTopics().get(j)));
             }
         }
+
+        if (resume && savedRun.isPresent()) {
+            resumeFrom(savedRun.get());
+        } else {
+            RunCache.clear(cacheKey, username);
+        }
+    }
+
+    /** Replays the saved answers so the run is exactly where the student left it. */
+    private void resumeFrom(RunCache.Saved savedRun) {
+        RunReplay.replay(run, savedRun.answers());
+        answers.addAll(savedRun.answers());
+        towerIdx = answers.size();
+        if (run.isFailed() || run.nextChallenge().isEmpty() || towerIdx >= towers.size()) {
+            towerIdx = towers.size();
+            finishRun();
+        } else {
+            distance = Math.max(0f, towers.get(towerIdx).s() - TRIGGER_AHEAD - 160f);
+        }
+    }
+
+    /** Rank among the classmates using the newest standings plus this student's own up-to-date points. */
+    private void updateStanding() {
+        Live live = standings == null ? null : standings.latest();
+        if (live == null) {
+            return;
+        }
+        int mine = run.score();
+        int ahead = 0;
+        int gap = Integer.MAX_VALUE;
+        int total = 1;
+        for (ClassTestData.Participant p : live.participants()) {
+            if (p.studentId() == studentId) {
+                continue;
+            }
+            total++;
+            if (p.score() > mine) {
+                ahead++;
+                gap = Math.min(gap, p.score() - mine);
+            }
+        }
+        liveRank = ahead + 1;
+        liveTotal = total;
+        pointsBehind = ahead == 0 ? 0 : gap;
+    }
+
+    private String placeLine() {
+        updateStanding();
+        return liveTotal > 1 ? "You are #" + liveRank + " of " + liveTotal : "";
     }
 
     private Vector2 pointAt(float s) {
@@ -203,6 +326,14 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     private void update(float dt) {
+        if (classTest && phase != Phase.RESULT && standings != null) {
+            Live live = standings.latest();
+            if (live != null && "completed".equals(live.status())) {
+                timesUp = true; // the professor ended the test, or the time limit passed
+                finishRun();
+                return;
+            }
+        }
         switch (phase) {
             case WALKING -> {
                 distance = Math.min(pathLength, distance + WALK_SPEED * dt);
@@ -257,12 +388,31 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     /** token == null means the player ran out of time. */
     private void resolve(String token) {
-        StageRun.Outcome o = run.answer(token);
+        Challenge answered = active;
+        boolean hinted = hintShown;
+        float fraction = flightTime > 0f ? Math.max(0f, timeLeft / flightTime) : 0f;
+        int takenMs = Math.round((flightTime - Math.max(0f, timeLeft)) * 1000f);
+        StageRun.Outcome o = run.answer(token, fraction);
         towerIdx++;
         active = null;
 
+        answers.add(new RunReplay.Answer(token, fraction));
+        RunCache.save(cacheKey, username, seed, answers);
+        recordAnswer(answered, token, o, takenMs, hinted);
+
         StringBuilder sb = new StringBuilder();
-        if (o.correct()) {
+        if (classTest) {
+            if (o.correct()) {
+                sb.append("Correct!  +").append(o.points());
+                if (o.streak() >= 2) {
+                    sb.append("     streak x").append(o.streak());
+                }
+                feedbackColor = new Color(0.55f, 0.95f, 0.55f, 1f);
+            } else {
+                sb.append(token == null ? "Too slow!" : "Wrong").append("  Answer: ").append(o.correctToken());
+                feedbackColor = new Color(1f, 0.55f, 0.5f, 1f);
+            }
+        } else if (o.correct()) {
             sb.append("Deflected!  +").append(StageRun.POINTS_PER_CORRECT);
             feedbackColor = new Color(0.55f, 0.95f, 0.55f, 1f);
         } else {
@@ -271,11 +421,20 @@ public class PlayScreen extends InputAdapter implements Screen {
                     .append("   -").append(o.damage()).append(" HP");
             feedbackColor = new Color(1f, 0.55f, 0.5f, 1f);
         }
+        if (classTest) {
+            String place = placeLine();
+            if (!place.isEmpty()) {
+                sb.append("\n").append(place);
+                if (pointsBehind > 0) {
+                    sb.append("   -   ").append(pointsBehind).append(" pts behind the next player");
+                }
+            }
+        }
         SectionResult closed = o.sectionClosed();
         if (closed != null) {
             sb.append("\nSection ").append(closed.sectionIndex()).append(" done: ")
                     .append(Math.round(closed.accuracy() * 100)).append("%");
-            if (closed.nextDifficulty() != closed.playedAt()) {
+            if (!classTest && closed.nextDifficulty() != closed.playedAt()) {
                 sb.append("   difficulty ").append(closed.playedAt()).append(" -> ").append(closed.nextDifficulty());
             }
         }
@@ -284,34 +443,60 @@ public class PlayScreen extends InputAdapter implements Screen {
         phase = Phase.FEEDBACK;
     }
 
+    /** Writes the answer to the answer log and, in a class test, the running score; in the background. */
+    private void recordAnswer(Challenge answered, String token, StageRun.Outcome o, int takenMs, boolean hinted) {
+        if (studentId < 0 || answered == null) {
+            return;
+        }
+        int score = run.score();
+        DatabaseManager.AnswerLog entry = new DatabaseManager.AnswerLog(studentId, lesson.stageId(),
+                classTest ? testSession.id() : null, classTest ? "class_test" : "campaign", answered.id(),
+                answered.topic(), answered.difficulty(), token, o.correct(), o.points(), takenMs, hinted ? 1 : 0);
+        uploader.submit(() -> {
+            db.logAnswer(entry);
+            if (classTest) {
+                tests.submitProgress(testSession.id(), studentId, score);
+            }
+        });
+    }
+
     private void finishRun() {
         phase = Phase.RESULT;
         if (saved) {
             return;
         }
         saved = true;
-        if (classTest) {
-            long studentId = db.profileId(username);
-            if (studentId >= 0) {
-                new ClassTestData().submitResult(testSession.id(), studentId, run.score());
-            }
-        } else if (!run.isFailed()) {
-            db.saveLessonProgress(username, lesson.stageId(), startDifficulty.name().toLowerCase(), run.score(),
-                    run.rank().name());
-            List<DatabaseManager.Cosmetic> rewards = db.grantLessonRewards(username, lesson.number());
-            if (!rewards.isEmpty()) {
-                StringBuilder sb = new StringBuilder("Reward unlocked: ");
-                for (int i = 0; i < rewards.size(); i++) {
-                    sb.append(i > 0 ? ", " : "").append(rewards.get(i).name());
+        boolean pass = !classTest && !run.isFailed();
+        saveDone = false;
+        int score = run.score();
+        String rank = run.rank().name();
+        uploader.submit(() -> {
+            try {
+                if (classTest) {
+                    if (studentId >= 0) {
+                        tests.submitResult(testSession.id(), studentId, score);
+                    }
+                } else if (pass) {
+                    db.saveLessonProgress(username, lesson.stageId(), startDifficulty.name().toLowerCase(), score, rank);
+                    List<DatabaseManager.Cosmetic> rewards = db.grantLessonRewards(username, lesson.number());
+                    if (!rewards.isEmpty()) {
+                        StringBuilder sb = new StringBuilder("Reward unlocked: ");
+                        for (int i = 0; i < rewards.size(); i++) {
+                            sb.append(i > 0 ? ", " : "").append(rewards.get(i).name());
+                        }
+                        rewardLine = sb.toString();
+                    }
                 }
-                rewardLine = sb.toString();
+            } finally {
+                saveDone = true;
             }
-        }
+        });
+        RunCache.clear(cacheKey, username); // the run is over: nothing left to resume
     }
 
     private void leave() {
         if (classTest && phase == Phase.RESULT) {
-            game.setScreen(new ClassTestResultScreen(game, username, testSession, RunSummary.of(run, towerCount)));
+            game.setScreen(new ClassTestResultScreen(game, username, testSession, RunSummary.of(run)));
         } else if (classTest) {
             game.setScreen(new MainMenuScreen(game, username));
         } else {
@@ -320,17 +505,12 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     /** Applies the equipped skin and trail (placeholder colors until the cosmetic art exists). */
-    private void loadLook() {
-        long studentId = db.profileId(username);
-        if (studentId < 0) {
+    private void applyLook(PlayData data) {
+        if (data.equipped().isEmpty()) {
             return;
         }
-        Map<String, Long> equipped = db.getEquippedCosmetics(studentId);
-        if (equipped.isEmpty()) {
-            return;
-        }
-        for (DatabaseManager.Cosmetic c : db.getCatalog()) {
-            if (c.id() == equipped.getOrDefault(c.category(), -1L)) {
+        for (DatabaseManager.Cosmetic c : data.catalog()) {
+            if (c.id() == data.equipped().getOrDefault(c.category(), -1L)) {
                 if ("avatar_skin".equals(c.category()) && !c.isDefault()) {
                     skinTint = CosmeticLook.colorOf(c);
                 } else if ("trail".equals(c.category()) && !c.isDefault()) {
@@ -349,6 +529,9 @@ public class PlayScreen extends InputAdapter implements Screen {
         float my = H - world.y;
 
         if (phase == Phase.RESULT) {
+            if (!saveDone) {
+                return true; // still saving the result: wait for it so the next screen shows it
+            }
             if (continueButton().contains(mx, my)) {
                 leave();
             } else if (certificateEligible() && CERT_BTN.contains(mx, my)) {
@@ -362,7 +545,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             return true;
         }
         if (phase == Phase.ENCOUNTER) {
-            if (!hintShown && hintButton().contains(mx, my)) {
+            if (!classTest && !hintShown && hintButton().contains(mx, my)) {
                 hintShown = true;
                 run.useHint();
                 return true;
@@ -505,12 +688,18 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     private void drawSidebarShapes() {
         fill(SIDEBAR_X, 0, W - SIDEBAR_X, H, new Color(0.05f, 0.07f, 0.17f, 0.96f));
-        float ratio = run.hp() / (float) StageRun.MAX_HP;
-        fill(SIDEBAR_X + 20, 150, 480, 26, new Color(0.25f, 0.05f, 0.05f, 1f));
+        float ratio = classTest ? 0f : run.hp() / (float) StageRun.MAX_HP;
+        if (!classTest) {
+            fill(SIDEBAR_X + 20, 150, 480, 26, new Color(0.25f, 0.05f, 0.05f, 1f));
+        }
         Color hpColor = ratio > 0.5f ? new Color(0.2f, 0.75f, 0.2f, 1f)
                 : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.1f, 1f) : new Color(0.8f, 0.15f, 0.15f, 1f);
-        fill(SIDEBAR_X + 20, 150, 480 * ratio, 26, hpColor);
-        fill(QUIT_BTN.x, QUIT_BTN.y, QUIT_BTN.w, QUIT_BTN.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+        if (!classTest) {
+            fill(SIDEBAR_X + 20, 150, 480 * ratio, 26, hpColor);
+        }
+        if (phase != Phase.RESULT) {
+            fill(QUIT_BTN.x, QUIT_BTN.y, QUIT_BTN.w, QUIT_BTN.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+        }
     }
 
     private void drawEncounterShapes() {
@@ -518,7 +707,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         float ratio = Math.max(0f, timeLeft / flightTime);
         fill(60, panelTop, 1280 * ratio, 10, ratio > 0.4f ? new Color(0.3f, 0.8f, 0.3f, 1f)
                 : new Color(0.9f, 0.25f, 0.2f, 1f));
-        if (!hintShown) {
+        if (!hintShown && !classTest) {
             Rect h = hintButton();
             fill(h.x, h.y, h.w, h.h, new Color(0.35f, 0.28f, 0.08f, 1f));
         }
@@ -534,8 +723,17 @@ public class PlayScreen extends InputAdapter implements Screen {
         text(lesson.title(), x, 62, 1.2f, new Color(0.75f, 0.8f, 0.95f, 1f));
         text("Section " + run.currentSectionNumber() + "/" + run.sectionCount()
                 + "    " + run.difficulty(), x, 100, 1.4f, Color.LIGHT_GRAY);
-        text("HP " + run.hp() + "/" + StageRun.MAX_HP, x, 188, 1.3f, Color.WHITE);
-        text("Score " + run.score(), x, 230, 1.5f, new Color(0.7f, 0.9f, 0.55f, 1f));
+        if (classTest) {
+            updateStanding();
+            text(liveTotal > 0 ? "Rank #" + liveRank + " of " + liveTotal : "Rank --", x, 140, 2.2f, GOLD_TEXT);
+            text(pointsBehind > 0 ? pointsBehind + " pts behind the next player"
+                    : liveRank == 1 && liveTotal > 1 ? "You are in the lead!" : "", x, 188, 1.3f, Color.LIGHT_GRAY);
+            text("Points " + run.score(), x, 222, 1.7f, new Color(0.7f, 0.9f, 0.55f, 1f));
+            text(run.streak() >= 2 ? "Streak x" + run.streak() : "", x, 256, 1.4f, new Color(1f, 0.6f, 0.2f, 1f));
+        } else {
+            text("HP " + run.hp() + "/" + StageRun.MAX_HP, x, 188, 1.3f, Color.WHITE);
+            text("Score " + run.score(), x, 230, 1.5f, new Color(0.7f, 0.9f, 0.55f, 1f));
+        }
 
         text("CODE BLOCK", x, 290, 1.4f, Color.LIGHT_GRAY);
         List<CodeBlock.Token> tokens = run.codeBlock().tokens();
@@ -548,7 +746,10 @@ public class PlayScreen extends InputAdapter implements Screen {
             text((t.correct() ? "+ " : "x ") + t.text(), x, 335 + (i - first) * 36f, 1.5f,
                     t.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
         }
-        drawCentered("Quit to menu", QUIT_BTN.x + QUIT_BTN.w / 2f, QUIT_BTN.y + 18, 1.4f, Color.WHITE);
+        if (phase != Phase.RESULT) {
+            drawCentered(classTest ? "Leave (you can resume)" : "Quit (progress is saved)", QUIT_BTN.x + QUIT_BTN.w / 2f,
+                    QUIT_BTN.y + 18, 1.4f, Color.WHITE);
+        }
     }
 
     private void drawEncounterText() {
@@ -556,7 +757,9 @@ public class PlayScreen extends InputAdapter implements Screen {
                 topicColor(active.topic()));
         int lines = active.prompt().split("\n", -1).length;
         text(active.prompt(), 90, panelTop + 80, lines <= 5 ? 2.0f : 1.55f, Color.WHITE);
-        if (!hintShown) {
+        if (classTest) {
+            // no hints in a class test
+        } else if (!hintShown) {
             Rect h = hintButton();
             drawCentered("Hint", h.x + h.w / 2f, h.y + 13, 1.7f, Color.WHITE);
         } else if (active.hint() != null) {
@@ -572,11 +775,14 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     private void drawResultText() {
         boolean cleared = !run.isFailed();
-        drawCentered(classTest ? "TEST FINISHED" : cleared ? "LESSON COMPLETE" : "RUN FAILED", W / 2f, 130, 3f,
+        drawCentered(classTest ? (timesUp ? "TIME IS UP" : "TEST FINISHED") : cleared ? "LESSON COMPLETE" : "RUN FAILED", W / 2f, 130, 3f,
                 cleared ? new Color(0.6f, 0.95f, 0.6f, 1f) : new Color(1f, 0.5f, 0.45f, 1f));
-        drawCentered(run.rank().name(), W / 2f, 230, 8f, new Color(1f, 0.85f, 0.35f, 1f));
-        drawCentered("Accuracy " + Math.round(run.overallAccuracy() * 100) + "%     Score " + run.score()
-                + "     HP " + run.hp(), W / 2f, 440, 1.8f, Color.WHITE);
+        drawCentered(classTest ? run.score() + " pts" : run.rank().name(), W / 2f, 230, classTest ? 6f : 8f,
+                new Color(1f, 0.85f, 0.35f, 1f));
+        drawCentered(classTest
+                ? "Accuracy " + Math.round(run.overallAccuracy() * 100) + "%     Best streak " + run.bestStreak()
+                : "Accuracy " + Math.round(run.overallAccuracy() * 100) + "%     Score " + run.score()
+                        + "     HP " + run.hp(), W / 2f, 440, 1.8f, Color.WHITE);
 
         float y = 500;
         for (SectionResult r : run.sectionResults()) {
@@ -586,8 +792,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             y += 40;
         }
         if (classTest) {
-            drawCentered("Grade " + Grades.percent(run.score(), Grades.maxScore(towerCount)) + "%", W / 2f, 780, 1.8f,
-                    new Color(0.6f, 0.95f, 0.6f, 1f));
+            drawCentered(placeLine(), W / 2f, 780, 1.8f, new Color(0.6f, 0.95f, 0.6f, 1f));
         } else if (!rewardLine.isEmpty()) {
             drawCentered(rewardLine, W / 2f, 735, 1.6f, new Color(1f, 0.85f, 0.4f, 1f));
         }
@@ -597,7 +802,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             drawCentered("Get certificate", CERT_BTN.x + CERT_BTN.w / 2f, CERT_BTN.y + 28, 1.8f, Color.WHITE);
         }
         Rect cont = continueButton();
-        drawCentered("Continue", cont.x + cont.w / 2f, cont.y + 28, 1.8f, Color.WHITE);
+        drawCentered(saveDone ? "Continue" : "Saving...", cont.x + cont.w / 2f, cont.y + 28, 1.8f, Color.WHITE);
     }
 
     private void text(String s, float x, float yTop, float scale, Color c) {
@@ -639,5 +844,11 @@ public class PlayScreen extends InputAdapter implements Screen {
         font.dispose();
         sprites.values().forEach(Texture::dispose);
         map.dispose();
+        if (standings != null) {
+            standings.close();
+        }
+        if (uploader != null) {
+            uploader.shutdown();
+        }
     }
 }

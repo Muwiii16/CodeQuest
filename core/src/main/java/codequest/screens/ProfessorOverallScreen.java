@@ -15,36 +15,43 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Overall class performance: every student's result on every lesson, from lesson 1
- * to the latest, as a grid. The written AI analysis is a placeholder for now.
+ * Overall class performance: every student's result on every lesson, from lesson 1 to the latest,
+ * as a grid. The written AI analysis is a placeholder for now.
  */
 public class ProfessorOverallScreen extends ProfessorScreen {
 
     private static final int LESSONS_PER_PAGE = 7;
 
-    private final ClassInfo cls;
-    private final List<Lesson> lessons;
-    private final List<ProfessorData.Student> students;
-    private final Map<Long, Map<Long, Progress>> progress;
+    private record Loaded(List<Lesson> lessons, List<ProfessorData.Student> students,
+            Map<Long, Map<Long, Progress>> progress) {
+    }
+
+    private List<Lesson> lessons = List.of();
+    private List<ProfessorData.Student> students = List.of();
+    private Map<Long, Map<Long, Progress>> progress = Map.of();
     private final int base;
     private int page;
 
     public ProfessorOverallScreen(Main game, String username, ClassInfo cls) {
         super(game, username, "Overall performance  -  " + cls.sectionName(),
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
-        this.cls = cls;
-        ProfessorData data = new ProfessorData();
-        lessons = new CampaignData().lessons(cls.id());
-        students = data.roster(cls.id());
-        progress = data.overallProgress(students, lessons);
-
         card(60, 140, 1800, 650);
         card(60, 810, 1800, 210);
         text("AI analysis (Gemini)", 90, 825, 700, 36, 1.8f, AMBER, Align.left);
         text("A written summary of how each student and the whole class progressed across the lessons is coming in a "
                 + "later version.", 90, 870, 1740, 110, 1.5f, MUTED, Align.topLeft).setWrap(true);
         base = mark();
-        rebuild();
+        load("Loading the results...", () -> {
+            ProfessorData data = new ProfessorData();
+            List<Lesson> ls = new CampaignData().lessons(cls.id());
+            List<ProfessorData.Student> st = data.roster(cls.id());
+            return new Loaded(ls, st, data.overallProgress(st, ls));
+        }, l -> {
+            lessons = l.lessons();
+            students = l.students();
+            progress = l.progress();
+            rebuild();
+        });
     }
 
     private void rebuild() {

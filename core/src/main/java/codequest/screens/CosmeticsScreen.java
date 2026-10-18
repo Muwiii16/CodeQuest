@@ -14,33 +14,49 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /** Cosmetics: what the student has earned from lesson rewards, and dressing the character with it. */
 public class CosmeticsScreen extends StudentScreen {
 
     private static final String[] CATEGORIES = { "avatar_skin", "trail", "badge", "title" };
 
+    private record Loaded(long studentId, List<Cosmetic> catalog, Set<Long> owned, Map<String, Long> equipped) {
+    }
+
+    private record Wardrobe(Set<Long> owned, Map<String, Long> equipped) {
+    }
+
     private final DatabaseManager db = new DatabaseManager();
-    private final long studentId;
-    private final List<Cosmetic> catalog;
     private final int base;
 
-    private Set<Long> owned;
-    private Map<String, Long> equipped;
+    private long studentId;
+    private List<Cosmetic> catalog = List.of();
+    private Set<Long> owned = Set.of();
+    private Map<String, Long> equipped = Map.of();
     private String category = CATEGORIES[0];
 
     public CosmeticsScreen(Main game, String username) {
         super(game, username, "Cosmetics", () -> game.setScreen(new MainMenuScreen(game, username)));
-        studentId = db.profileId(username);
-        catalog = db.getCatalog();
         base = mark();
-        refresh();
-        rebuild();
+        load("Opening your wardrobe...", () -> {
+            long id = db.profileId(username);
+            CompletableFuture<List<Cosmetic>> cat = CompletableFuture.supplyAsync(db::getCatalog);
+            Wardrobe w = fetchWardrobe(id);
+            return new Loaded(id, cat.join(), w.owned(), w.equipped());
+        }, l -> {
+            studentId = l.studentId();
+            catalog = l.catalog();
+            owned = l.owned();
+            equipped = l.equipped();
+            rebuild();
+        });
     }
 
-    private void refresh() {
-        owned = new HashSet<>(db.getOwnedCosmetics(studentId));
-        equipped = db.getEquippedCosmetics(studentId);
+    private Wardrobe fetchWardrobe(long id) {
+        CompletableFuture<Map<String, Long>> eq = CompletableFuture.supplyAsync(() -> db.getEquippedCosmetics(id));
+        Set<Long> own = new HashSet<>(db.getOwnedCosmetics(id));
+        return new Wardrobe(own, eq.join());
     }
 
     /** The cosmetic equipped in a category, falling back to that category's default one. */
@@ -111,36 +127,45 @@ public class CosmeticsScreen extends StudentScreen {
         }
 
         float y = 250;
+        int shown = 0;
         for (Cosmetic c : catalog) {
             if (!c.category().equals(category)) {
                 continue;
             }
-            boolean have = owned.contains(c.id());
-            boolean on = equipped.get(category) != null ? equipped.get(category) == c.id() : c.isDefault() && equippedIn(category) == c;
-            rect(770, y, 1060, 110, ROW);
-            Image swatch = rect(790, y + 20, 70, 70, c.isDefault() ? new Color(0.8f, 0.82f, 0.9f, 1f) : CosmeticLook.colorOf(c));
+            if (shown++ >= 7) {
+                break;
+            }
+            boolean have = owned.contains(c.id()) || c.isDefault();
+            boolean on = equipped.get(category) != null ? equipped.get(category) == c.id()
+                    : c.isDefault() && equippedIn(category) == c;
+            rect(770, y, 1060, 100, ROW);
+            Image swatch = rect(790, y + 15, 70, 70, c.isDefault() ? new Color(0.8f, 0.82f, 0.9f, 1f) : CosmeticLook.colorOf(c));
             swatch.setTouchable(Touchable.disabled);
-            text(c.name(), 890, y + 14, 520, 40, 2.1f, have ? Color.WHITE : MUTED, Align.left);
-            text(c.rarity() + "  -  " + c.description(), 890, y + 62, 560, 34, 1.4f, MUTED, Align.left);
+            text(c.name(), 890, y + 10, 520, 40, 2.1f, have ? Color.WHITE : MUTED, Align.left);
+            text(c.rarity() + "  -  " + c.description(), 890, y + 56, 560, 34, 1.4f, MUTED, Align.left);
             if (on) {
-                text("Equipped", 1500, y, 300, 110, 1.8f, new Color(0.6f, 0.9f, 0.7f, 1f), Align.center);
+                text("Equipped", 1500, y, 300, 100, 1.8f, new Color(0.6f, 0.9f, 0.7f, 1f), Align.center);
             } else if (have) {
-                solidButton("Equip", 1540, y + 27, 260, 56, GOOD, () -> equip(c));
+                solidButton("Equip", 1540, y + 22, 260, 56, GOOD, () -> equip(c));
             } else {
-                text(c.lessonNumber() > 0 ? "Pass lesson " + c.lessonNumber() : "Locked", 1480, y, 340, 110, 1.6f,
+                text(c.lessonNumber() > 0 ? "Pass lesson " + c.lessonNumber() : "Locked", 1480, y, 340, 100, 1.6f,
                         MUTED, Align.center);
             }
-            y += 124;
+            y += 112;
         }
     }
 
     private void equip(Cosmetic c) {
-        if (db.equipCosmetic(studentId, c.category(), c.id())) {
-            refresh();
+        load("Equipping...", () -> {
+            if (!db.equipCosmetic(studentId, c.category(), c.id())) {
+                throw new IllegalStateException("could not equip");
+            }
+            return fetchWardrobe(studentId);
+        }, w -> {
+            owned = w.owned();
+            equipped = w.equipped();
             rebuild();
             toast("Equipped " + c.name() + ".", true);
-        } else {
-            toast("Could not equip it. Check your connection.", false);
-        }
+        });
     }
 }

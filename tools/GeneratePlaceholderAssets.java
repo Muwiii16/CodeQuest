@@ -43,23 +43,12 @@ public class GeneratePlaceholderAssets {
         save(loginCard(), "ui/login/card.png");
 
         save(logo(), "ui/titles/logo.png");
-        save(heading("HOW TO PLAY", null), "ui/titles/how_to_play.png");
 
         String[][] menu = { { "campaign", "CAMPAIGN" }, { "class_test", "CLASS TEST" }, { "cosmetics", "COSMETICS" },
                 { "certificates", "CERTIFICATES" }, { "back", "BACK" } };
         for (String[] m : menu) {
             save(button(m[1], 720, 180, false, ACCENT), "ui/buttons/" + m[0] + "_def.png");
             save(button(m[1], 720, 180, true, ACCENT), "ui/buttons/" + m[0] + "_hover.png");
-        }
-        save(button("BACK", 520, 150, false, ACCENT), "ui/buttons/back_small_def.png");
-        save(button("BACK", 520, 150, true, ACCENT), "ui/buttons/back_small_hover.png");
-        save(button("< PREV", 520, 150, false, ACCENT), "ui/buttons/prev_def.png");
-        save(button("< PREV", 520, 150, true, ACCENT), "ui/buttons/prev_hover.png");
-        save(button("NEXT >", 520, 150, false, ACCENT), "ui/buttons/next_def.png");
-        save(button("NEXT >", 520, 150, true, ACCENT), "ui/buttons/next_hover.png");
-
-        for (int p = 1; p <= 4; p++) {
-            save(howToPage(p), "ui/how_to_play/page" + p + ".png");
         }
 
         int[][][] paths = {
@@ -314,23 +303,6 @@ public class GeneratePlaceholderAssets {
         return im;
     }
 
-    static BufferedImage heading(String text, String sub) {
-        BufferedImage im = img(1100, 230);
-        Graphics2D g = g(im);
-        g.setFont(sans(110));
-        g.setColor(TEXT);
-        centered(g, text, 550, 120);
-        g.setColor(ACCENT);
-        g.fill(new RoundRectangle2D.Float(375, 145, 350, 10, 10, 10));
-        if (sub != null) {
-            g.setFont(sans(40));
-            g.setColor(MUTED);
-            centered(g, sub, 550, 210);
-        }
-        g.dispose();
-        return im;
-    }
-
     // ── buttons & panels ────────────────────────────────
 
     static BufferedImage button(String text, int w, int h, boolean hover, Color accent) {
@@ -352,95 +324,6 @@ public class GeneratePlaceholderAssets {
     }
 
     // ── how-to-play pages ───────────────────────────────
-
-    static BufferedImage howToPage(int page) {
-        BufferedImage im = background(1);
-        Graphics2D g = g(im);
-        g.setColor(new Color(0, 0, 0, 120));
-        g.fill(new RoundRectangle2D.Float(120, 200, 1680, 780, 60, 60));
-
-        String[] titles = { "Reach the computer lab", "Beat the towers", "Build the code", "Level up" };
-        String[][] lines = {
-                { "Your student walks the campus path by itself - you never steer.",
-                        "The map has four sections, with towers waiting along the way.",
-                        "Get to the computer laboratory at the end of the path." },
-                { "Near a tower, a projectile launches and a C challenge opens.",
-                        "Pick the right token for the blank before the projectile lands.",
-                        "Right answer: you deflect it and score. Wrong or too slow: you take damage.",
-                        "Stuck? The Hint button helps (your hint use is tracked)." },
-                { "Every token you answer joins the code block on the right.",
-                        "Green tokens were correct, red tokens were wrong.",
-                        "Your health bar shows how many mistakes you can afford.",
-                        "Run out of health and the run fails." },
-                { "After each section, your accuracy sets the next section's difficulty:",
-                        "80% or more gets harder, below 50% gets easier.",
-                        "Finish with rank B or higher to earn a stage certificate (PDF).",
-                        "Ranks run S, A, B, C, D, F." } };
-
-        g.setFont(sans(76));
-        g.setColor(ACCENT);
-        g.drawString(titles[page - 1], 190, 330);
-        g.setFont(sans(42));
-        g.setColor(TEXT);
-        int y = 430;
-        for (String line : lines[page - 1]) {
-            g.drawString("-  " + line, 190, y);
-            y += 78;
-        }
-
-        // simple illustration strip along the bottom of the panel
-        int cy = 880;
-        switch (page) {
-            case 1 -> {
-                g.setStroke(new BasicStroke(14, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g.setColor(new Color(90, 100, 140));
-                g.drawLine(260, cy, 1500, cy);
-                g.setColor(ACCENT);
-                g.fillOval(240, cy - 28, 56, 56);
-                g.setColor(AMBER);
-                g.fill(new RoundRectangle2D.Float(1500, cy - 50, 130, 100, 16, 16));
-                g.setFont(sans(34));
-                g.setColor(BG_TOP);
-                g.drawString("LAB", 1528, cy + 12);
-            }
-            case 2 -> {
-                g.setColor(ACCENT);
-                g.fillOval(300, cy - 28, 56, 56);
-                g.setColor(new Color(0xB48AF2));
-                g.fill(new RoundRectangle2D.Float(1300, cy - 60, 90, 120, 14, 14));
-                g.setColor(RED);
-                g.fillOval(900, cy - 22, 44, 44);
-                g.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g.setColor(new Color(255, 255, 255, 120));
-                g.drawLine(1290, cy, 960, cy);
-                g.drawLine(960, cy, 986, cy - 16);
-                g.drawLine(960, cy, 986, cy + 16);
-            }
-            case 3 -> {
-                g.setFont(mono(46));
-                g.setColor(GREEN);
-                g.drawString("+ ;", 300, cy);
-                g.setColor(RED);
-                g.drawString("x ,", 560, cy);
-                g.setColor(GREEN);
-                g.drawString("+ float", 820, cy);
-                g.setColor(new Color(60, 10, 10));
-                g.fill(new RoundRectangle2D.Float(1250, cy - 36, 360, 30, 8, 8));
-                g.setColor(GREEN);
-                g.fill(new RoundRectangle2D.Float(1250, cy - 36, 240, 30, 8, 8));
-            }
-            default -> {
-                String[] ranks = { "S", "A", "B", "C", "D", "F" };
-                g.setFont(sans(72));
-                for (int i = 0; i < ranks.length; i++) {
-                    g.setColor(i <= 2 ? AMBER : MUTED);
-                    g.drawString(ranks[i], 360 + i * 200, cy + 24);
-                }
-            }
-        }
-        g.dispose();
-        return im;
-    }
 
     // ── gameplay art ────────────────────────────────────
 

@@ -2,8 +2,6 @@ package codequest.screens;
 
 import codequest.Main;
 import codequest.data.DatabaseManager;
-import codequest.data.ProfessorData;
-import codequest.data.SupabaseConfig;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -61,8 +59,6 @@ public class LoginScreen extends BaseScreen {
         placeTopLeft(mark, 110, 48, 76, 76);
         stage.addActor(mark);
         text("CodeQuest", 205, 62, 400, 50, 2.8f, Color.WHITE, Align.left);
-        solidButton("How to play", 1590, 56, 220, 62, new Color(0.08f, 0.16f, 0.1f, 1f),
-                () -> game.setScreen(new HowToPlayScreen(game, () -> game.setScreen(new LoginScreen(game)))));
 
         text("-  LEARN C. BEAT THE TOWERS.", 110, 262, 700, 30, 1.3f, new Color(0.75f, 0.9f, 0.55f, 1f), Align.left);
         text("Learn C by\nbeating the\ntowers.", 110, 310, 950, 360, 6.6f, Color.WHITE, Align.topLeft);
@@ -207,43 +203,43 @@ public class LoginScreen extends BaseScreen {
     }
 
     private void handleLogin(String user, String pass) {
-        if (!dbManager.validateLogin(user, pass)) {
-            setStatus("Invalid username or password.", false);
-            return;
-        }
-        // The database decides the role; the toggle only has to agree with it.
-        boolean isProfessor = "professor".equals(new ProfessorData().getRole(user));
-        if (isProfessor != professorRole) {
-            setStatus(isProfessor ? "This is a professor account. Choose \"I'm a professor\"."
-                    : "This account does not have professor access. Choose \"I'm a student\".", false);
-            return;
-        }
-        if (isProfessor) {
-            game.setScreen(new ProfessorDashboardScreen(game, user));
-        } else {
-            game.setScreen(new MainMenuScreen(game, user));
-        }
+        load("Signing in...", () -> dbManager.login(user, pass), account -> {
+            if (account.isEmpty()) {
+                setStatus("Invalid username or password.", false);
+                return;
+            }
+            // The server decides the role; the toggle only has to agree with it.
+            boolean isProfessor = account.get().isProfessor();
+            if (isProfessor != professorRole) {
+                setStatus(isProfessor ? "This is a professor account. Choose \"I'm a professor\"."
+                        : "This account does not have professor access. Choose \"I'm a student\".", false);
+                return;
+            }
+            if (isProfessor) {
+                game.setScreen(new ProfessorDashboardScreen(game, user));
+            } else {
+                game.setScreen(new MainMenuScreen(game, user));
+            }
+        });
     }
 
     private void handleRegister(String user, String pass) {
-        if (professorRole) {
-            String required = SupabaseConfig.getProfessorInviteCode();
-            if (required == null) {
-                setStatus("Professor sign-up is turned off.", false);
-                return;
+        String role = professorRole ? "professor" : "student";
+        String code = professorRole ? typedCode.trim() : null;
+        load("Creating your account...", () -> dbManager.register(user, pass, role, code), result -> {
+            switch (result) {
+                case OK -> {
+                    typedPass = "";
+                    typedCode = "";
+                    registerMode = false;
+                    setStatus("Account created. You can log in now.", true);
+                }
+                case TAKEN -> setStatus("That username is taken. Choose a different name.", false);
+                case INVALID -> setStatus("Use a username of at least 3 characters and a password of at least 4.", false);
+                case BAD_INVITE -> setStatus("Wrong professor access code.", false);
+                case PROFESSOR_DISABLED -> setStatus("Professor sign-up is turned off.", false);
+                default -> setStatus("Could not reach the server. Check your connection.", false);
             }
-            if (!required.equals(typedCode.trim())) {
-                setStatus("Wrong professor access code.", false);
-                return;
-            }
-        }
-        if (dbManager.registerUser(user, pass, professorRole ? "professor" : "student")) {
-            typedPass = "";
-            typedCode = "";
-            registerMode = false;
-            setStatus("Account created. You can log in now.", true);
-        } else {
-            setStatus("That username is taken. Choose a different name.", false);
-        }
+        });
     }
 }

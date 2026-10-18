@@ -6,12 +6,13 @@ import codequest.data.ClassTestData;
 import codequest.data.ClassTestData.Participant;
 import codequest.data.ClassTestData.Session;
 import codequest.data.DatabaseManager;
-import codequest.data.Lesson;
 import codequest.data.Poller;
+import codequest.data.RunCache;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Align;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -20,58 +21,85 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Class Test Mode, student side: the lobby for a test the professor opened on one
  * of the student's classes. The student clicks Ready; when the professor starts it,
- * a short countdown runs and everyone plays the lesson together.
+ * a short countdown runs and everyone plays the lesson together. A test left in
+ * progress (the game was closed) offers Resume instead.
  */
 public class ClassTestScreen extends StudentScreen {
 
     private record State(List<Session> sessions, List<Participant> participants) {
     }
 
+    /** The result of the first lookup: who the student is and which classes they are in. */
+    private record Init(long id, List<Long> classIds) {
+    }
+
     private final ClassTestData tests = new ClassTestData();
     private final CampaignData campaigns = new CampaignData();
-    private final long studentId;
-    private final boolean inAClass;
-    private final Poller<State> poller;
     private final Set<Long> joined = ConcurrentHashMap.newKeySet();
     private final int base;
+
+    private long studentId;
+    private boolean inAClass;
+    private Poller<State> poller;
 
     private String shown = "";
     private boolean starting;
     private float countdown;
     private boolean launching;
+    private boolean cleaned;
 
     public ClassTestScreen(Main game, String username) {
         super(game, username, "Class Test", () -> game.setScreen(new MainMenuScreen(game, username)));
-        studentId = new DatabaseManager().profileId(username);
-        List<Long> classIds = new ArrayList<>();
-        campaigns.studentClasses(studentId).forEach(c -> classIds.add(c.id()));
-        inAClass = !classIds.isEmpty();
         base = mark();
-        poller = new Poller<>(() -> {
-            List<Session> sessions = tests.openSessions(classIds);
-            List<Participant> participants = List.of();
-            if (!sessions.isEmpty()) {
-                Session s = sessions.get(0);
-                if (!joined.contains(s.id()) && tests.join(s.id(), studentId)) {
-                    joined.add(s.id());
+        load("Looking for your class test...", () -> {
+            long id = new DatabaseManager().profileId(username);
+            List<Long> classIds = new ArrayList<>();
+            campaigns.studentClasses(id).forEach(c -> classIds.add(c.id()));
+            return new Init(id, classIds);
+        }, init -> {
+            studentId = init.id();
+            inAClass = !init.classIds().isEmpty();
+            poller = new Poller<>(() -> {
+                List<Session> sessions = tests.openSessions(init.classIds());
+                List<Participant> participants = List.of();
+                if (!sessions.isEmpty()) {
+                    Session s = sessions.get(0);
+                    if (!joined.contains(s.id()) && tests.join(s.id(), studentId)) {
+                        joined.add(s.id());
+                    }
+                    participants = tests.participants(s.id());
+                    if ("completed".equals(tests.endIfOver(s, participants))) {
+                        sessions = new ArrayList<>(sessions);
+                        sessions.remove(0); // that test just ended
+                        participants = List.of();
+                    }
                 }
-                participants = tests.participants(s.id());
-            }
-            return new State(sessions, participants);
-        }, 1500);
+                return new State(sessions, participants);
+            }, 1500);
+        });
     }
 
     @Override
     public void render(float delta) {
+        if (poller == null) {
+            super.render(delta); // still finding out which classes the student is in
+            return;
+        }
         State st = poller.latest();
         if (starting) {
             countdown -= delta;
             if (countdown <= 0 && !launching) {
-                launch(st);
+                launch(st, false);
             }
         }
         if (launching) {
             return; // the next screen has taken over and this one is disposed: do not draw it
+        }
+        if (st != null && !cleaned) {
+            cleaned = true;
+            Set<String> open = new HashSet<>();
+            st.sessions().forEach(x -> open.add(RunCache.classTestKey(x.id())));
+            RunCache.clearExcept("classtest-", username, open); // saves for tests that are over are no use any more
         }
         String sig = signature(st);
         if (!sig.equals(shown)) {
@@ -129,6 +157,13 @@ public class ClassTestScreen extends StudentScreen {
         text("Everyone plays the same questions at the same time. Difficulty stays fixed.", 200, 235, 1520, 36, 1.5f,
                 MUTED, Align.left);
 
+        if (session.isActive() && !starting && RunCache.exists(RunCache.classTestKey(session.id()), username)) {
+            text("You left this test in progress", 200, 330, 1520, 70, 3.4f, GOLD, Align.center);
+            text("Your answers so far are saved. Pick up where you stopped.", 200, 420, 1520, 40, 1.8f, MUTED,
+                    Align.center);
+            solidButton("Resume test", 660, 520, 600, 100, GOOD, () -> launch(st, true));
+            return;
+        }
         if (session.isActive()) {
             if (!starting) {
                 starting = true;
@@ -155,29 +190,20 @@ public class ClassTestScreen extends StudentScreen {
         }
 
         boolean isReady = mine.map(Participant::ready).orElse(false);
-        solidButton(isReady ? "Not ready" : "I'm ready", 1280, 355, 440, 90, isReady ? BUTTON : GOOD, () -> {
-            tests.setReady(session.id(), studentId, !isReady);
-            shown = "";
-        });
+        solidButton(isReady ? "Not ready" : "I'm ready", 1280, 355, 440, 90, isReady ? BUTTON : GOOD,
+                () -> run("Updating...", () -> tests.setReady(session.id(), studentId, !isReady), () -> shown = ""));
         text(isReady ? "Waiting for your professor to start the test..." : "Click Ready when you are prepared.", 1280,
                 470, 440, 120, 1.5f, MUTED, Align.topLeft).setWrap(true);
     }
 
-    private void launch(State st) {
+    private void launch(State st, boolean resume) {
         if (st == null || st.sessions().isEmpty()) {
             starting = false;
             return;
         }
         launching = true;
         Session session = st.sessions().get(0);
-        Optional<Lesson> lesson = campaigns.lesson(session.stageId());
-        if (lesson.isEmpty()) {
-            launching = false;
-            starting = false;
-            toast("Could not load the lesson. Check your connection.", false);
-            return;
-        }
-        game.setScreen(new PlayScreen(game, username, lesson.get(), session));
+        PlayScreen.open(game, username, null, session, resume, () -> game.setScreen(new ClassTestScreen(game, username)));
     }
 
     private void leaveToResults(Session session) {
@@ -189,7 +215,9 @@ public class ClassTestScreen extends StudentScreen {
 
     @Override
     public void dispose() {
-        poller.close();
+        if (poller != null) {
+            poller.close();
+        }
         super.dispose();
     }
 }

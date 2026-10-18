@@ -70,6 +70,31 @@ final class SupabaseClient {
         }
     }
 
+    /** Escapes text for use inside a JSON string literal (quotes, backslashes and every control character). */
+    static String jsonEscape(String value) {
+        StringBuilder sb = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                case '\b' -> sb.append("\\b");
+                case '\f' -> sb.append("\\f");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
+    }
+
     static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
@@ -110,8 +135,7 @@ final class SupabaseClient {
             }
             return JSON_READER.parse(body);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.err.println("Supabase " + method + " " + pathAndQuery + " interrupted");
+            Thread.currentThread().interrupt(); // a screen closed while its poll was in flight: nothing to report
             return null;
         } catch (Exception e) {
             System.err.println("Supabase " + method + " " + pathAndQuery + " failed: " + e.getMessage());

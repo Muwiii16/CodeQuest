@@ -54,6 +54,7 @@
   where you land; the toggle must match it. New professor accounts need `professor.inviteCode` from `assets/supabase.properties`.
   Stopgap only: the code ships inside the game files and the database is still wide open. Real fix: Supabase Auth + RLS.
 - Google sign-in button is a placeholder.
+  (Update: registration/sign-in now run on the server, see the security section below; the invite code is no longer read by the game.)
 - Not built yet on the professor side: writing/editing questions, AI generation (4.0), live class-test scoreboard.
 - Not built yet on the student side: joining a class, taking a class test (3.0).
 - The 3 stage titles in D3 (`stages`) are still the old Tower of Engkanto names.
@@ -74,4 +75,45 @@ cosmetics (`unlock_criteria {"lesson_number": n}`). ERD needs those 4 columns.
   class dictionary per language, AI analysis boxes (Gemini), post-game feedback (Claude).
 - Only C is playable; Python / C++ / Java are greyed out "coming soon".
 - A student in several classes switches class with a button on the Campaign screen; Class Test uses all their classes.
-- Not built: ending a test automatically, rejoining a test after quitting mid-run, rewards for class tests.
+
+## Class tests, Kahoot style (done)
+- Scoring (Class Test Mode only): a correct answer is worth 500-1000 points depending on how much of the question's time was
+  left, plus a streak bonus (+100 per extra correct in a row, max +500). Wrong or too slow = 0 and the streak resets.
+  Nobody loses health and there are no hints, so everyone plays every question. Campaign scoring is unchanged.
+- While playing: live "Rank #n of m", points behind the next player, and the streak, in the sidebar and after each answer.
+- After finishing: a "You finished!" card with points and place while others catch up, then the podium reveal
+  (3rd, 2nd, 1st) and the full ranking once everyone is done or the professor ends the test. No rewards, no grade percentage.
+- The professor sees live points per student, then the podium and ranking when the test ends.
+- Resume: every answer is saved to `~/CodeQuest/cache/classtest-<session>-<user>.json` (and the running score is uploaded).
+  Reopening Class Test while the test is still running shows "Resume test", which replays the answers (the questions are
+  seeded per session, so it lands on the same question). The save is deleted when the test is finished or over.
+- Not done: resume for campaign lessons (their questions are random, so a replay would not match); a professor cannot reopen
+  the podium of an ended test later (the lesson Analysis table still shows each student's best class-test points).
+
+## Round 3: editor, hashing, async loading, answer log (done)
+Migration `supabase/migrations/20261018120000_security_answers_rewards.sql` (applied).
+- **Question editor:** Section -> lesson "Edit" (or right after Stage creation) opens the lesson screen: rename, difficulty,
+  adaptive, delete lesson (lessons after it are renumbered), and every question with its choices: add, rewrite, delete,
+  or copy in the built-in starter questions. The game draws a random question per tower topic/difficulty; a topic with
+  none uses the built-in set. Class tests use the same questions.
+- **Passwords:** stored as bcrypt hashes (`profiles.password_hash`; the plaintext column is gone). Sign-in and sign-up are the
+  database functions `login_user` / `register_user`. The app can no longer read profiles' hashes, insert/update profiles,
+  or change a role. The professor invite code is checked in the database against a hash (`app_secrets`).
+  Change it: `select set_professor_invite_code('new-code', 'current-code');`
+  Forgot it: in the SQL editor, `delete from app_secrets where key = 'professor_invite_hash';` then set a new one.
+- **Slow database:** every screen now loads on a background thread behind a "Loading..." cover (`BaseScreen.load`), starting a
+  lesson goes through `LoadingScreen`, the cosmetics catalog is cached for 5 minutes, and independent requests run in parallel.
+- **Answer log (D5):** every answer is written to `submissions` (student, lesson, session, topic, difficulty, answer, correct,
+  points, time in ms, hints). The lesson Analysis screen shows which topics went worst.
+- **Gaps closed:** edit/delete lessons and classes, rename a class, class test history (reopen any podium), tests end by
+  themselves (everyone finished, or after 20 minutes) and a student still playing gets "TIME IS UP", campaign lessons can be
+  resumed (Resume / Restart), 6 more reward cosmetics (lessons 7-12). How to play was removed (to be added at the end).
+- **ERD changes to draw:** classes.language, campaigns.class_id, stages.prompt, class_test_participants.ready,
+  profiles.password -> password_hash, submissions += stage_id, session_id, topic, difficulty, challenge_key, points,
+  time_taken_ms (challenge_id now optional), new table app_secrets (private, not reachable from the app).
+
+## Still open
+- Row-level security: only `profiles` and `app_secrets` are locked down. Every other table still accepts reads and writes
+  from anyone holding the app key (needs Supabase Auth so the database knows who is asking).
+- No limit on wrong-password attempts.
+- Gemini / Claude steps, real art, fonts and sound, How to play (add at the end).

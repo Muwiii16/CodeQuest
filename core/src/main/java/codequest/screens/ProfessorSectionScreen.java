@@ -13,32 +13,55 @@ import com.badlogic.gdx.utils.Align;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * One section: its lessons (each with its own performance analysis and a class
- * test button), plus stage creation, class management and the overall class analysis.
+ * One section: its lessons (each with Edit, its own performance Analysis and a class
+ * test button), plus stage creation, class management, the overall class analysis and
+ * the history of finished class tests.
  */
 public class ProfessorSectionScreen extends ProfessorScreen {
 
     private static final int PAGE_SIZE = 6;
 
+    private record Loaded(List<Lesson> lessons, List<ProfessorData.Student> roster,
+            Map<Long, Map<Long, Progress>> progress, Optional<ClassTestData.Session> openTest) {
+    }
+
     private final ClassInfo cls;
-    private final List<Lesson> lessons;
-    private final List<ProfessorData.Student> roster;
-    private final Map<Long, Map<Long, Progress>> progress;
-    private final Optional<ClassTestData.Session> openTest;
     private final int base;
+    private List<Lesson> lessons = List.of();
+    private List<ProfessorData.Student> roster = List.of();
+    private Map<Long, Map<Long, Progress>> progress = Map.of();
+    private Optional<ClassTestData.Session> openTest = Optional.empty();
     private int page;
 
     public ProfessorSectionScreen(Main game, String username, ClassInfo cls) {
         super(game, username, cls.sectionName() + "   -   " + cls.language(),
                 () -> game.setScreen(new ProfessorDashboardScreen(game, username)));
         this.cls = cls;
-        ProfessorData data = new ProfessorData();
-        lessons = new CampaignData().lessons(cls.id());
-        roster = data.roster(cls.id());
-        progress = data.overallProgress(roster, lessons);
-        openTest = new ClassTestData().openSession(cls.id());
+
+        card(60, 140, 1260, 880);
+        text("Lessons", 90, 155, 600, 40, 2f, AMBER, Align.left);
+        base = mark();
+        load("Loading the section...", () -> {
+            ProfessorData data = new ProfessorData();
+            CompletableFuture<Optional<ClassTestData.Session>> test = CompletableFuture
+                    .supplyAsync(() -> new ClassTestData().openSession(cls.id()));
+            List<Lesson> ls = new CampaignData().lessons(cls.id());
+            List<ProfessorData.Student> students = data.roster(cls.id());
+            return new Loaded(ls, students, data.overallProgress(students, ls), test.join());
+        }, l -> {
+            lessons = l.lessons();
+            roster = l.roster();
+            progress = l.progress();
+            openTest = l.openTest();
+            rebuild();
+        });
+    }
+
+    private void rebuild() {
+        clearFrom(base);
 
         // ── right column: the section tools ──
         float x = 1370;
@@ -46,27 +69,22 @@ public class ProfessorSectionScreen extends ProfessorScreen {
         card(x - 20, 140, w + 40, 880);
         text("Section tools", x, 160, w, 40, 2f, AMBER, Align.left);
         text(roster.size() + " students   -   " + lessons.size() + " lessons", x, 205, w, 30, 1.4f, MUTED, Align.left);
-        solidButton("Stage creation", x, 260, w, 90, GOOD, () -> game.setScreen(new ProfessorStageCreationScreen(game, username, cls)));
-        solidButton("Class management", x, 380, w, 90, BUTTON,
+        solidButton("Stage creation", x, 255, w, 80, GOOD, () -> game.setScreen(new ProfessorStageCreationScreen(game, username, cls)));
+        solidButton("Class management", x, 355, w, 80, BUTTON,
                 () -> game.setScreen(new ProfessorClassManagementScreen(game, username, cls)));
-        solidButton("Overall class performance", x, 500, w, 90, BUTTON,
+        solidButton("Overall class performance", x, 455, w, 80, BUTTON,
                 () -> game.setScreen(new ProfessorOverallScreen(game, username, cls)));
+        solidButton("Class test history", x, 555, w, 80, BUTTON,
+                () -> game.setScreen(new ProfessorTestHistoryScreen(game, username, cls)));
         if (openTest.isPresent()) {
             ClassTestData.Session s = openTest.get();
-            text("Class test " + (s.isActive() ? "running" : "lobby open") + " on lesson " + s.lessonNumber(), x, 640, w,
+            text("Class test " + (s.isActive() ? "running" : "lobby open") + " on lesson " + s.lessonNumber(), x, 670, w,
                     60, 1.5f, new Color(0.55f, 0.9f, 0.65f, 1f), Align.topLeft).setWrap(true);
         }
-        text("Each lesson below has its own performance analysis and a class test button.", x, 880, w, 100, 1.3f, MUTED,
+        text("Each lesson has Edit (details and questions), Analysis (grades) and Class test.", x, 880, w, 100, 1.3f, MUTED,
                 Align.topLeft).setWrap(true);
 
-        card(60, 140, 1260, 880);
-        text("Lessons", 90, 155, 600, 40, 2f, AMBER, Align.left);
-        base = mark();
-        rebuild();
-    }
-
-    private void rebuild() {
-        clearFrom(base);
+        // ── lessons ──
         if (lessons.isEmpty()) {
             text("No lessons yet.\nUse \"Stage creation\" to add the first one.", 90, 240, 1200, 200, 2f, MUTED,
                     Align.center);
@@ -90,10 +108,12 @@ public class ProfessorSectionScreen extends ProfessorScreen {
             text(l.title(), 200, y + 14, 560, 44, 2.1f, Color.WHITE, Align.left);
             text(l.baseDifficulty().toUpperCase() + "   -   " + done + " / " + roster.size() + " completed", 200, y + 64,
                     560, 34, 1.4f, MUTED, Align.left);
-            solidButton("Analysis", 770, y + 25, 220, 60, BUTTON,
+            solidButton("Edit", 770, y + 25, 150, 60, BUTTON,
+                    () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, l)));
+            solidButton("Analysis", 930, y + 25, 170, 60, BUTTON,
                     () -> game.setScreen(new ProfessorLessonAnalysisScreen(game, username, cls, l)));
             boolean running = openTest.isPresent() && openTest.get().stageId() == l.stageId();
-            solidButton(running ? "Open lobby" : "Class test", 1010, y + 25, 250, 60,
+            solidButton(running ? "Open lobby" : "Class test", 1110, y + 25, 170, 60,
                     running ? new Color(0.55f, 0.37f, 0.08f, 1f) : GOOD, () -> openLobby(l));
             y += 124;
         }

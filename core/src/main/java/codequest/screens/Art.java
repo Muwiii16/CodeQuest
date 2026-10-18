@@ -17,7 +17,6 @@ public final class Art {
 
     public static final String LOGO = "ui/titles/logo.png";
     public static final String LOGO_MARK = "ui/titles/logo_mark.png";
-    public static final String TITLE_HOW_TO_PLAY = "ui/titles/how_to_play.png";
 
     public static final String LOGIN_CARD = "ui/login/card.png";
 
@@ -30,10 +29,6 @@ public final class Art {
 
     public static String hover(String name) {
         return "ui/buttons/" + name + "_hover.png";
-    }
-
-    public static String howToPlayPage(int page) {
-        return "ui/how_to_play/page" + page + ".png";
     }
 
     public static String map(int stage) {

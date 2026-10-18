@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
@@ -23,6 +24,10 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Scene2D analogue of the Swing prototype's BasePanel: a fixed 1920x1080 design
@@ -101,9 +106,44 @@ public abstract class BaseScreen implements Screen {
     }
 
     protected void clearFrom(int mark) {
-        while (stage.getActors().size > mark) {
-            Actor a = stage.getActors().peek();
-            a.remove();
+        // the loading cover (if one is up) stays: a rebuild that finishes while another load runs must not lift it
+        for (int i = stage.getActors().size - 1; i >= mark; i--) {
+            Actor a = stage.getActors().get(i);
+            if (a != loadingCover) {
+                a.remove();
+            }
+        }
+    }
+
+    // ── regions: groups of actors that can be cleared and redrawn on their own ──
+
+    private Group target;
+
+    /** Adds an actor to the region being drawn, or to the stage when no region is active. */
+    private void put(com.badlogic.gdx.scenes.scene2d.Actor actor) {
+        if (target != null) {
+            target.addActor(actor);
+        } else {
+            stage.addActor(actor);
+        }
+    }
+
+    /** An empty group on the stage (at the origin, so layout coordinates stay absolute) to draw a part of a screen into. */
+    protected Group region() {
+        Group g = new Group();
+        stage.addActor(g);
+        return g;
+    }
+
+    /** Clears the region and runs {@code build}, which draws into it with the usual helpers (rect, text, solidButton...). */
+    protected void fill(Group region, Runnable build) {
+        region.clearChildren();
+        Group previous = target;
+        target = region;
+        try {
+            build.run();
+        } finally {
+            target = previous;
         }
     }
 
@@ -121,7 +161,7 @@ public abstract class BaseScreen implements Screen {
         Image image = new Image(whiteDrawable());
         image.setColor(color);
         placeTopLeft(image, x, yFromTop, w, h);
-        stage.addActor(image);
+        put(image);
         return image;
     }
 
@@ -132,7 +172,7 @@ public abstract class BaseScreen implements Screen {
         label.setAlignment(align);
         label.setTouchable(Touchable.disabled);
         placeTopLeft(label, x, yFromTop, w, h);
-        stage.addActor(label);
+        put(label);
         return label;
     }
 
@@ -153,8 +193,112 @@ public abstract class BaseScreen implements Screen {
         com.badlogic.gdx.scenes.scene2d.ui.TextArea area = new com.badlogic.gdx.scenes.scene2d.ui.TextArea("", style);
         area.setMessageText(hint);
         placeTopLeft(area, x, yFromTop, w, h);
-        stage.addActor(area);
+        put(area);
         return area;
+    }
+
+    // ── loading: run a slow (database) job off the render thread, with a "Loading..." cover meanwhile ──
+
+    private static final ExecutorService IO = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "codequest-io");
+        t.setDaemon(true);
+        return t;
+    });
+
+    private boolean disposed;
+    private int pendingLoads;
+    private Group loadingCover;
+
+    /**
+     * Runs {@code work} on a background thread (it may block on the network), then calls {@code done} with the
+     * result on the render thread. A dimmed cover with a spinner blocks clicks until it finishes, so the
+     * window never freezes. If the work throws, a message is shown and {@code done} is not called.
+     */
+    protected <T> void load(String message, Supplier<T> work, Consumer<T> done) {
+        showLoadingCover(message);
+        IO.submit(() -> {
+            T result = null;
+            Throwable error = null;
+            try {
+                result = work.get();
+            } catch (Throwable t) {
+                error = t;
+            }
+            T finalResult = result;
+            Throwable finalError = error;
+            Gdx.app.postRunnable(() -> {
+                hideLoadingCover();
+                if (disposed) {
+                    return;
+                }
+                if (finalError != null) {
+                    Gdx.app.error("CodeQuest", "Background load failed", finalError);
+                    toast("Could not reach the server. Check your connection.", false);
+                    return;
+                }
+                done.accept(finalResult);
+            });
+        });
+    }
+
+    /** Same, for work whose result is not needed. */
+    protected void run(String message, Runnable work, Runnable done) {
+        load(message, () -> {
+            work.run();
+            return Boolean.TRUE;
+        }, ignored -> done.run());
+    }
+
+    private void showLoadingCover(String message) {
+        pendingLoads++;
+        if (loadingCover != null && loadingCover.hasParent()) {
+            return;
+        }
+        loadingCover = new Group();
+        Image dim = new Image(whiteDrawable());
+        dim.setColor(0f, 0f, 0f, 0f);
+        dim.setBounds(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        // fade in after a short delay so quick loads do not flash the cover
+        dim.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence(
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.delay(0.2f),
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0.55f, 0.15f)));
+        loadingCover.addActor(dim);
+
+        Image spinner = new Image(whiteDrawable());
+        spinner.setColor(0.9f, 0.95f, 1f, 0f);
+        spinner.setBounds(VIRTUAL_WIDTH / 2f - 24, VIRTUAL_HEIGHT / 2f + 10, 48, 48);
+        spinner.setOrigin(24, 24);
+        spinner.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.parallel(
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence(
+                        com.badlogic.gdx.scenes.scene2d.actions.Actions.delay(0.2f),
+                        com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(1f, 0.15f)),
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.forever(
+                        com.badlogic.gdx.scenes.scene2d.actions.Actions.rotateBy(-360f, 1.1f))));
+        loadingCover.addActor(spinner);
+
+        Label label = new Label(message, new Label.LabelStyle(defaultFont(), Color.WHITE));
+        label.setFontScale(1.8f);
+        label.setAlignment(Align.center);
+        label.setBounds(0, VIRTUAL_HEIGHT / 2f - 70, VIRTUAL_WIDTH, 50);
+        label.getColor().a = 0f;
+        label.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.sequence(
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.delay(0.2f),
+                com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(1f, 0.15f)));
+        loadingCover.addActor(label);
+        stage.addActor(loadingCover);
+    }
+
+    private void hideLoadingCover() {
+        pendingLoads = Math.max(0, pendingLoads - 1);
+        if (pendingLoads == 0 && loadingCover != null) {
+            loadingCover.remove();
+            loadingCover = null;
+        }
+    }
+
+    /** True while a {@link #load} is still running. */
+    protected boolean isLoading() {
+        return pendingLoads > 0;
     }
 
     private Label toastLabel;
@@ -232,7 +376,7 @@ public abstract class BaseScreen implements Screen {
             field.setPasswordMode(true);
         }
         placeTopLeft(field, x, yFromTop, w, h);
-        stage.addActor(field);
+        put(field);
         return field;
     }
 
@@ -262,7 +406,7 @@ public abstract class BaseScreen implements Screen {
         label.pack();
         placeTopLeft(label, (VIRTUAL_WIDTH - label.getWidth()) / 2f, yFromTop - label.getHeight() / 2f,
                 label.getWidth(), label.getHeight());
-        stage.addActor(label);
+        put(label);
         return label;
     }
 
@@ -282,6 +426,9 @@ public abstract class BaseScreen implements Screen {
             stage.getBatch().end();
         }
 
+        if (loadingCover != null && loadingCover.hasParent()) {
+            loadingCover.toFront(); // anything added since the cover went up must still sit under it
+        }
         stage.act(delta);
         stage.draw();
     }
@@ -305,6 +452,7 @@ public abstract class BaseScreen implements Screen {
 
     @Override
     public void dispose() {
+        disposed = true;
         stage.dispose();
         for (Texture t : ownedTextures) {
             t.dispose();

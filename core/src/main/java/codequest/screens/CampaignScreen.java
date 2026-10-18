@@ -7,6 +7,7 @@ import codequest.data.CampaignData.Progress;
 import codequest.data.DatabaseManager;
 import codequest.data.DatabaseManager.Cosmetic;
 import codequest.data.Lesson;
+import codequest.data.RunCache;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Align;
 
@@ -14,45 +15,80 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Campaign Mode: the lessons of the student's class (or the built-in set when
- * they are not in one), each with a Rewards dropdown. Lessons unlock in order.
+ * they are not in one), each with a Rewards dropdown. Lessons unlock in order, and a
+ * lesson left half-played can be resumed.
  */
 public class CampaignScreen extends StudentScreen {
 
     private static final int PAGE_SIZE = 5;
 
+    /** Everything the screen shows, fetched together in the background. */
+    private record Loaded(long studentId, List<ClassInfo> classes, List<Cosmetic> catalog, Set<Long> owned,
+            List<Lesson> lessons, Map<Long, Progress> progress) {
+    }
+
+    private record LessonsLoaded(List<Lesson> lessons, Map<Long, Progress> progress) {
+    }
+
     private final CampaignData data = new CampaignData();
     private final DatabaseManager db = new DatabaseManager();
-    private final long studentId;
-    private final List<ClassInfo> classes;
-    private final List<Cosmetic> catalog;
-    private final Set<Long> owned;
     private final int base;
 
+    private long studentId;
+    private List<ClassInfo> classes = List.of();
+    private List<Cosmetic> catalog = List.of();
+    private Set<Long> owned = Set.of();
     private int classIdx;
     private int page;
     private Long expandedStageId;
-    private List<Lesson> lessons;
-    private Map<Long, Progress> progress;
+    private List<Lesson> lessons = List.of();
+    private Map<Long, Progress> progress = Map.of();
 
     public CampaignScreen(Main game, String username) {
         super(game, username, "Campaign", () -> game.setScreen(new MainMenuScreen(game, username)));
-        studentId = db.profileId(username);
-        classes = data.studentClasses(studentId);
-        catalog = db.getCatalog();
-        owned = new HashSet<>(db.getOwnedCosmetics(studentId));
         base = mark();
-        loadLessons();
-        rebuild();
+        load("Loading your lessons...", () -> {
+            long id = db.profileId(username);
+            CompletableFuture<Object[]> shop = CompletableFuture.supplyAsync(
+                    () -> new Object[] { db.getCatalog(), new HashSet<>(db.getOwnedCosmetics(id)) });
+            List<ClassInfo> myClasses = data.studentClasses(id);
+            LessonsLoaded l = fetchLessons(id, myClasses.isEmpty() ? null : myClasses.get(0).id());
+            Object[] s = shop.join();
+            @SuppressWarnings("unchecked")
+            List<Cosmetic> cat = (List<Cosmetic>) s[0];
+            @SuppressWarnings("unchecked")
+            Set<Long> own = (Set<Long>) s[1];
+            return new Loaded(id, myClasses, cat, own, l.lessons(), l.progress());
+        }, l -> {
+            studentId = l.studentId();
+            classes = l.classes();
+            catalog = l.catalog();
+            owned = l.owned();
+            lessons = l.lessons();
+            progress = l.progress();
+            rebuild();
+        });
     }
 
-    private void loadLessons() {
-        lessons = data.lessons(classes.isEmpty() ? null : classes.get(classIdx).id());
-        progress = data.progress(studentId);
-        page = 0;
-        expandedStageId = null;
+    private LessonsLoaded fetchLessons(long id, Long classId) {
+        CompletableFuture<Map<Long, Progress>> progressFuture = CompletableFuture.supplyAsync(() -> data.progress(id));
+        List<Lesson> list = data.lessons(classId);
+        return new LessonsLoaded(list, progressFuture.join());
+    }
+
+    private void switchClass() {
+        classIdx = (classIdx + 1) % classes.size();
+        load("Loading lessons...", () -> fetchLessons(studentId, classes.get(classIdx).id()), l -> {
+            lessons = l.lessons();
+            progress = l.progress();
+            page = 0;
+            expandedStageId = null;
+            rebuild();
+        });
     }
 
     private void rebuild() {
@@ -62,11 +98,7 @@ public class CampaignScreen extends StudentScreen {
                 : classes.get(classIdx).sectionName() + "  -  " + classes.get(classIdx).language();
         text(context, 160, 128, 1100, 40, 1.8f, MUTED, Align.left);
         if (classes.size() > 1) {
-            solidButton("Switch class", 1500, 122, 260, 52, BUTTON, () -> {
-                classIdx = (classIdx + 1) % classes.size();
-                loadLessons();
-                rebuild();
-            });
+            solidButton("Switch class", 1500, 122, 260, 52, BUTTON, this::switchClass);
         }
 
         if (lessons.isEmpty()) {
@@ -100,35 +132,44 @@ public class CampaignScreen extends StudentScreen {
         }
     }
 
+    private void play(Lesson lesson, boolean resume) {
+        PlayScreen.open(game, username, lesson, null, resume, () -> game.setScreen(new CampaignScreen(game, username)));
+    }
+
     /** Draws one lesson row (and its rewards strip if expanded); returns the y for the next row. */
     private float drawLesson(int index, float y) {
         Lesson lesson = lessons.get(index);
         Progress p = progress.get(lesson.stageId());
         boolean unlocked = CampaignData.isUnlocked(lessons, progress, index);
         boolean done = p != null && p.completed();
+        boolean halfPlayed = unlocked && RunCache.exists(RunCache.campaignKey(lesson.stageId()), username);
 
         rect(160, y, 1600, 110, ROW);
         rect(160, y, 8, 110, done ? GOOD : unlocked ? TEAL : new Color(0.35f, 0.38f, 0.5f, 1f));
         text(String.valueOf(lesson.number()), 190, y, 80, 110, 3.4f, unlocked ? Color.WHITE : MUTED, Align.center);
         text(lesson.title(), 300, y + 14, 880, 44, 2.3f, unlocked ? Color.WHITE : MUTED, Align.left);
         String status;
-        if (done) {
+        if (halfPlayed) {
+            status = "In progress  -  you can pick up where you stopped";
+        } else if (done) {
             status = "Completed  -  Rank " + (p.rank() == null ? "-" : p.rank()) + "  -  best score " + p.score();
         } else if (unlocked) {
             status = "Ready  -  starts at " + lesson.baseDifficulty().toUpperCase();
         } else {
             status = "Locked  -  pass lesson " + (lesson.number() - 1) + " first";
         }
-        text(status, 300, y + 64, 880, 34, 1.5f, done ? new Color(0.6f, 0.9f, 0.7f, 1f) : MUTED, Align.left);
+        text(status, 300, y + 64, 880, 34, 1.5f, done || halfPlayed ? new Color(0.6f, 0.9f, 0.7f, 1f) : MUTED, Align.left);
 
         boolean expanded = Long.valueOf(lesson.stageId()).equals(expandedStageId);
         solidButton(expanded ? "Rewards  ^" : "Rewards  v", 1200, y + 27, 230, 56, BUTTON, () -> {
             expandedStageId = expanded ? null : lesson.stageId();
             rebuild();
         });
-        if (unlocked) {
-            solidButton(done ? "Replay" : "Play", 1460, y + 27, 270, 56, GOOD,
-                    () -> game.setScreen(new PlayScreen(game, username, lesson)));
+        if (halfPlayed) {
+            solidButton("Resume", 1450, y + 27, 150, 56, GOOD, () -> play(lesson, true));
+            solidButton("Restart", 1610, y + 27, 140, 56, BUTTON, () -> play(lesson, false));
+        } else if (unlocked) {
+            solidButton(done ? "Replay" : "Play", 1460, y + 27, 270, 56, GOOD, () -> play(lesson, false));
         } else {
             solidButton("Locked", 1460, y + 27, 270, 56, new Color(0.2f, 0.22f, 0.3f, 1f), Color.GRAY, () -> { });
         }

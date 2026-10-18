@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.Align;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Class creation: a details form, the students who belong to the class, and the
@@ -45,9 +46,9 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
             String language = LANGUAGES[i];
             float x = 90 + i * (lw + 13.3f);
             if (playable) {
-                solidButton(LANGUAGES[i], x, 490, lw, 70, new Color(0.55f, 0.37f, 0.08f, 1f), () -> { });
+                solidButton(language, x, 490, lw, 70, new Color(0.55f, 0.37f, 0.08f, 1f), () -> { });
             } else {
-                solidButton(LANGUAGES[i], x, 490, lw, 70, new Color(0.14f, 0.16f, 0.21f, 1f), Color.GRAY,
+                solidButton(language, x, 490, lw, 70, new Color(0.14f, 0.16f, 0.21f, 1f), Color.GRAY,
                         () -> toast(language + " is coming soon. C is the only language available for now.", false));
                 text("coming soon", x, 565, lw, 24, 1.1f, MUTED, Align.center);
             }
@@ -97,16 +98,18 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
             toast(name + " is already on the list.", false);
             return;
         }
-        switch (data.checkStudent(name)) {
-            case ENROLLED -> {
-                students.add(name);
-                studentField.setText("");
-                rebuild();
+        load("Checking the account...", () -> data.checkStudent(name), result -> {
+            switch (result) {
+                case ENROLLED -> {
+                    students.add(name);
+                    studentField.setText("");
+                    rebuild();
+                }
+                case NO_SUCH_STUDENT -> toast("No account named '" + name + "'.", false);
+                case NOT_A_STUDENT -> toast("'" + name + "' is not a student account.", false);
+                default -> toast("Could not check that username. Check your connection.", false);
             }
-            case NO_SUCH_STUDENT -> toast("No account named '" + name + "'.", false);
-            case NOT_A_STUDENT -> toast("'" + name + "' is not a student account.", false);
-            default -> toast("Could not check that username. Check your connection.", false);
-        }
+        });
     }
 
     private void create() {
@@ -116,17 +119,20 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
             toast("Give the class a section name.", false);
             return;
         }
-        if (course.isEmpty()) {
-            course = "CC102";
-        }
-        long professorId = data.professorId(username);
-        var created = professorId < 0 ? java.util.Optional.<ProfessorData.CreatedClass>empty()
-                : data.createClass(professorId, section, course, "C", students);
-        if (created.isEmpty()) {
-            toast("Could not create the class. Check your connection.", false);
-            return;
-        }
-        ClassInfo info = new ClassInfo(created.get().classId(), course, section, "C", created.get().enrolled().size(), 0);
-        game.setScreen(new ProfessorSectionScreen(game, username, info));
+        String finalCourse = course.isEmpty() ? "CC102" : course;
+        List<String> toEnroll = new ArrayList<>(students);
+        load("Creating the class...", () -> {
+            long professorId = data.professorId(username);
+            return professorId < 0 ? Optional.<ProfessorData.CreatedClass>empty()
+                    : data.createClass(professorId, section, finalCourse, "C", toEnroll);
+        }, created -> {
+            if (created.isEmpty()) {
+                toast("Could not create the class. Check your connection.", false);
+                return;
+            }
+            ClassInfo info = new ClassInfo(created.get().classId(), finalCourse, section, "C",
+                    created.get().enrolled().size(), 0);
+            game.setScreen(new ProfessorSectionScreen(game, username, info));
+        });
     }
 }

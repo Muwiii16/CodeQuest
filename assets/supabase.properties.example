@@ -7,7 +7,3 @@ supabase.url=https://YOUR_PROJECT_REF.supabase.co/rest/v1/
 
 # The anon/public API key (NOT the service_role key).
 supabase.anonKey=YOUR_ANON_KEY
-
-# Professors must enter this code to register (students never need it).
-# Pick your own; give it only to your professors. Leave blank to turn professor sign-up off.
-professor.inviteCode=CHANGE_ME

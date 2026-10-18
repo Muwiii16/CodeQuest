@@ -14,15 +14,17 @@ public class CertificatesScreen extends StudentScreen {
 
     private static final int PAGE_SIZE = 6;
 
-    private final List<CertificateListing> certificates;
+    private List<CertificateListing> certificates = List.of();
     private final int base;
     private int page;
 
     public CertificatesScreen(Main game, String username) {
         super(game, username, "Certificates", () -> game.setScreen(new MainMenuScreen(game, username)));
-        certificates = new DatabaseManager().listCertificates(username);
         base = mark();
-        rebuild();
+        load("Loading your certificates...", () -> new DatabaseManager().listCertificates(username), list -> {
+            certificates = list;
+            rebuild();
+        });
     }
 
     private void rebuild() {

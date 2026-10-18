@@ -24,14 +24,25 @@ public class StageRun {
 
     public enum Mode { CAMPAIGN, CLASS_TEST }
 
-    /** correctToken is always filled in so the UI can show the right answer after a miss. */
-    public record Outcome(boolean correct, int damage, String correctToken, SectionResult sectionClosed) {
+    /**
+     * correctToken is always filled in so the UI can show the right answer after a miss.
+     * points is what this answer added to the score; streak is the current run of correct answers.
+     */
+    public record Outcome(boolean correct, int damage, String correctToken, SectionResult sectionClosed, int points,
+            int streak) {
     }
 
     public static final int MAX_HP = 100;
     // 20 so that failing is possible on the placeholder 8-tower stage (5 misses); retune with the real stage length.
     public static final int DAMAGE_PER_MISS = 20;
     public static final int POINTS_PER_CORRECT = 10;
+
+    // Class Test Mode scores like Kahoot: a correct answer is worth 500-1000 points depending on how fast it was,
+    // plus a bonus for answering several in a row. Nobody loses health, so everyone plays to the end.
+    public static final int SPEED_POINTS_MIN = 500;
+    public static final int SPEED_POINTS_MAX = 1000;
+    public static final int STREAK_BONUS_STEP = 100;
+    public static final int STREAK_BONUS_MAX = 500;
 
     private final Stage stage;
     private final ChallengeProvider provider;
@@ -50,6 +61,8 @@ public class StageRun {
     private int totalCorrect = 0;
     private int totalAnswered = 0;
     private int hintsUsed = 0;
+    private int streak = 0;
+    private int bestStreak = 0;
     private Challenge pending;
     private boolean finished = false;
     private boolean failed = false;
@@ -101,27 +114,54 @@ public class StageRun {
         return Optional.empty();
     }
 
-    /** Answer the pending challenge. A null token means the player ran out of time. */
+    /** Points for a correct class-test answer given the share of the question's time still left (0 to 1). */
+    public static int speedPoints(float timeLeftFraction) {
+        float f = Math.max(0f, Math.min(1f, timeLeftFraction));
+        return SPEED_POINTS_MIN + Math.round((SPEED_POINTS_MAX - SPEED_POINTS_MIN) * f);
+    }
+
+    /** Extra points for a streak: nothing for the first correct answer, then 100 more each, up to 500. */
+    public static int streakBonus(int streak) {
+        return streak < 2 ? 0 : Math.min(STREAK_BONUS_MAX, STREAK_BONUS_STEP * (streak - 1));
+    }
+
+    /** Answer the pending challenge as if with no time left (what the campaign uses; it does not score on speed). */
     public Outcome answer(String token) {
+        return answer(token, 0f);
+    }
+
+    /**
+     * Answer the pending challenge. A null token means the player ran out of time.
+     * timeLeftFraction is the share of the question's time that was still left; only Class Test scoring uses it.
+     */
+    public Outcome answer(String token, float timeLeftFraction) {
         if (pending == null) {
             throw new IllegalStateException("no active challenge");
         }
         Challenge c = pending;
         pending = null;
 
+        boolean speedScoring = mode == Mode.CLASS_TEST;
         boolean correct = token != null && token.equals(c.correctToken());
         int damage = 0;
+        int points = 0;
         if (correct) {
             codeBlock.append(new CodeBlock.Token(token, true));
-            score += POINTS_PER_CORRECT;
+            streak++;
+            bestStreak = Math.max(bestStreak, streak);
+            points = speedScoring ? speedPoints(timeLeftFraction) + streakBonus(streak) : POINTS_PER_CORRECT;
+            score += points;
             sectionCorrect++;
             totalCorrect++;
         } else {
+            streak = 0;
             if (token != null) {
                 codeBlock.append(new CodeBlock.Token(token, false));
             }
-            hp = Math.max(0, hp - DAMAGE_PER_MISS);
-            damage = DAMAGE_PER_MISS;
+            if (!speedScoring) {
+                hp = Math.max(0, hp - DAMAGE_PER_MISS);
+                damage = DAMAGE_PER_MISS;
+            }
         }
         sectionTotal++;
         totalAnswered++;
@@ -136,7 +176,7 @@ public class StageRun {
                 finished = true;
             }
         }
-        return new Outcome(correct, damage, c.correctToken(), closed);
+        return new Outcome(correct, damage, c.correctToken(), closed, points, streak);
     }
 
     public void useHint() {
@@ -185,6 +225,15 @@ public class StageRun {
 
     public int hintsUsed() {
         return hintsUsed;
+    }
+
+    /** Correct answers in a row right now. */
+    public int streak() {
+        return streak;
+    }
+
+    public int bestStreak() {
+        return bestStreak;
     }
 
     public Difficulty difficulty() {

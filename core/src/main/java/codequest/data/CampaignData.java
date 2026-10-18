@@ -121,6 +121,37 @@ public class CampaignData {
         return Optional.of(new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt));
     }
 
+    /** Changes a lesson's title, starting difficulty, adaptive flag and prompt. */
+    public boolean updateLesson(long stageId, String title, String difficulty, boolean adaptive, String prompt) {
+        String body = "{\"title\":\"" + escape(title) + "\",\"base_difficulty\":\"" + escape(difficulty)
+                + "\",\"adaptive_enabled\":" + adaptive + ",\"prompt\":"
+                + (prompt == null || prompt.isBlank() ? "null" : "\"" + escape(prompt) + "\"") + "}";
+        return SupabaseClient.patch("stages?id=eq." + stageId, body) != null;
+    }
+
+    /**
+     * Deletes a lesson with its questions, student progress and certificate links, then renumbers the
+     * lessons after it so the numbers (and the rewards tied to them) stay 1, 2, 3...
+     */
+    public boolean deleteLesson(Lesson lesson) {
+        if (!SupabaseClient.delete("stages?id=eq." + lesson.stageId())) {
+            return false;
+        }
+        JsonValue rest = SupabaseClient.get("stages?campaign_id=eq." + lesson.campaignId()
+                + "&select=id,order_index&order=order_index");
+        if (rest == null) {
+            return true;
+        }
+        int number = 1;
+        for (JsonValue r : rest) {
+            if (r.getInt("order_index", number) != number) {
+                SupabaseClient.patch("stages?id=eq." + r.getLong("id"), "{\"order_index\":" + number + "}");
+            }
+            number++;
+        }
+        return true;
+    }
+
     /** The class's campaign id, creating the campaign on first use. */
     Long campaignIdFor(long classId, String sectionName) {
         JsonValue existing = SupabaseClient.get("campaigns?class_id=eq." + classId + "&select=id&limit=1");
@@ -136,6 +167,6 @@ public class CampaignData {
     }
 
     static String escape(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\n").replace("\r", "");
+        return SupabaseClient.jsonEscape(s);
     }
 }

@@ -17,7 +17,7 @@ import java.util.Optional;
 public class ClassTestData {
 
     public record Session(long id, long classId, long stageId, String sectionName, String lessonTitle,
-            int lessonNumber, String mode, String status) {
+            int lessonNumber, String mode, String status, String startedAt, String endedAt) {
         public boolean isLobby() {
             return "scheduled".equals(status);
         }
@@ -34,7 +34,7 @@ public class ClassTestData {
     public record Participant(long studentId, String username, boolean ready, int score, boolean finished) {
     }
 
-    private static final String SESSION_SELECT = "id,class_id,stage_id,session_mode,status,"
+    private static final String SESSION_SELECT = "id,class_id,stage_id,session_mode,status,started_at,ended_at,"
             + "class:classes(section_name),stage:stages(order_index,title)";
 
     /** The class's lobby or running test, if there is one. */
@@ -109,6 +109,12 @@ public class ClassTestData {
                 + studentId, "{\"ready\":" + ready + "}") != null;
     }
 
+    /** Updates the running score while the student is still playing (so the live standings move). */
+    public boolean submitProgress(long sessionId, long studentId, int score) {
+        return SupabaseClient.patch("class_test_participants?session_id=eq." + sessionId + "&student_id=eq."
+                + studentId, "{\"score\":" + score + "}") != null;
+    }
+
     /** Stores the finished run's points and finish time. */
     public boolean submitResult(long sessionId, long studentId, int score) {
         return SupabaseClient.patch("class_test_participants?session_id=eq." + sessionId + "&student_id=eq."
@@ -146,6 +152,42 @@ public class ClassTestData {
         return sorted;
     }
 
+    /** Finished tests of a class, newest first. */
+    public List<Session> history(long classId, int limit) {
+        List<Session> out = new ArrayList<>();
+        JsonValue rows = SupabaseClient.get("class_test_sessions?class_id=eq." + classId + "&status=eq.completed&started_at=not.is.null&select="
+                + SESSION_SELECT + "&order=ended_at.desc.nullslast&limit=" + limit);
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                out.add(sessionFrom(r));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Closes a running test if everyone who joined has finished or the time limit has passed.
+     * Safe to call from any screen watching the test; the result is the (possibly new) status.
+     */
+    public String endIfOver(Session session, List<Participant> participants) {
+        if (!session.isActive()) {
+            return session.status();
+        }
+        java.time.Instant started = null;
+        try {
+            started = session.startedAt() == null ? null : java.time.Instant.parse(session.startedAt());
+        } catch (RuntimeException ignored) {
+            // an unreadable start time just means the time limit cannot apply
+        }
+        int finished = (int) participants.stream().filter(Participant::finished).count();
+        if (codequest.session.TestRules.shouldEnd(session.status(), participants.size(), finished, started,
+                java.time.Instant.now())) {
+            setStatus(session.id(), "completed");
+            return "completed";
+        }
+        return session.status();
+    }
+
     private static Optional<Session> first(JsonValue rows) {
         return rows == null || rows.size == 0 ? Optional.empty() : Optional.of(sessionFrom(rows.get(0)));
     }
@@ -157,6 +199,7 @@ public class ClassTestData {
                 cls != null ? cls.getString("section_name", "?") : "?",
                 stage != null ? stage.getString("title", "Lesson") : "Lesson",
                 stage != null ? stage.getInt("order_index", 0) : 0,
-                r.getString("session_mode", "competitive"), r.getString("status", "scheduled"));
+                r.getString("session_mode", "competitive"), r.getString("status", "scheduled"),
+                r.getString("started_at", null), r.getString("ended_at", null));
     }
 }

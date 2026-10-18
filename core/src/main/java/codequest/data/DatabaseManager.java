@@ -37,25 +37,51 @@ public class DatabaseManager {
 
     // ── Accounts ─────────────────────────────────────────
 
-    public boolean validateLogin(String username, String password) {
-        // Not cached — always check the real credentials.
-        String query = "profiles?username=eq." + SupabaseClient.encode(username)
-                + "&password=eq." + SupabaseClient.encode(password)
-                + "&select=id&limit=1";
-        JsonValue result = SupabaseClient.get(query);
-        return result != null && result.size > 0;
+    /** A signed-in account: its profile id and role ("student" or "professor"). */
+    public record Account(long id, String role) {
+        public boolean isProfessor() {
+            return "professor".equals(role);
+        }
     }
 
-    public boolean registerUser(String username, String password) {
-        return registerUser(username, password, "student");
+    public enum SignUpResult {
+        OK, TAKEN, INVALID, BAD_INVITE, PROFESSOR_DISABLED, ERROR
     }
 
-    /** role must be "student" or "professor"; the caller is responsible for checking the professor invite code. */
-    public boolean registerUser(String username, String password, String role) {
-        String body = "{\"username\":\"" + escape(username) + "\",\"password\":\"" + escape(password)
-                + "\",\"role\":\"" + escape(role) + "\"}";
-        JsonValue inserted = SupabaseClient.post("profiles", body);
-        return inserted != null;
+    /**
+     * Checks the username and password on the server (passwords are stored hashed and compared there,
+     * so nothing readable is ever fetched). Empty means wrong credentials or the server could not be reached.
+     */
+    public Optional<Account> login(String username, String password) {
+        JsonValue result = SupabaseClient.post("rpc/login_user",
+                "{\"p_username\":\"" + escape(username) + "\",\"p_password\":\"" + escape(password) + "\"}");
+        if (result == null || result.isNull() || !result.isObject()) {
+            return Optional.empty();
+        }
+        long id = result.getLong("id");
+        profileIdCache.put(username, id);
+        return Optional.of(new Account(id, result.getString("role", "student")));
+    }
+
+    /**
+     * Creates an account on the server. A professor account also needs the invite code, which is checked
+     * there against a stored hash, so the code is not kept in the game files.
+     */
+    public SignUpResult register(String username, String password, String role, String inviteCode) {
+        JsonValue result = SupabaseClient.post("rpc/register_user", "{\"p_username\":\"" + escape(username)
+                + "\",\"p_password\":\"" + escape(password) + "\",\"p_role\":\"" + escape(role)
+                + "\",\"p_invite\":" + (inviteCode == null ? "null" : "\"" + escape(inviteCode) + "\"") + "}");
+        if (result == null || result.isNull()) {
+            return SignUpResult.ERROR;
+        }
+        return switch (result.asString()) {
+            case "ok" -> SignUpResult.OK;
+            case "taken" -> SignUpResult.TAKEN;
+            case "invalid" -> SignUpResult.INVALID;
+            case "bad_invite" -> SignUpResult.BAD_INVITE;
+            case "professor_disabled" -> SignUpResult.PROFESSOR_DISABLED;
+            default -> SignUpResult.ERROR;
+        };
     }
 
     public record Profile(long id, String username, String fullName, String section) {
@@ -177,6 +203,35 @@ public class DatabaseManager {
         return challenges;
     }
 
+    // ── Answer log (D5 submissions) ──────────────────────
+
+    /** One answer a student gave, as the log stores it. */
+    public record AnswerLog(long studentId, long stageId, Long sessionId, String mode, String challengeId, CTopic topic,
+            Difficulty difficulty, String token, boolean correct, int points, int timeTakenMs, int hintsUsed) {
+    }
+
+    /**
+     * Writes one answer to the log. Built-in questions (not rows in the challenges table) are recorded by
+     * their key instead of a challenge id. Returns false if it could not be saved; callers do not block on it.
+     */
+    public boolean logAnswer(AnswerLog a) {
+        String challengeRef;
+        if (a.challengeId() != null && a.challengeId().startsWith("db-")) {
+            challengeRef = ",\"challenge_id\":" + a.challengeId().substring(3);
+        } else {
+            challengeRef = a.challengeId() == null ? "" : ",\"challenge_key\":\"" + escape(a.challengeId()) + "\"";
+        }
+        String body = "{\"student_id\":" + a.studentId() + ",\"stage_id\":" + a.stageId()
+                + (a.sessionId() == null ? "" : ",\"session_id\":" + a.sessionId())
+                + ",\"mode\":\"" + escape(a.mode()) + "\"" + challengeRef
+                + ",\"topic\":\"" + a.topic().name() + "\",\"difficulty\":\"" + a.difficulty().name().toLowerCase()
+                + "\",\"submitted_code\":" + (a.token() == null ? "null" : "\"" + escape(a.token()) + "\"")
+                + ",\"is_correct\":" + a.correct() + ",\"points\":" + a.points()
+                + ",\"time_taken_ms\":" + a.timeTakenMs() + ",\"time_taken_seconds\":" + Math.round(a.timeTakenMs() / 1000f)
+                + ",\"hints_used\":" + a.hintsUsed() + "}";
+        return SupabaseClient.post("submissions", body) != null;
+    }
+
     // ── Certificates ─────────────────────────────────────
 
     public record CertificateRecord(long id, String rank, double scorePercentage, String issuedAt) {
@@ -265,8 +320,25 @@ public class DatabaseManager {
         }
     }
 
-    /** The whole catalog, in a stable order. */
+    private static volatile List<Cosmetic> catalogCache;
+    private static volatile long catalogCachedAt;
+    private static final long CATALOG_TTL_MS = 5 * 60 * 1000L;
+
+    /** The whole catalog, in a stable order. It changes rarely, so it is kept for a few minutes. */
     public List<Cosmetic> getCatalog() {
+        List<Cosmetic> cached = catalogCache;
+        if (cached != null && System.currentTimeMillis() - catalogCachedAt < CATALOG_TTL_MS) {
+            return cached;
+        }
+        List<Cosmetic> fresh = loadCatalog();
+        if (!fresh.isEmpty()) {
+            catalogCache = fresh;
+            catalogCachedAt = System.currentTimeMillis();
+        }
+        return fresh;
+    }
+
+    private List<Cosmetic> loadCatalog() {
         List<Cosmetic> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get(
                 "cosmetics?select=id,name,category,description,rarity,unlock_type,unlock_criteria&order=id");
@@ -387,6 +459,6 @@ public class DatabaseManager {
     }
 
     private static String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        return SupabaseClient.jsonEscape(value);
     }
 }

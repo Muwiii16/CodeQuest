@@ -12,7 +12,6 @@ public final class SupabaseConfig {
 
     private static String url;
     private static String anonKey;
-    private static String professorInviteCode;
     private static boolean loaded = false;
 
     private SupabaseConfig() {
@@ -35,7 +34,6 @@ public final class SupabaseConfig {
             props.load(new StringReader(file.readString("UTF-8")));
             url = props.getProperty("supabase.url");
             anonKey = props.getProperty("supabase.anonKey");
-            professorInviteCode = props.getProperty("professor.inviteCode");
         } catch (Exception e) {
             Gdx.app.error("SupabaseConfig", "Failed to read supabase.properties", e);
         }
@@ -49,12 +47,6 @@ public final class SupabaseConfig {
     public static String getAnonKey() {
         ensureLoaded();
         return anonKey;
-    }
-
-    /** Code a new professor must enter to register; null/blank means professor sign-up is switched off. */
-    public static String getProfessorInviteCode() {
-        ensureLoaded();
-        return professorInviteCode == null || professorInviteCode.isBlank() ? null : professorInviteCode.trim();
     }
 
     public static boolean isConfigured() {

@@ -98,6 +98,17 @@ public class ProfessorData {
         return Optional.of(new CreatedClass(classId, enrolled, skipped));
     }
 
+    /** Renames a class (section name and course code). */
+    public boolean updateClass(long classId, String sectionName, String courseCode) {
+        return SupabaseClient.patch("classes?id=eq." + classId, "{\"section_name\":\"" + CampaignData.escape(sectionName)
+                + "\",\"course_code\":\"" + CampaignData.escape(courseCode) + "\"}") != null;
+    }
+
+    /** Deletes a class with its lessons, questions, enrollments, class tests and student results for it. */
+    public boolean deleteClass(long classId) {
+        return SupabaseClient.delete("classes?id=eq." + classId);
+    }
+
     /** Checks an account exists and is a student, without enrolling it anywhere. */
     public EnrollResult checkStudent(String username) {
         JsonValue found = SupabaseClient.get("profiles?username=eq." + SupabaseClient.encode(username)
@@ -207,6 +218,31 @@ public class ProfessorData {
                 out.computeIfAbsent(r.getLong("student_id"), k -> new HashMap<>()).put(r.getLong("stage_id"),
                         new Progress(r.getString("status", "locked"), r.getInt("score", 0), r.getString("rank", null),
                                 r.getInt("attempts", 0), r.getString("last_played_at", null)));
+            }
+        }
+        return out;
+    }
+
+    /** Per topic: {answers that were right, answers in total} for a lesson, from the answer log of these students. */
+    public Map<String, int[]> topicAccuracy(long classId, long stageId) {
+        Map<String, int[]> out = new java.util.TreeMap<>();
+        List<Student> students = roster(classId);
+        if (students.isEmpty()) {
+            return out;
+        }
+        JsonValue rows = SupabaseClient.get("submissions?stage_id=eq." + stageId + "&student_id=in.(" + idList(students)
+                + ")&select=topic,is_correct&limit=5000");
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                String topic = r.getString("topic", null);
+                if (topic == null) {
+                    continue;
+                }
+                int[] c = out.computeIfAbsent(topic, k -> new int[2]);
+                c[1]++;
+                if (r.getBoolean("is_correct", false)) {
+                    c[0]++;
+                }
             }
         }
         return out;
