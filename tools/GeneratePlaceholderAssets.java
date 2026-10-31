@@ -61,6 +61,11 @@ public class GeneratePlaceholderAssets {
         save(lab(), "game/lab.png");
         save(avatar(), "game/avatar.png");
         save(projectile(), "game/projectile.png");
+        save(weapon(), "game/weapon.png");
+        save(hat(), "game/hat.png");
+        save(glow(), "game/glow.png");
+        save(spark(), "game/spark.png");
+        save(ring(), "game/ring.png");
         String[][] towers = { { "syntax", ";" }, { "variables", "x" }, { "control_structures", "if" },
                 { "functions", "f()" }, { "arrays", "[ ]" }, { "pointers", "*p" } };
         Color[] towerColors = { new Color(0xF2C14E), new Color(0x5AA9E6), new Color(0xB48AF2),
@@ -489,6 +494,81 @@ public class GeneratePlaceholderAssets {
         g.setColor(Color.WHITE);
         g.setFont(sans(40));
         centered(g, "!", 48, 62);
+        g.dispose();
+        return im;
+    }
+
+    /** A floating weapon, drawn pointing right with the grip at the left end (so a rotation swings it from the grip). White so it can be tinted. */
+    static BufferedImage weapon() {
+        BufferedImage im = img(256, 96);
+        Graphics2D g = g(im);
+        g.setColor(new Color(0xB8BCC8));
+        g.fill(new RoundRectangle2D.Float(8, 40, 52, 16, 8, 8));
+        g.setColor(new Color(0x8C91A0));
+        g.fill(new RoundRectangle2D.Float(56, 20, 14, 56, 6, 6));
+        Path2D.Float blade = new Path2D.Float();
+        blade.moveTo(70, 34);
+        blade.lineTo(220, 34);
+        blade.lineTo(250, 48);
+        blade.lineTo(220, 62);
+        blade.lineTo(70, 62);
+        blade.closePath();
+        g.setPaint(new GradientPaint(0, 34, Color.WHITE, 0, 62, new Color(0xC9CEDB)));
+        g.fill(blade);
+        g.setColor(new Color(255, 255, 255, 200));
+        g.fill(new RoundRectangle2D.Float(78, 38, 140, 6, 6, 6));
+        g.dispose();
+        return im;
+    }
+
+    /** A simple hat (dome and brim), white so it can be tinted. */
+    static BufferedImage hat() {
+        BufferedImage im = img(128, 96);
+        Graphics2D g = g(im);
+        g.setColor(new Color(0xD7DBE6));
+        g.fill(new Ellipse2D.Float(6, 62, 116, 24));
+        g.setPaint(new GradientPaint(0, 10, Color.WHITE, 0, 74, new Color(0xC3C9DA)));
+        g.fill(new Arc2D.Float(24, 8, 80, 130, 0, 180, Arc2D.CHORD));
+        g.setColor(new Color(0x9AA1B8));
+        g.fill(new RoundRectangle2D.Float(24, 58, 80, 10, 6, 6));
+        g.dispose();
+        return im;
+    }
+
+    /** Soft round glow, white at the middle fading out, for auras (tinted by rarity). */
+    static BufferedImage glow() {
+        BufferedImage im = img(256, 256);
+        Graphics2D g = g(im);
+        g.setPaint(new RadialGradientPaint(new Point2D.Float(128, 128), 126f, new float[] { 0f, 0.35f, 1f },
+                new Color[] { new Color(255, 255, 255, 255), new Color(255, 255, 255, 110), new Color(255, 255, 255, 0) }));
+        g.fill(new Ellipse2D.Float(0, 0, 256, 256));
+        g.dispose();
+        return im;
+    }
+
+    /** A four-point sparkle. */
+    static BufferedImage spark() {
+        BufferedImage im = img(64, 64);
+        Graphics2D g = g(im);
+        Path2D.Float star = new Path2D.Float();
+        star.moveTo(32, 2);
+        star.quadTo(34, 30, 62, 32);
+        star.quadTo(34, 34, 32, 62);
+        star.quadTo(30, 34, 2, 32);
+        star.quadTo(30, 30, 32, 2);
+        g.setColor(Color.WHITE);
+        g.fill(star);
+        g.dispose();
+        return im;
+    }
+
+    /** A thin ring for the shockwave when a projectile is hit. */
+    static BufferedImage ring() {
+        BufferedImage im = img(256, 256);
+        Graphics2D g = g(im);
+        g.setColor(Color.WHITE);
+        g.setStroke(new BasicStroke(14));
+        g.draw(new Ellipse2D.Float(14, 14, 228, 228));
         g.dispose();
         return im;
     }

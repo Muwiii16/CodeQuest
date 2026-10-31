@@ -8,6 +8,7 @@ import codequest.data.DatabaseManager;
 import codequest.data.DatabaseManager.Cosmetic;
 import codequest.data.Lesson;
 import codequest.data.RunCache;
+import codequest.session.GachaRoll;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Align;
 
@@ -28,7 +29,7 @@ public class CampaignScreen extends StudentScreen {
 
     /** Everything the screen shows, fetched together in the background. */
     private record Loaded(long studentId, List<ClassInfo> classes, List<Cosmetic> catalog, Set<Long> owned,
-            List<Lesson> lessons, Map<Long, Progress> progress) {
+            Set<Long> rolled, DatabaseManager.RollStats stats, List<Lesson> lessons, Map<Long, Progress> progress) {
     }
 
     private record LessonsLoaded(List<Lesson> lessons, Map<Long, Progress> progress) {
@@ -42,6 +43,8 @@ public class CampaignScreen extends StudentScreen {
     private List<ClassInfo> classes = List.of();
     private List<Cosmetic> catalog = List.of();
     private Set<Long> owned = Set.of();
+    private Set<Long> rolled = Set.of();
+    private DatabaseManager.RollStats stats = new DatabaseManager.RollStats(0, 0);
     private int classIdx;
     private int page;
     private Long expandedStageId;
@@ -54,7 +57,8 @@ public class CampaignScreen extends StudentScreen {
         load("Loading your lessons...", () -> {
             long id = db.profileId(username);
             CompletableFuture<Object[]> shop = CompletableFuture.supplyAsync(
-                    () -> new Object[] { db.getCatalog(), new HashSet<>(db.getOwnedCosmetics(id)) });
+                    () -> new Object[] { db.getCatalog(), new HashSet<>(db.getOwnedCosmetics(id)), db.rolledStages(id),
+                            db.getRollStats(id) });
             List<ClassInfo> myClasses = data.studentClasses(id);
             LessonsLoaded l = fetchLessons(id, myClasses.isEmpty() ? null : myClasses.get(0).id());
             Object[] s = shop.join();
@@ -62,12 +66,16 @@ public class CampaignScreen extends StudentScreen {
             List<Cosmetic> cat = (List<Cosmetic>) s[0];
             @SuppressWarnings("unchecked")
             Set<Long> own = (Set<Long>) s[1];
-            return new Loaded(id, myClasses, cat, own, l.lessons(), l.progress());
+            @SuppressWarnings("unchecked")
+            Set<Long> rolls = (Set<Long>) s[2];
+            return new Loaded(id, myClasses, cat, own, rolls, (DatabaseManager.RollStats) s[3], l.lessons(), l.progress());
         }, l -> {
             studentId = l.studentId();
             classes = l.classes();
             catalog = l.catalog();
             owned = l.owned();
+            rolled = l.rolled();
+            stats = l.stats();
             lessons = l.lessons();
             progress = l.progress();
             rebuild();
@@ -152,9 +160,10 @@ public class CampaignScreen extends StudentScreen {
         if (halfPlayed) {
             status = "In progress  -  you can pick up where you stopped";
         } else if (done) {
-            status = "Completed  -  Rank " + (p.rank() == null ? "-" : p.rank()) + "  -  best score " + p.score();
+            status = "Completed  -  Rank " + (p.rank() == null ? "-" : p.rank()) + "  -  best score " + p.score()
+                    + (rolled.contains(lesson.stageId()) ? "  -  reward claimed" : "  -  reward roll waiting");
         } else if (unlocked) {
-            status = "Ready  -  starts at " + lesson.baseDifficulty().toUpperCase();
+            status = "Ready  -  starts at " + lesson.baseDifficulty().toUpperCase() + "  -  reward roll waiting";
         } else {
             status = "Locked  -  pass lesson " + (lesson.number() - 1) + " first";
         }
@@ -183,14 +192,13 @@ public class CampaignScreen extends StudentScreen {
         return next;
     }
 
+    /** The first time you pass a lesson you get one roll; replays give none. */
     private String rewardText(Lesson lesson) {
-        StringBuilder sb = new StringBuilder();
-        for (Cosmetic c : catalog) {
-            if ("stage_completion".equals(c.unlockType()) && c.lessonNumber() == lesson.number()) {
-                sb.append(sb.length() == 0 ? "" : "    ").append(c.name()).append("  (")
-                        .append(CosmeticLook.categoryLabel(c.category())).append(owned.contains(c.id()) ? ", owned)" : ")");
-            }
-        }
-        return sb.length() == 0 ? "No rewards for this lesson." : "Pass this lesson to unlock:   " + sb;
+        String head = rolled.contains(lesson.stageId())
+                ? "Reward claimed. Replaying this lesson gives no more rolls."
+                : "Pass this lesson for one reward roll (a hat, weapon, trail or title).   Odds:  " + GachaRoll.oddsText();
+        return head + "\nPity: a rare or better item is guaranteed within " + GachaRoll.PITY_ROLLS + " rolls.  "
+                + (stats.untilGuarantee() <= 1 ? "Your next roll is guaranteed!" : "Next guarantee in " + stats.untilGuarantee()
+                        + " rolls.");
     }
 }

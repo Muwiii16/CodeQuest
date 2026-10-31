@@ -117,3 +117,32 @@ Migration `supabase/migrations/20261018120000_security_answers_rewards.sql` (app
   from anyone holding the app key (needs Supabase Auth so the database knows who is asking).
 - No limit on wrong-password attempts.
 - Gemini / Claude steps, real art, fonts and sound, How to play (add at the end).
+
+## Round 4: gacha cosmetics, hats, floating weapon (done)
+Migration `supabase/migrations/20261031120000_gacha_cosmetics.sql` (applied). Categories are now hat / weapon / trail / title
+(old avatar_skin -> hat, badge -> weapon). Items won from lessons have `unlock_type = 'gacha'`; the old per-lesson rewards
+(`stage_completion`, `unlock_criteria.lesson_number`) are gone. 24 cosmetics: 4 starter items + 20 to win
+(6 common, 6 rare, 4 epic, 4 legendary). A student's existing "Lab Rookie" became the common weapon "Pencil".
+- **Roll:** (see Round 5 below for the final rules.) The roll is made on the student's computer when the result is saved (like the
+  rest of progress, it can be tampered with until Supabase Auth + RLS). Class tests still give no rewards.
+- **Reveal:** `RewardRollScreen`: shaking orb whose color turns to the rarity, flash, card; glow and orbiting sparks for
+  epic and legendary. "Equip it now" / "Continue".
+- **Hat:** drawn on the head (glow behind it from rare up). **Weapon:** `WeaponRig` floats beside the student (bob, sway, lag),
+  aims at the projectile and pulses faster as time runs out, then on a right answer winds up, dashes through it with
+  afterimages, bursts and a shockwave, knocks it back to its tower and returns; on a wrong answer it droops and flickers while
+  the projectile hits the student. Same motion for every weapon; rarity only changes the glow, sparks and particles.
+- **Art to draw (replaces the placeholders):** `game/hat.png` (sits on the head), `game/weapon.png` (pointing right, grip at
+  the left end), `game/glow.png`, `game/spark.png`, `game/ring.png`. Each hat/weapon will need its own file once the real
+  art exists: the placeholder is one white picture tinted per item.
+
+## Round 5: duplicates, pity, one roll per lesson (done)
+Migration `supabase/migrations/20261101120000_reward_rolls.sql` (applied): new table `reward_rolls` (a ledger of every roll).
+- Duplicates are allowed (the reveal says DUPLICATE). The odds are 60 / 28 / 9 / 3 percent.
+- Pity: `GachaRoll.PITY_ROLLS = 5`. After 4 rolls in a row with nothing rare or better, the 5th roll is forced to be rare, epic
+  or legendary (at their normal odds relative to each other). Change the number to tune it. It is per student, across all
+  their classes, and shown on the reveal, the Campaign rewards dropdown and the Cosmetics screen.
+- One roll per lesson per student, ever: the ledger has a unique entry per (student, lesson), written before the item is
+  unlocked. Replaying a lesson shows "already claimed" and goes straight back to the lesson list. Cosmetics belong to the
+  student, so they carry over to every class they join. Lessons finished before the gacha existed will give their roll
+  the first time they are passed again (no backfill).
+- Fixed on the way: the JSON reader was shared between threads, which could garble a reply when two screens loaded at once.

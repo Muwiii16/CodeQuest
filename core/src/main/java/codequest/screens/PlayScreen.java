@@ -97,9 +97,23 @@ public class PlayScreen extends InputAdapter implements Screen {
     private final Difficulty startDifficulty;
     private final int towerCount;
     private final DatabaseManager db = new DatabaseManager();
-    private Color skinTint = Color.WHITE;
-    private Color trailColor;
-    private volatile String rewardLine = "";
+    private CosmeticLook.Outfit outfit;
+    private WeaponRig rig;
+    private volatile DatabaseManager.RollOutcome rollOutcome;
+
+    // what happens to the projectile after an answer: held in place until the weapon hits it, then knocked
+    // back to its tower (right answer), or carried on into the student (wrong answer)
+    private enum Fx { NONE, FROZEN, KNOCKBACK, HIT }
+
+    private Fx fx = Fx.NONE;
+    private float fxT;
+    private float fxX;
+    private float fxY;
+    private float fxFromX;
+    private float fxFromY;
+    private float fxToX;
+    private float fxToY;
+    private float avatarFlash;
 
     // The answers so far and the seed the questions are drawn with are saved locally after every answer, so a
     // class test or a campaign lesson can be resumed after the game was closed.
@@ -326,6 +340,9 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     private void update(float dt) {
+        Vector2 avatarNow = pointAt(distance);
+        rig.update(dt, avatarNow.x, avatarNow.y, phase == Phase.WALKING ? -10f : 0f);
+        updateFx(dt, avatarNow);
         if (classTest && phase != Phase.RESULT && standings != null) {
             Live live = standings.latest();
             if (live != null && "completed".equals(live.status())) {
@@ -345,6 +362,8 @@ public class PlayScreen extends InputAdapter implements Screen {
             }
             case ENCOUNTER -> {
                 timeLeft -= dt;
+                Vector2 pp = projectilePos();
+                rig.guard(pp.x, pp.y, 1f - Math.max(0f, timeLeft) / flightTime);
                 if (timeLeft <= 0f) {
                     resolve(null);
                 }
@@ -392,9 +411,12 @@ public class PlayScreen extends InputAdapter implements Screen {
         boolean hinted = hintShown;
         float fraction = flightTime > 0f ? Math.max(0f, timeLeft / flightTime) : 0f;
         int takenMs = Math.round((flightTime - Math.max(0f, timeLeft)) * 1000f);
+        Vector2 projectileAt = projectilePos();
+        TowerSpot sourceTower = towers.get(towerIdx);
         StageRun.Outcome o = run.answer(token, fraction);
         towerIdx++;
         active = null;
+        startAnswerFx(o.correct(), projectileAt, sourceTower);
 
         answers.add(new RunReplay.Answer(token, fraction));
         RunCache.save(cacheKey, username, seed, answers);
@@ -478,14 +500,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                     }
                 } else if (pass) {
                     db.saveLessonProgress(username, lesson.stageId(), startDifficulty.name().toLowerCase(), score, rank);
-                    List<DatabaseManager.Cosmetic> rewards = db.grantLessonRewards(username, lesson.number());
-                    if (!rewards.isEmpty()) {
-                        StringBuilder sb = new StringBuilder("Reward unlocked: ");
-                        for (int i = 0; i < rewards.size(); i++) {
-                            sb.append(i > 0 ? ", " : "").append(rewards.get(i).name());
-                        }
-                        rewardLine = sb.toString();
-                    }
+                    rollOutcome = db.rollReward(username, lesson.stageId());
                 }
             } finally {
                 saveDone = true;
@@ -500,22 +515,83 @@ public class PlayScreen extends InputAdapter implements Screen {
         } else if (classTest) {
             game.setScreen(new MainMenuScreen(game, username));
         } else {
-            game.setScreen(new CampaignScreen(game, username));
+            game.setScreen(afterRun());
         }
     }
 
-    /** Applies the equipped skin and trail (placeholder colors until the cosmetic art exists). */
-    private void applyLook(PlayData data) {
-        if (data.equipped().isEmpty()) {
-            return;
+    /** After a passed lesson the reward reveal comes next (it was rolled while the result was saved); otherwise the lesson list. */
+    private com.badlogic.gdx.Screen afterRun() {
+        DatabaseManager.RollOutcome r = rollOutcome;
+        if (!classTest && phase == Phase.RESULT && r != null && r.status() != DatabaseManager.RollStatus.ALREADY_CLAIMED) {
+            return new RewardRollScreen(game, username, r, lesson.title(), lesson.stageId());
         }
-        for (DatabaseManager.Cosmetic c : data.catalog()) {
-            if (c.id() == data.equipped().getOrDefault(c.category(), -1L)) {
-                if ("avatar_skin".equals(c.category()) && !c.isDefault()) {
-                    skinTint = CosmeticLook.colorOf(c);
-                } else if ("trail".equals(c.category()) && !c.isDefault()) {
-                    trailColor = CosmeticLook.colorOf(c);
+        return new CampaignScreen(game, username);
+    }
+
+    /** Dresses the student in the equipped hat, floating weapon and trail (placeholder colors until the art exists). */
+    private void applyLook(PlayData data) {
+        outfit = CosmeticLook.outfit(data.equipped(), data.catalog());
+        DatabaseManager.Cosmetic w = outfit.weapon();
+        rig = new WeaponRig(w == null ? 0 : w.rarityRank(), w == null ? new Color(0.82f, 0.86f, 1f, 1f) : CosmeticLook.colorOf(w),
+                CosmeticLook.rarityColor(w == null ? "common" : w.rarity()));
+    }
+
+    private Vector2 projectilePos() {
+        TowerSpot t = towers.get(Math.min(towerIdx, towers.size() - 1));
+        Vector2 a = pointAt(distance);
+        float p = flightTime > 0f ? Math.max(0f, Math.min(1f, 1f - timeLeft / flightTime)) : 1f;
+        return new Vector2(t.x() + (a.x - t.x()) * p, t.y() + (a.y - t.y()) * p);
+    }
+
+    /** Starts the weapon's strike (right answer) or stumble (wrong answer) and the matching fate for the projectile. */
+    private void startAnswerFx(boolean correct, Vector2 pp, TowerSpot source) {
+        fxFromX = pp.x;
+        fxFromY = pp.y;
+        fxX = pp.x;
+        fxY = pp.y;
+        fxT = 0f;
+        if (correct) {
+            fx = Fx.FROZEN;
+            fxToX = source.x();
+            fxToY = source.y();
+            int rank = rig == null ? 0 : outfit.weapon() == null ? 0 : outfit.weapon().rarityRank();
+            Color color = rank >= 1 ? CosmeticLook.rarityColor(outfit.weapon().rarity()) : new Color(0.6f, 0.82f, 1f, 1f);
+            rig.strike(pp.x, pp.y, () -> {
+                rig.burst(pp.x, pp.y, color, 14 + 8 * rank, 260f + 60f * rank);
+                fx = Fx.KNOCKBACK;
+                fxT = 0f;
+            });
+        } else {
+            fx = Fx.HIT;
+            rig.stumble();
+        }
+    }
+
+    private void updateFx(float dt, Vector2 avatar) {
+        avatarFlash = Math.max(0f, avatarFlash - dt);
+        switch (fx) {
+            case KNOCKBACK -> {
+                fxT += dt;
+                float t = Math.min(1f, fxT / 0.4f);
+                float e = com.badlogic.gdx.math.Interpolation.pow2Out.apply(t);
+                fxX = fxFromX + (fxToX - fxFromX) * e;
+                fxY = fxFromY + (fxToY - fxFromY) * e;
+                if (t >= 1f) {
+                    fx = Fx.NONE;
                 }
+            }
+            case HIT -> {
+                fxT += dt;
+                float t = Math.min(1f, fxT / 0.25f);
+                fxX = fxFromX + (avatar.x - fxFromX) * t;
+                fxY = fxFromY + (avatar.y - fxFromY) * t;
+                if (t >= 1f) {
+                    rig.burst(avatar.x, avatar.y, new Color(1f, 0.35f, 0.3f, 1f), 12, 220f);
+                    avatarFlash = 0.45f;
+                    fx = Fx.NONE;
+                }
+            }
+            default -> {
             }
         }
     }
@@ -536,7 +612,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 leave();
             } else if (certificateEligible() && CERT_BTN.contains(mx, my)) {
                 game.setScreen(new CertificateScreen(game, username, lesson,
-                        run.rank().name(), run.overallAccuracy()));
+                        run.rank().name(), run.overallAccuracy(), () -> game.setScreen(afterRun())));
             }
             return true;
         }
@@ -651,7 +727,15 @@ public class PlayScreen extends InputAdapter implements Screen {
         return sprites.computeIfAbsent(path, p -> new Texture(Gdx.files.internal(p)));
     }
 
-    /** Towers, avatar and the incoming projectile (placeholder sprites; y is flipped from the top-left layout). */
+    private void drawProjectile(float x, float y, float size, float alpha, float rotation) {
+        Texture tex = sprite("game/projectile.png");
+        batch.setColor(1f, 1f, 1f, alpha);
+        batch.draw(tex, x - size / 2f, H - y - size / 2f, size / 2f, size / 2f, size, size, 1f, 1f, rotation, 0, 0,
+                tex.getWidth(), tex.getHeight(), false, false);
+        batch.setColor(Color.WHITE);
+    }
+
+    /** Towers, student (hat, trail), the projectile and the floating weapon (placeholder sprites; y is flipped from the top-left layout). */
     private void drawWorldSprites() {
         for (int i = 0; i < towers.size(); i++) {
             TowerSpot t = towers.get(i);
@@ -662,25 +746,64 @@ public class PlayScreen extends InputAdapter implements Screen {
         batch.setColor(Color.WHITE);
 
         Vector2 a = pointAt(distance);
-        if (trailColor != null) {
-            for (int i = 1; i <= 5; i++) {
-                Vector2 back = pointAt(distance - i * 18f);
-                batch.setColor(trailColor.r, trailColor.g, trailColor.b, 0.7f - i * 0.12f);
-                float size = 26 - i * 3;
-                batch.draw(sprite("game/projectile.png"), back.x - size / 2, H - back.y - size / 2, size, size);
+        float bob = phase == Phase.WALKING ? (float) Math.sin(distance * 0.18f) * 2.5f : 0f;
+
+        DatabaseManager.Cosmetic trail = outfit.trail();
+        if (trail != null && !trail.isDefault()) {
+            Color tc = CosmeticLook.colorOf(trail);
+            int rank = trail.rarityRank();
+            int dots = 5 + rank * 2;
+            if (rank >= 2) {
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
             }
+            for (int i = 1; i <= dots; i++) {
+                Vector2 back = pointAt(distance - i * 18f);
+                batch.setColor(tc.r, tc.g, tc.b, Math.max(0.05f, 0.75f - i * (0.75f / (dots + 1))));
+                float size = (26 + rank * 4) - i * 2.4f;
+                batch.draw(sprite("game/glow.png"), back.x - size / 2, H - back.y - size / 2, size * 1.4f, size * 1.4f);
+            }
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         }
-        batch.setColor(skinTint);
-        batch.draw(sprite("game/avatar.png"), a.x - 36, H - a.y - 40, 72, 72);
+
+        if (avatarFlash > 0f) {
+            float f = avatarFlash / 0.45f;
+            batch.setColor(1f, 1f - 0.6f * f, 1f - 0.6f * f, 1f);
+        }
+        batch.draw(sprite("game/avatar.png"), a.x - 36, H - (a.y + bob) - 40, 72, 72);
         batch.setColor(Color.WHITE);
 
-        if (phase == Phase.ENCOUNTER) {
-            TowerSpot t = towers.get(towerIdx);
-            float p = 1f - timeLeft / flightTime;
-            float px = t.x() + (a.x - t.x()) * p;
-            float py = t.y() + (a.y - t.y()) * p;
-            batch.draw(sprite("game/projectile.png"), px - 30, H - py - 30, 60, 60);
+        DatabaseManager.Cosmetic hat = outfit.hat();
+        if (hat != null && !hat.isDefault()) {
+            Color hc = CosmeticLook.colorOf(hat);
+            int rank = hat.rarityRank();
+            float hatY = H - (a.y + bob - 24f);
+            if (rank >= 1) {
+                Color aura = CosmeticLook.rarityColor(hat.rarity());
+                float size = 80f + 28f * rank;
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                batch.setColor(aura.r, aura.g, aura.b, 0.28f + 0.1f * rank);
+                batch.draw(sprite("game/glow.png"), a.x - size / 2f, hatY + 20f - size / 2f, size, size);
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            }
+            batch.setColor(hc);
+            batch.draw(sprite("game/hat.png"), a.x - 29f, hatY, 58f, 44f);
+            batch.setColor(Color.WHITE);
         }
+
+        if (phase == Phase.ENCOUNTER) {
+            Vector2 pp = projectilePos();
+            drawProjectile(pp.x, pp.y, 60f, 1f, 0f);
+        } else if (fx == Fx.FROZEN) {
+            drawProjectile(fxX, fxY, 60f, 1f, 0f);
+        } else if (fx == Fx.KNOCKBACK) {
+            float t = Math.min(1f, fxT / 0.4f);
+            drawProjectile(fxX, fxY, 60f * (1f - 0.5f * t), 1f - t, 720f * t);
+        } else if (fx == Fx.HIT) {
+            drawProjectile(fxX, fxY, 60f, 1f, 0f);
+        }
+
+        rig.draw(batch, H, sprite("game/weapon.png"), sprite("game/glow.png"), sprite("game/spark.png"),
+                sprite("game/ring.png"));
     }
 
     private void drawWorldShapes() {
@@ -793,8 +916,14 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
         if (classTest) {
             drawCentered(placeLine(), W / 2f, 780, 1.8f, new Color(0.6f, 0.95f, 0.6f, 1f));
-        } else if (!rewardLine.isEmpty()) {
-            drawCentered(rewardLine, W / 2f, 735, 1.6f, new Color(1f, 0.85f, 0.4f, 1f));
+        } else if (cleared && rollOutcome != null) {
+            if (rollOutcome.status() == DatabaseManager.RollStatus.ALREADY_CLAIMED) {
+                drawCentered("You already claimed this lesson's reward. Replays do not give another roll.", W / 2f, 735,
+                        1.5f, new Color(0.7f, 0.75f, 0.9f, 1f));
+            } else {
+                drawCentered("You earned a reward roll!  Open it on the next screen.", W / 2f, 735, 1.6f,
+                        new Color(1f, 0.85f, 0.4f, 1f));
+            }
         }
         if (certificateEligible()) {
             drawCentered("Rank B or higher: you earned a lesson certificate", W / 2f, 780, 1.5f,

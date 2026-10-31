@@ -41,11 +41,10 @@ public class CertificateScreen extends BaseScreen {
     private byte[] pdf;
     private String fileName;
 
-    /** Right after a run: issue (or upgrade) the certificate, then show it. */
-    public CertificateScreen(Main game, String username, Lesson lesson, String rank, double accuracy) {
+    /** Right after a run: issue (or upgrade) the certificate, then show it. {@code back} is what the button underneath does. */
+    public CertificateScreen(Main game, String username, Lesson lesson, String rank, double accuracy, Runnable back) {
         setBackground(Art.BG_MENU);
         addCenteredTitle("YOUR CERTIFICATE", 70f, 4f, Color.WHITE);
-        Runnable back = () -> game.setScreen(new CampaignScreen(game, username));
         load("Preparing your certificate...", () -> {
             var record = db.issueCertificate(username, lesson.stageId(), rank, accuracy * 100);
             if (record.isEmpty()) {
@@ -53,7 +52,7 @@ public class CertificateScreen extends BaseScreen {
             }
             return prepare(username, lesson.number(), lesson.title(), record.get().rank(),
                     record.get().scorePercentage(), LocalDate.now());
-        }, prepared -> show(prepared, back, "Back to lessons"));
+        }, prepared -> show(prepared, back, "Continue"));
     }
 
     /** From the Certificates list: show one the student already earned. */

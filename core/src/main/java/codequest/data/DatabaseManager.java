@@ -3,6 +3,7 @@ package codequest.data;
 import codequest.content.CTopic;
 import codequest.content.Challenge;
 import codequest.content.Difficulty;
+import codequest.session.GachaRoll;
 import codequest.session.Rank;
 import com.badlogic.gdx.utils.JsonValue;
 
@@ -314,9 +315,14 @@ public class DatabaseManager {
     // ── Cosmetics ────────────────────────────────────────
 
     public record Cosmetic(long id, String name, String category, String description, String rarity,
-            String unlockType, int lessonNumber) {
+            String unlockType) {
         public boolean isDefault() {
             return "default".equals(unlockType);
+        }
+
+        /** 0 (common) to 3 (legendary): how flashy the item looks. */
+        public int rarityRank() {
+            return GachaRoll.rank(rarity);
         }
     }
 
@@ -341,16 +347,14 @@ public class DatabaseManager {
     private List<Cosmetic> loadCatalog() {
         List<Cosmetic> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get(
-                "cosmetics?select=id,name,category,description,rarity,unlock_type,unlock_criteria&order=id");
+                "cosmetics?select=id,name,category,description,rarity,unlock_type&order=id");
         if (rows == null) {
             return out;
         }
         for (JsonValue r : rows) {
-            JsonValue criteria = r.get("unlock_criteria");
-            out.add(new Cosmetic(r.getLong("id"), r.getString("name", "?"), r.getString("category", "badge"),
+            out.add(new Cosmetic(r.getLong("id"), r.getString("name", "?"), r.getString("category", "weapon"),
                     r.getString("description", ""), r.getString("rarity", "common"),
-                    r.getString("unlock_type", "default"),
-                    criteria != null ? criteria.getInt("lesson_number", 0) : 0));
+                    r.getString("unlock_type", "default")));
         }
         return out;
     }
@@ -414,31 +418,117 @@ public class DatabaseManager {
         return out;
     }
 
-    /** The cosmetics passing lesson number {@code lessonNumber} unlocks. */
-    public List<Cosmetic> rewardsForLesson(int lessonNumber) {
-        List<Cosmetic> out = new ArrayList<>();
-        for (Cosmetic c : getCatalog()) {
-            if ("stage_completion".equals(c.unlockType()) && c.lessonNumber() == lessonNumber) {
-                out.add(c);
+    public enum RollStatus {
+        /** A cosmetic was won. */
+        WON,
+        /** This lesson already gave its roll: replaying a lesson gives nothing. */
+        ALREADY_CLAIMED,
+        ERROR
+    }
+
+    /**
+     * The result of a reward roll. {@code duplicate}: the student already owned the item. {@code pity}: the roll was
+     * forced to be rare or better. {@code rollsUntilGuarantee}: how many rolls until the next forced one (1 = the next roll).
+     */
+    public record RollOutcome(RollStatus status, Cosmetic cosmetic, boolean duplicate, boolean pity,
+            int rollsUntilGuarantee) {
+        public static RollOutcome of(RollStatus status) {
+            return new RollOutcome(status, null, false, false, GachaRoll.PITY_ROLLS);
+        }
+    }
+
+    /** How many rolls the student has made, and how many in a row since the last rare or better. */
+    public record RollStats(int rolls, int sinceRare) {
+        public int untilGuarantee() {
+            return Math.max(1, GachaRoll.PITY_ROLLS - sinceRare);
+        }
+    }
+
+    /** Rarities of the student's rolls, newest first (rolls recorded for lessons finished before the gacha existed are ignored). */
+    private List<String> rollHistory(long studentId) {
+        List<String> out = new ArrayList<>();
+        JsonValue rows = SupabaseClient.get("reward_rolls?student_id=eq." + studentId
+                + "&rarity=neq.legacy&select=rarity&order=rolled_at.desc,id.desc&limit=500");
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                out.add(r.getString("rarity", "common"));
             }
         }
         return out;
     }
 
-    /** Unlocks the lesson's rewards for the student; returns the ones that were new. */
-    public List<Cosmetic> grantLessonRewards(String username, int lessonNumber) {
-        List<Cosmetic> granted = new ArrayList<>();
-        Long studentId = resolveProfileId(username);
-        if (studentId == null) {
-            return granted;
-        }
-        Set<Long> owned = new HashSet<>(getOwnedCosmetics(studentId));
-        for (Cosmetic c : rewardsForLesson(lessonNumber)) {
-            if (!owned.contains(c.id()) && unlockCosmetic(studentId, c.id())) {
-                granted.add(c);
+    public RollStats getRollStats(long studentId) {
+        List<String> history = rollHistory(studentId);
+        return new RollStats(history.size(), GachaRoll.rollsSinceRare(history));
+    }
+
+    /** Ids of the lessons (stages) that already gave this student their roll. */
+    public Set<Long> rolledStages(long studentId) {
+        Set<Long> out = new HashSet<>();
+        JsonValue rows = SupabaseClient.get("reward_rolls?student_id=eq." + studentId + "&stage_id=not.is.null&select=stage_id");
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                out.add(r.getLong("stage_id"));
             }
         }
-        return granted;
+        return out;
+    }
+
+    /**
+     * The reward for passing a lesson for the first time: one random cosmetic by the rarity odds. Duplicates can
+     * happen; after {@link GachaRoll#PITY_ROLLS} - 1 rolls without anything rare or better the next roll is forced to be
+     * rare or better. A lesson gives one roll per student, ever, so replaying it gives nothing. The roll is recorded
+     * in the reward_rolls ledger (unique per student and lesson) before the item is unlocked.
+     */
+    public RollOutcome rollReward(String username, long stageId) {
+        Long studentId = resolveProfileId(username);
+        if (studentId == null) {
+            return RollOutcome.of(RollStatus.ERROR);
+        }
+        JsonValue claimed = SupabaseClient.get("reward_rolls?student_id=eq." + studentId + "&stage_id=eq." + stageId
+                + "&select=id&limit=1");
+        if (claimed == null) {
+            return RollOutcome.of(RollStatus.ERROR);
+        }
+        if (claimed.size > 0) {
+            return RollOutcome.of(RollStatus.ALREADY_CLAIMED);
+        }
+
+        List<Cosmetic> pool = new ArrayList<>();
+        for (Cosmetic c : getCatalog()) {
+            if ("gacha".equals(c.unlockType())) {
+                pool.add(c);
+            }
+        }
+        if (pool.isEmpty()) {
+            return RollOutcome.of(RollStatus.ERROR);
+        }
+        List<String> history = rollHistory(studentId);
+        int since = GachaRoll.rollsSinceRare(history);
+        boolean pity = GachaRoll.pityDue(since);
+        Optional<Cosmetic> won = GachaRoll.roll(pool, Cosmetic::rarity, new java.util.Random(), pity);
+        if (won.isEmpty()) {
+            return RollOutcome.of(RollStatus.ERROR);
+        }
+        Cosmetic item = won.get();
+        boolean duplicate = getOwnedCosmetics(studentId).contains(item.id());
+        boolean forcedByPity = pity && GachaRoll.rank(item.rarity()) >= 1 && since >= GachaRoll.PITY_ROLLS - 1;
+
+        // claim the lesson's roll first: the unique ledger entry is what stops a second roll for the same lesson
+        JsonValue entry = SupabaseClient.post("reward_rolls", "{\"student_id\":" + studentId + ",\"stage_id\":" + stageId
+                + ",\"cosmetic_id\":" + item.id() + ",\"rarity\":\"" + escape(item.rarity()) + "\",\"was_pity\":"
+                + forcedByPity + ",\"was_duplicate\":" + duplicate + "}");
+        if (entry == null) {
+            JsonValue again = SupabaseClient.get("reward_rolls?student_id=eq." + studentId + "&stage_id=eq." + stageId
+                    + "&select=id&limit=1");
+            return RollOutcome.of(again != null && again.size > 0 ? RollStatus.ALREADY_CLAIMED : RollStatus.ERROR);
+        }
+        boolean unlocked = unlockCosmetic(studentId, item.id()) || unlockCosmetic(studentId, item.id());
+        if (!unlocked) {
+            System.err.println("rollReward: could not unlock " + item.name() + " for " + username);
+        }
+        return new RollOutcome(RollStatus.WON, item, duplicate, forcedByPity,
+                GachaRoll.rollsUntilGuarantee(since, item.rarity()));
     }
 
     // ── helpers ──────────────────────────────────────────

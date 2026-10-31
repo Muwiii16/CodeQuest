@@ -20,7 +20,9 @@ from an earlier Java Swing prototype (`../CodeQuest base`).
 ## Running
 
 ```
-./gradlew lwjgl3:run
+run: ./gradlew lwjgl3:run
+
+professor code: prof-2cd0f84b
 ```
 
 ## Gradle

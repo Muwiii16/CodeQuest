@@ -20,7 +20,6 @@ import java.time.Duration;
  */
 final class SupabaseClient {
 
-    private static final JsonReader JSON_READER = new JsonReader();
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(8))
             .build();
@@ -133,7 +132,7 @@ final class SupabaseClient {
             if (body == null || body.isEmpty()) {
                 return null;
             }
-            return JSON_READER.parse(body);
+            return new JsonReader().parse(body); // a reader keeps state while parsing, so each call gets its own (calls run on several threads)
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // a screen closed while its poll was in flight: nothing to report
             return null;
