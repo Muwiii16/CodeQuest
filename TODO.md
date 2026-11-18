@@ -146,3 +146,17 @@ Migration `supabase/migrations/20261101120000_reward_rolls.sql` (applied): new t
   student, so they carry over to every class they join. Lessons finished before the gacha existed will give their roll
   the first time they are passed again (no backfill).
 - Fixed on the way: the JSON reader was shared between threads, which could garble a reply when two screens loaded at once.
+
+## Round 6: pixel art integrated (Nov 2026)
+- Done: real pixel art replaced the placeholders in `assets/` under the same names (maps without towers and hero, towers, hero run/idle frames, hats, floating weapons, projectile, backgrounds, logo, pixel menu buttons, login card). `Art.java` lists every path.
+- Done: nearest-neighbour filtering for pixel sprites, `GameMap` uses the 1640x902 maps and no longer draws a separate lab (the end building is in the map), `PlayScreen` animates the hero (run in 4 directions, idle), draws towers/hats/weapons from the new files, frozen projectile state.
+- Hats and weapons are matched to the database items by name (`CosmeticLook.hatSprite/weaponSprite`); unknown items fall back by rarity.
+- Open: the pixel UI kit (notched panels, buttons, icons, Pixelify Sans font) is only used for the menu buttons so far; other screens still draw flat rectangles and the default font. Cosmetics preview layout was not run on screen (needs the database), check it once.
+- Done: tower slots. The map generator reserves 9-10 empty slots per map beside the path (evenly spread, never on the path, never on another picture) and writes them to `assets/game/maps/mapN_slots.txt`; `game/TowerSlots` gives each tower the slot that keeps the towers in path order and evenly spread (unit tested).
+- Done: strict rule, nothing but the hero stands on the path. When a map has no slot file or too few slots, towers are placed by `game/TowerPlacement` (picture kept at least half a cell plus air from the whole path, inside the play area, clear of other towers; unit tested; checked on all six stage layouts). The map pictures keep two cells around the path free of scenery and the entrance posts stand beside it; `make_env.py` refuses to produce a map with a prop touching the path.
+- Open: only the fallback placement (no slot file) can still put a tower over a prop; with the slot files nothing overlaps.
+- Open: do not run `tools/GeneratePlaceholderAssets.java` any more, it would overwrite the new art.
+
+## Round 7: pixel font (Nov 2026)
+- Done: all game text uses Pixelify Sans (SIL OFL, licence in `assets/ui/fonts/`) baked into crisp bitmap fonts at 19 sizes, plain and with a dark outline (`PixelFonts`, `make_fonts.py`). `BaseScreen.text` is plain (for panels), `outlinedText` is for text over pictures (login left side, menu header, intro). The login card is a pale parchment panel so its dark text is readable.
+- Open: some screens still use small sizes (scale 1.0 to 1.3, about 15-20 px) in dense lists; raise them where they feel small. Characters outside ASCII are only available for a few symbols; check any new text with accents.

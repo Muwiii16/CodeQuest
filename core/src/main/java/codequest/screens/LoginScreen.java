@@ -58,16 +58,16 @@ public class LoginScreen extends BaseScreen {
         Image mark = new Image(new TextureRegionDrawable(new TextureRegion(texture(Art.LOGO_MARK))));
         placeTopLeft(mark, 110, 48, 76, 76);
         stage.addActor(mark);
-        text("CodeQuest", 205, 62, 400, 50, 2.8f, Color.WHITE, Align.left);
+        outlinedText("CodeQuest", 205, 62, 400, 50, 2.8f, Color.WHITE, Align.left);
 
-        text("-  LEARN C. BEAT THE TOWERS.", 110, 262, 700, 30, 1.3f, new Color(0.75f, 0.9f, 0.55f, 1f), Align.left);
-        text("Learn C by\nbeating the\ntowers.", 110, 310, 950, 360, 6.6f, Color.WHITE, Align.topLeft);
-        text("The forest is crawling with enemy towers. Learn C, and take them down.", 110, 700, 640, 90, 2.1f,
+        outlinedText("-  LEARN C. BEAT THE TOWERS.", 110, 262, 700, 34, 1.8f, new Color(0.85f, 0.95f, 0.6f, 1f), Align.left);
+        outlinedText("Learn C by\nbeating the\ntowers.", 110, 310, 950, 360, 6.6f, Color.WHITE, Align.topLeft);
+        outlinedText("The forest is crawling with enemy towers. Learn C, and take them down.", 110, 700, 640, 90, 2.1f,
                 new Color(0.88f, 0.94f, 0.85f, 1f), Align.topLeft).setWrap(true);
 
-        text("*  ALL SYSTEMS OPERATIONAL      v1.0.0", 110, 1030, 700, 24, 1.1f, new Color(0.7f, 0.9f, 0.6f, 1f),
+        outlinedText("*  ALL SYSTEMS OPERATIONAL      v1.0.0", 110, 1030, 700, 30, 1.5f, new Color(0.85f, 0.95f, 0.65f, 1f),
                 Align.left);
-        text("(c) 2026 CodeQuest", 0, 1030, VIRTUAL_WIDTH, 24, 1.1f, new Color(1f, 1f, 1f, 0.6f), Align.center);
+        outlinedText("(c) 2026 CodeQuest", 0, 1030, VIRTUAL_WIDTH, 30, 1.5f, new Color(1f, 1f, 1f, 0.85f), Align.center);
 
         stage.addListener(new InputListener() {
             @Override
@@ -107,11 +107,11 @@ public class LoginScreen extends BaseScreen {
         tab("Log in", CARD_X + 30, !registerMode, () -> switchMode(false));
         tab("Register", CARD_X + 190, registerMode, () -> switchMode(true));
 
-        text(">  TOWER ACCESS", x, CARD_Y + 96, w, 24, 1.2f, SOFT_INK, Align.left);
+        text(">  TOWER ACCESS", x, CARD_Y + 94, w, 28, 1.6f, SOFT_INK, Align.left);
         text(registerMode ? "Join the fight against the towers." : "Ready to take down the towers?", x, CARD_Y + 128,
                 w, 100, 2.7f, INK, Align.topLeft).setWrap(true);
         text(registerMode ? "Create an account to start learning C."
-                : "Sign in to keep learning C and defeat the next enemy tower.", x, CARD_Y + 238, w, 56, 1.5f,
+                : "Sign in to keep learning C and defeat the next enemy tower.", x, CARD_Y + 238, w, 66, 1.7f,
                 SOFT_INK, Align.topLeft).setWrap(true);
 
         float segW = (w - 10) / 2f;

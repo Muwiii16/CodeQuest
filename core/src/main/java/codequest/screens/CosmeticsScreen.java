@@ -92,11 +92,12 @@ public class CosmeticsScreen extends StudentScreen {
         if (trail != null && !trail.isDefault()) {
             Color tc = CosmeticLook.colorOf(trail);
             for (int i = 1; i <= 5 + trail.rarityRank() * 2; i++) {
-                Image dot = art("game/glow.png", tc, 340 - i * 38, 600, 70 - i * 5, 70 - i * 5);
+                Image dot = art("game/glow.png", tc, 300 - i * 38, 600, 70 - i * 5, 70 - i * 5);
                 dot.getColor().a = Math.max(0.1f, 0.85f - i * 0.1f);
             }
         }
-        art("game/avatar.png", Color.WHITE, 290, 440, 280, 280);
+        // the hero (pixel art, 186 x 329) with the hat on the hairline and the weapon floating beside him
+        art("game/avatar.png", Color.WHITE, 280, 336, 200, 354);
 
         Cosmetic hat = outfit.hat();
         if (hat != null && !hat.isDefault()) {
@@ -104,15 +105,15 @@ public class CosmeticsScreen extends StudentScreen {
                 Color aura = CosmeticLook.rarityColor(hat.rarity());
                 float size = 280f + 70f * hat.rarityRank();
                 Image glow = art("game/glow.png", new Color(aura.r, aura.g, aura.b, 0.3f + 0.08f * hat.rarityRank()),
-                        430 - size / 2f, 470 - size / 2f, size, size);
+                        385 - size / 2f, 360 - size / 2f, size, size);
                 glow.addAction(Actions.forever(Actions.sequence(Actions.alpha(0.2f, 1.2f), Actions.alpha(0.5f, 1.2f))));
             }
-            art("game/hat.png", CosmeticLook.colorOf(hat), 336, 410, 188, 144);
+            art(CosmeticLook.hatSprite(hat), Color.WHITE, 302, 289, 167, 140);
         }
 
         Cosmetic weapon = outfit.weapon();
         if (weapon != null) {
-            float wx = 570;
+            float wx = 540;
             float wy = 450;
             if (weapon.rarityRank() >= 1) {
                 Color aura = CosmeticLook.rarityColor(weapon.rarity());
@@ -121,7 +122,7 @@ public class CosmeticsScreen extends StudentScreen {
                         wx + 60 - size / 2f, wy - size / 2f, size, size);
                 glow.addAction(Actions.forever(Actions.sequence(Actions.alpha(0.2f, 1f), Actions.alpha(0.6f, 1f))));
             }
-            Image sword = art("game/weapon.png", CosmeticLook.colorOf(weapon), wx - 30, wy - 40, 180, 68);
+            Image sword = art(CosmeticLook.weaponSprite(weapon), Color.WHITE, wx - 30, wy - 40, 178, 65);
             sword.setOrigin(25, 34);
             sword.setRotation(-20f);
             sword.addAction(Actions.forever(Actions.sequence(Actions.moveBy(0, 14, 1.1f), Actions.moveBy(0, -14, 1.1f))));

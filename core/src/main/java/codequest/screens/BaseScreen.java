@@ -46,7 +46,6 @@ public abstract class BaseScreen implements Screen {
     private final List<Texture> ownedTextures = new ArrayList<>();
     private BitmapFont sharedFont;
     private Texture whiteTexture;
-    private final List<BitmapFont> extraFonts = new ArrayList<>();
 
     protected BaseScreen() {
         stage = new Stage(new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
@@ -55,6 +54,7 @@ public abstract class BaseScreen implements Screen {
     /** Loads a texture from assets/ and tracks it so dispose() cleans it up. */
     protected Texture texture(String assetPath) {
         Texture t = new Texture(Gdx.files.internal(assetPath));
+        t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest); // pixel art: never smoothed
         ownedTextures.add(t);
         return t;
     }
@@ -78,7 +78,11 @@ public abstract class BaseScreen implements Screen {
         if (hoverPath != null) {
             style.imageOver = new TextureRegionDrawable(new TextureRegion(texture(hoverPath)));
         }
-        return new ImageButton(style);
+        ImageButton button = new ImageButton(style);
+        // the picture fills whatever size the button is given (the pixel-art buttons are small and are shown enlarged)
+        button.getImageCell().expand().fill();
+        button.getImage().setScaling(com.badlogic.gdx.utils.Scaling.stretch);
+        return button;
     }
 
     /** A tracked 1x1 solid-color texture, handy for cursors/selection drawables/toasts. */
@@ -92,10 +96,10 @@ public abstract class BaseScreen implements Screen {
         return t;
     }
 
-    /** Lazily-created shared bitmap font used for all text on this screen. */
+    /** The shared pixel font at its normal size (about 15 px). */
     protected BitmapFont defaultFont() {
         if (sharedFont == null) {
-            sharedFont = new BitmapFont();
+            sharedFont = PixelFonts.forScale(1f, false);
         }
         return sharedFont;
     }
@@ -165,10 +169,19 @@ public abstract class BaseScreen implements Screen {
         return image;
     }
 
-    /** A text label inside the given box (top-left coordinates), added to the stage. */
+    /** A text label inside the given box (top-left coordinates), added to the stage. Plain pixel text, for use on solid panels. */
     protected Label text(String text, float x, float yFromTop, float w, float h, float scale, Color color, int align) {
-        Label label = new Label(text, new Label.LabelStyle(defaultFont(), color));
-        label.setFontScale(scale);
+        return makeText(text, x, yFromTop, w, h, scale, color, align, false);
+    }
+
+    /** Like {@link #text} but with a dark outline, so it stays readable over a picture (backgrounds, the map). */
+    protected Label outlinedText(String text, float x, float yFromTop, float w, float h, float scale, Color color, int align) {
+        return makeText(text, x, yFromTop, w, h, scale, color, align, true);
+    }
+
+    private Label makeText(String text, float x, float yFromTop, float w, float h, float scale, Color color, int align,
+            boolean outlined) {
+        Label label = new Label(text, new Label.LabelStyle(PixelFonts.forScale(scale, outlined), color));
         label.setAlignment(align);
         label.setTouchable(Touchable.disabled);
         placeTopLeft(label, x, yFromTop, w, h);
@@ -276,8 +289,7 @@ public abstract class BaseScreen implements Screen {
                         com.badlogic.gdx.scenes.scene2d.actions.Actions.rotateBy(-360f, 1.1f))));
         loadingCover.addActor(spinner);
 
-        Label label = new Label(message, new Label.LabelStyle(defaultFont(), Color.WHITE));
-        label.setFontScale(1.8f);
+        Label label = new Label(message, new Label.LabelStyle(PixelFonts.forScale(1.8f, true), Color.WHITE));
         label.setAlignment(Align.center);
         label.setBounds(0, VIRTUAL_HEIGHT / 2f - 70, VIRTUAL_WIDTH, 50);
         label.getColor().a = 0f;
@@ -380,12 +392,9 @@ public abstract class BaseScreen implements Screen {
         return field;
     }
 
-    /** A separate default-style font at the given scale (for TextFields, which can't scale per-widget). */
+    /** The pixel font at the given scale (for TextFields, which can't scale per-widget). Shared; do not dispose it. */
     protected BitmapFont scaledFont(float scale) {
-        BitmapFont font = new BitmapFont();
-        font.getData().setScale(scale);
-        extraFonts.add(font);
-        return font;
+        return PixelFonts.forScale(scale, false);
     }
 
     /** A non-interactive, semi-transparent image for a locked/disabled slot (e.g. a locked stage). */
@@ -401,8 +410,7 @@ public abstract class BaseScreen implements Screen {
      * via gdx-freetype. yFromTop is the same top-down coordinate placeTopLeft uses.
      */
     protected Label addCenteredTitle(String text, float yFromTop, float fontScale, Color color) {
-        Label label = new Label(text, new Label.LabelStyle(defaultFont(), color));
-        label.setFontScale(fontScale);
+        Label label = new Label(text, new Label.LabelStyle(PixelFonts.forScale(fontScale, true), color));
         label.pack();
         placeTopLeft(label, (VIRTUAL_WIDTH - label.getWidth()) / 2f, yFromTop - label.getHeight() / 2f,
                 label.getWidth(), label.getHeight());
@@ -457,9 +465,6 @@ public abstract class BaseScreen implements Screen {
         for (Texture t : ownedTextures) {
             t.dispose();
         }
-        if (sharedFont != null) {
-            sharedFont.dispose();
-        }
-        extraFonts.forEach(BitmapFont::dispose);
+        // the pixel fonts are shared by all screens (PixelFonts), so they are not disposed here
     }
 }

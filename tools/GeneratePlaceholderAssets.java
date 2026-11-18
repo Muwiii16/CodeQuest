@@ -16,6 +16,9 @@ import java.util.Random;
  *
  * Every file here is meant to be overwritten with real art later: keep the same
  * file names and the game picks the new files up with no code changes.
+ *
+ * WARNING: the real pixel art has now replaced these placeholders in assets/ (see DESIGN.md and Art.java).
+ * Do NOT run this generator against assets/ any more: it would overwrite the finished art with the old placeholders.
  */
 public class GeneratePlaceholderAssets {
 

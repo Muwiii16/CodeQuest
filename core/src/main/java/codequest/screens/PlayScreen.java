@@ -19,6 +19,8 @@ import codequest.data.RunCache;
 import codequest.session.RunReplay;
 import codequest.session.RunSummary;
 import codequest.game.GameMap;
+import codequest.game.TowerPlacement;
+import codequest.game.TowerSlots;
 import codequest.session.CodeBlock;
 import codequest.session.SectionResult;
 import codequest.session.StageRun;
@@ -77,6 +79,15 @@ public class PlayScreen extends InputAdapter implements Screen {
     private static final float W = BaseScreen.VIRTUAL_WIDTH;
     private static final float H = BaseScreen.VIRTUAL_HEIGHT;
     private static final float MAP_WIDTH = 1400f;
+    /** Pixel-art sizes on the 1920 x 1080 stage: hero pictures are drawn at this fraction, towers and hats at these sizes. */
+    private static final float HERO_SCALE = 0.8f;      // run frames
+    private static final float HERO_IDLE_SCALE = 0.62f; // the standing pictures are taller, so they are drawn smaller
+    private static final float TOWER_W = 78f;
+    private static final float TOWER_H = 121f;
+    /** How far a tower's picture must stay from the path's centre line: half a cell of path plus a little air. */
+    private static final float TOWER_CLEARANCE = 43f;
+    private static final float HAT_W = 74f;
+    private static final float HAT_H = 62f;
     private static final float SIDEBAR_X = MAP_WIDTH;
     private static final float WALK_SPEED = 90f;
     private static final float TRIGGER_AHEAD = 140f;
@@ -146,13 +157,15 @@ public class PlayScreen extends InputAdapter implements Screen {
     private final Viewport viewport = new FitViewport(W, H, camera);
     private final SpriteBatch batch = new SpriteBatch();
     private final ShapeRenderer sr = new ShapeRenderer();
-    private final BitmapFont font = new BitmapFont();
     private final Map<String, Texture> sprites = new HashMap<>();
     private final GlyphLayout layout = new GlyphLayout();
     private final Random rng;
 
     private Phase phase = Phase.WALKING;
     private float distance = 0f;
+    /** Seconds on screen, drives the hero's run and idle frames. */
+    private float animTime;
+    private String weaponPath = "game/weapons/wooden.png";
     private int towerIdx = 0;
 
     private Challenge active;
@@ -249,18 +262,53 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
         this.pathLength = cum[cum.length - 1];
 
+        // Towers stand BESIDE the path, never on it, and never on top of another picture. The map picture reserves
+        // empty slots for them (map<N>_slots.txt); each tower takes the slot that keeps the towers in path order and
+        // spread along the route. Without a slot file (or with too few slots) the tower is placed by TowerPlacement,
+        // which at least keeps it off the path.
+        List<float[]> pathSamples = TowerPlacement.sample(pts, 8f);
+        TowerPlacement.Box playArea = new TowerPlacement.Box(60f, map.getOffsetY() + 72f, map.getMapWidth() - 60f,
+                map.getOffsetY() + map.getMapHeight() - 72f);
+        TowerPlacement.Box wholeMap = new TowerPlacement.Box(20f, map.getOffsetY() + 10f, map.getMapWidth() - 20f,
+                map.getOffsetY() + map.getMapHeight() - 10f);
+        List<Float> wantedS = new ArrayList<>();
+        List<CTopic> wantedTopics = new ArrayList<>();
         float secLen = (pathLength - LEAD_IN) / stage.sections().size();
         for (int k = 0; k < stage.sections().size(); k++) {
             Section section = stage.sections().get(k);
             int n = section.towerTopics().size();
             for (int j = 0; j < n; j++) {
-                float s = LEAD_IN + k * secLen + (j + 1) * secLen / (n + 1);
+                wantedS.add(LEAD_IN + k * secLen + (j + 1) * secLen / (n + 1));
+                wantedTopics.add(section.towerTopics().get(j));
+            }
+        }
+        List<TowerSlots.Slot> given = TowerSlots.assign(map.getTowerSlots(), wantedS);
+        List<TowerPlacement.Box> takenSpots = new ArrayList<>();
+        for (TowerSlots.Slot slot : given) {
+            if (slot != null) {
+                takenSpots.add(towerBox(slot.x(), slot.y()));
+            }
+        }
+        for (int i = 0; i < wantedS.size(); i++) {
+            float s = wantedS.get(i);
+            TowerSlots.Slot slot = given.get(i);
+            float[] spot = slot == null ? null : new float[] { slot.x(), slot.y() };
+            if (spot == null) {
                 Vector2 on = pointAt(s);
                 Vector2 dir = pointAt(s + 5).sub(pointAt(s - 5)).nor();
-                float side = towers.size() % 2 == 0 ? 1f : -1f;
-                towers.add(new TowerSpot(s, on.x - dir.y * 70f * side, on.y + dir.x * 70f * side,
-                        section.towerTopics().get(j)));
+                int side = i % 2 == 0 ? 1 : -1;
+                spot = TowerPlacement.choose(pathSamples, on.x, on.y, dir.x, dir.y, side, TOWER_W / 2f, TOWER_H / 2f + 1f, 60f,
+                        TOWER_CLEARANCE, playArea, takenSpots);
+                if (spot == null) {
+                    spot = TowerPlacement.choose(pathSamples, on.x, on.y, dir.x, dir.y, side, TOWER_W / 2f, TOWER_H / 2f + 1f, 60f,
+                            TOWER_CLEARANCE, wholeMap, takenSpots);
+                }
+                if (spot == null) {
+                    spot = new float[] { on.x - dir.y * 110f * side, on.y + dir.x * 110f * side };
+                }
+                takenSpots.add(towerBox(spot[0], spot[1]));
             }
+            towers.add(new TowerSpot(s, spot[0], spot[1], wantedTopics.get(i)));
         }
 
         if (resume && savedRun.isPresent()) {
@@ -268,6 +316,11 @@ public class PlayScreen extends InputAdapter implements Screen {
         } else {
             RunCache.clear(cacheKey, username);
         }
+    }
+
+    /** The area a tower's picture covers when its spot is (x, y): the picture is drawn 60 px below the spot and reaches up from there. */
+    private static TowerPlacement.Box towerBox(float x, float y) {
+        return new TowerPlacement.Box(x - TOWER_W / 2f, y - TOWER_H / 2f - 1f, x + TOWER_W / 2f, y + 60f);
     }
 
     /** Replays the saved answers so the run is exactly where the student left it. */
@@ -340,6 +393,7 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     private void update(float dt) {
+        animTime += dt;
         Vector2 avatarNow = pointAt(distance);
         rig.update(dt, avatarNow.x, avatarNow.y, phase == Phase.WALKING ? -10f : 0f);
         updateFx(dt, avatarNow);
@@ -528,11 +582,12 @@ public class PlayScreen extends InputAdapter implements Screen {
         return new CampaignScreen(game, username);
     }
 
-    /** Dresses the student in the equipped hat, floating weapon and trail (placeholder colors until the art exists). */
+    /** Dresses the student in the equipped hat, floating weapon and trail. The weapon and hat pictures keep their own colors. */
     private void applyLook(PlayData data) {
         outfit = CosmeticLook.outfit(data.equipped(), data.catalog());
         DatabaseManager.Cosmetic w = outfit.weapon();
-        rig = new WeaponRig(w == null ? 0 : w.rarityRank(), w == null ? new Color(0.82f, 0.86f, 1f, 1f) : CosmeticLook.colorOf(w),
+        weaponPath = CosmeticLook.weaponSprite(w);
+        rig = new WeaponRig(w == null ? 0 : w.rarityRank(), Color.WHITE,
                 CosmeticLook.rarityColor(w == null ? "common" : w.rarity()));
     }
 
@@ -723,12 +778,27 @@ public class PlayScreen extends InputAdapter implements Screen {
         };
     }
 
+    /**
+     * A sprite from assets/. Pixel art is drawn with the Nearest filter; the hero and the towers are shown smaller than
+     * their pictures and the glow textures are soft, so those use Linear.
+     */
     private Texture sprite(String path) {
-        return sprites.computeIfAbsent(path, p -> new Texture(Gdx.files.internal(p)));
+        return sprites.computeIfAbsent(path, p -> {
+            Texture t = new Texture(Gdx.files.internal(p));
+            boolean smooth = p.startsWith("game/hero/") || p.startsWith("game/towers/") || p.equals("game/glow.png")
+                    || p.equals("game/ring.png");
+            Texture.TextureFilter filter = smooth ? Texture.TextureFilter.Linear : Texture.TextureFilter.Nearest;
+            t.setFilter(filter, filter);
+            return t;
+        });
     }
 
     private void drawProjectile(float x, float y, float size, float alpha, float rotation) {
-        Texture tex = sprite("game/projectile.png");
+        drawProjectile(x, y, size, alpha, rotation, false);
+    }
+
+    private void drawProjectile(float x, float y, float size, float alpha, float rotation, boolean frozen) {
+        Texture tex = sprite(frozen ? "game/projectile_frozen.png" : "game/projectile.png");
         batch.setColor(1f, 1f, 1f, alpha);
         batch.draw(tex, x - size / 2f, H - y - size / 2f, size / 2f, size / 2f, size, size, 1f, 1f, rotation, 0, 0,
                 tex.getWidth(), tex.getHeight(), false, false);
@@ -741,12 +811,12 @@ public class PlayScreen extends InputAdapter implements Screen {
             TowerSpot t = towers.get(i);
             Texture tex = sprite("game/towers/tower_" + t.topic().name().toLowerCase() + ".png");
             batch.setColor(i < towerIdx ? new Color(0.5f, 0.5f, 0.55f, 0.9f) : Color.WHITE);
-            batch.draw(tex, t.x() - 42, H - t.y() - 60, 84, 105);
+            batch.draw(tex, t.x() - TOWER_W / 2f, H - t.y() - 60, TOWER_W, TOWER_H);
         }
         batch.setColor(Color.WHITE);
 
         Vector2 a = pointAt(distance);
-        float bob = phase == Phase.WALKING ? (float) Math.sin(distance * 0.18f) * 2.5f : 0f;
+        float bob = phase == Phase.WALKING ? (float) Math.sin(distance * 0.18f) * 1.5f : 0f;
 
         DatabaseManager.Cosmetic trail = outfit.trail();
         if (trail != null && !trail.isDefault()) {
@@ -769,40 +839,55 @@ public class PlayScreen extends InputAdapter implements Screen {
             float f = avatarFlash / 0.45f;
             batch.setColor(1f, 1f - 0.6f * f, 1f - 0.6f * f, 1f);
         }
-        batch.draw(sprite("game/avatar.png"), a.x - 36, H - (a.y + bob) - 40, 72, 72);
+        // the hero: a run cycle facing the way he walks, or the idle loop while he stands
+        String set = "idle";
+        int frame = (int) (animTime * 4f) % 5 + 1;
+        if (phase == Phase.WALKING) {
+            Vector2 dir = pointAt(distance + 6f).sub(pointAt(Math.max(0f, distance - 6f)));
+            if (dir.len2() < 0.01f) {
+                dir.set(1f, 0f);
+            }
+            set = Math.abs(dir.x) >= Math.abs(dir.y) ? (dir.x >= 0f ? "run_right" : "run_left") : (dir.y < 0f ? "run_up" : "run_down");
+            frame = (int) (animTime * 10f) % 5 + 1;
+        }
+        Texture hero = sprite(Art.heroFrame(set, frame));
+        float heroScale = set.equals("idle") ? HERO_IDLE_SCALE : HERO_SCALE;
+        float heroW = hero.getWidth() * heroScale;
+        float heroH = hero.getHeight() * heroScale;
+        float feetY = a.y + bob + 38f;
+        batch.draw(hero, a.x - heroW / 2f, H - feetY, heroW, heroH);
         batch.setColor(Color.WHITE);
 
         DatabaseManager.Cosmetic hat = outfit.hat();
         if (hat != null && !hat.isDefault()) {
-            Color hc = CosmeticLook.colorOf(hat);
             int rank = hat.rarityRank();
-            float hatY = H - (a.y + bob - 24f);
+            float headX = a.x + (set.equals("run_right") ? heroW * 0.06f : set.equals("run_left") ? -heroW * 0.06f : 0f);
+            float seatY = feetY - heroH + 0.30f * heroW; // the hairline, where the hat's brim sits
             if (rank >= 1) {
                 Color aura = CosmeticLook.rarityColor(hat.rarity());
                 float size = 80f + 28f * rank;
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
                 batch.setColor(aura.r, aura.g, aura.b, 0.28f + 0.1f * rank);
-                batch.draw(sprite("game/glow.png"), a.x - size / 2f, hatY + 20f - size / 2f, size, size);
+                batch.draw(sprite("game/glow.png"), headX - size / 2f, H - (seatY - 18f) - size / 2f, size, size);
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             }
-            batch.setColor(hc);
-            batch.draw(sprite("game/hat.png"), a.x - 29f, hatY, 58f, 44f);
             batch.setColor(Color.WHITE);
+            batch.draw(sprite(CosmeticLook.hatSprite(hat)), headX - HAT_W / 2f, H - (seatY - 0.88f * HAT_H + HAT_H), HAT_W, HAT_H);
         }
 
         if (phase == Phase.ENCOUNTER) {
             Vector2 pp = projectilePos();
             drawProjectile(pp.x, pp.y, 60f, 1f, 0f);
         } else if (fx == Fx.FROZEN) {
-            drawProjectile(fxX, fxY, 60f, 1f, 0f);
+            drawProjectile(fxX, fxY, 60f, 1f, 0f, true);
         } else if (fx == Fx.KNOCKBACK) {
             float t = Math.min(1f, fxT / 0.4f);
-            drawProjectile(fxX, fxY, 60f * (1f - 0.5f * t), 1f - t, 720f * t);
+            drawProjectile(fxX, fxY, 60f * (1f - 0.5f * t), 1f - t, 720f * t, true);
         } else if (fx == Fx.HIT) {
             drawProjectile(fxX, fxY, 60f, 1f, 0f);
         }
 
-        rig.draw(batch, H, sprite("game/weapon.png"), sprite("game/glow.png"), sprite("game/spark.png"),
+        rig.draw(batch, H, sprite(weaponPath), sprite("game/glow.png"), sprite("game/spark.png"),
                 sprite("game/ring.png"));
     }
 
@@ -935,18 +1020,16 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     private void text(String s, float x, float yTop, float scale, Color c) {
+        BitmapFont font = PixelFonts.forScale(scale, false);
         font.setColor(c);
-        font.getData().setScale(scale);
         font.draw(batch, s, x, H - yTop);
-        font.getData().setScale(1f);
     }
 
     private void drawCentered(String s, float centerX, float yTop, float scale, Color c) {
+        BitmapFont font = PixelFonts.forScale(scale, false);
         font.setColor(c);
-        font.getData().setScale(scale);
         layout.setText(font, s);
         font.draw(batch, s, centerX - layout.width / 2f, H - yTop);
-        font.getData().setScale(1f);
     }
 
     @Override
@@ -970,7 +1053,6 @@ public class PlayScreen extends InputAdapter implements Screen {
     public void dispose() {
         batch.dispose();
         sr.dispose();
-        font.dispose();
         sprites.values().forEach(Texture::dispose);
         map.dispose();
         if (standings != null) {

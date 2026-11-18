@@ -40,8 +40,7 @@ public class IntroScreen extends BaseScreen {
         stage.addActor(logo);
 
         Label prompt = new Label("Click anywhere or press any key to start",
-                new Label.LabelStyle(defaultFont(), new Color(0.82f, 0.87f, 1f, 1f)));
-        prompt.setFontScale(2.2f);
+                new Label.LabelStyle(PixelFonts.forScale(2.2f, true), new Color(0.9f, 0.94f, 1f, 1f)));
         prompt.pack();
         placeTopLeft(prompt, (VIRTUAL_WIDTH - prompt.getWidth()) / 2f, 800f, prompt.getWidth(), prompt.getHeight());
         prompt.getColor().a = 0f;
@@ -49,9 +48,8 @@ public class IntroScreen extends BaseScreen {
                 Actions.alpha(1f, 0.9f), Actions.alpha(0.25f, 0.9f)))));
         stage.addActor(prompt);
 
-        Label note = new Label("placeholder art - final assets coming soon",
-                new Label.LabelStyle(defaultFont(), new Color(1f, 1f, 1f, 0.35f)));
-        note.setFontScale(1.3f);
+        Label note = new Label("work in progress - more art coming soon",
+                new Label.LabelStyle(PixelFonts.forScale(1.6f, true), new Color(1f, 1f, 1f, 0.9f)));
         note.pack();
         placeTopLeft(note, (VIRTUAL_WIDTH - note.getWidth()) / 2f, 1010f, note.getWidth(), note.getHeight());
         stage.addActor(note);

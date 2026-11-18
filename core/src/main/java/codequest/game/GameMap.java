@@ -25,29 +25,47 @@ public class GameMap {
             { { 0, 3 }, { 6, 3 }, { 6, 8 }, { 10, 8 }, { 10, 2 }, { 14, 2 }, { 14, 6 }, { 19, 6 } } };
 
     private Texture mapImage;
-    private Texture labImage;
     private final int cellSize;
     private final int mapWidth;
     private final int mapHeight;
     private final int offsetY;
     private final List<Point> waypoints = new ArrayList<>();
     private final int stageNumber;
+    private List<TowerSlots.Slot> towerSlots = List.of();
 
     public GameMap(int stageNumber, int mapWidth) {
         this.stageNumber = stageNumber;
         this.mapWidth = mapWidth;
-        this.mapHeight = (int) (mapWidth * (941.0 / 1672.0));
+        this.mapHeight = (int) (mapWidth * (902.0 / 1640.0)); // the map pictures are 1640 x 902 (20 x 11 cells)
         this.offsetY = ((int) BaseScreen.VIRTUAL_HEIGHT - mapHeight) / 2;
         this.cellSize = mapWidth / COLS;
 
-        mapImage = load(Art.map(stageNumber));
-        labImage = load(Art.LAB);
+        mapImage = load(Art.map(stageNumber)); // the picture already shows the campus gate and the building at the path's end
         buildPath();
+        loadSlots();
+    }
+
+    /** The tower slots reserved in the map picture (map<N>_slots.txt), if the file exists. */
+    private void loadSlots() {
+        try {
+            com.badlogic.gdx.files.FileHandle file = Gdx.files.internal(Art.slots(stageNumber));
+            if (file.exists()) {
+                towerSlots = TowerSlots.parse(file.readString(), cellSize, offsetY);
+            }
+        } catch (RuntimeException e) {
+            Gdx.app.error("GameMap", "Could not read the tower slots", e);
+        }
+    }
+
+    public List<TowerSlots.Slot> getTowerSlots() {
+        return towerSlots;
     }
 
     private Texture load(String path) {
         try {
-            return new Texture(Gdx.files.internal(path));
+            Texture texture = new Texture(Gdx.files.internal(path));
+            texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear); // shown smaller than its size
+            return texture;
         } catch (Exception e) {
             Gdx.app.error("GameMap", "Could not load " + path, e);
             return null;
@@ -74,13 +92,6 @@ public class GameMap {
     public void draw(Batch batch) {
         if (mapImage != null) {
             batch.draw(mapImage, 0, BaseScreen.VIRTUAL_HEIGHT - offsetY - mapHeight, mapWidth, mapHeight);
-        }
-        if (labImage != null && !waypoints.isEmpty()) {
-            Point last = waypoints.get(waypoints.size() - 1);
-            float size = cellSize * 1.6f;
-            float x = Math.min(last.x - size / 2f, mapWidth - size);
-            float y = BaseScreen.VIRTUAL_HEIGHT - last.y - size / 2f;
-            batch.draw(labImage, x, y, size, size);
         }
     }
 
@@ -111,9 +122,6 @@ public class GameMap {
     public void dispose() {
         if (mapImage != null) {
             mapImage.dispose();
-        }
-        if (labImage != null) {
-            labImage.dispose();
         }
     }
 }

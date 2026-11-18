@@ -7,14 +7,53 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Placeholder look for a cosmetic until its real art exists: a stable color picked from the
- * name, so each item is visibly different in the preview and in play. Rarity decides the glow.
+ * How a cosmetic looks: its picture (hats and weapons have their own pixel art, see {@link #hatSprite} and
+ * {@link #weaponSprite}), a stable color picked from the name (used for trails and list swatches), and the
+ * rarity glow.
  */
 public final class CosmeticLook {
 
     private static final Color NEUTRAL = new Color(0.82f, 0.86f, 1f, 1f);
 
     private CosmeticLook() {
+    }
+
+    /** The picture of a hat: matched by name, then by rarity for any item without its own art. */
+    public static String hatSprite(Cosmetic hat) {
+        String name = hat == null ? "" : hat.name().toLowerCase();
+        return switch (name) {
+            case "student cap" -> "game/hats/cap.png";
+            case "paper hat" -> "game/hats/chef.png";
+            case "headphones" -> "game/hats/headphones.png";
+            case "wizard hat" -> "game/hats/wizard.png";
+            case "halo" -> "game/hats/halo.png";
+            case "golden crown" -> "game/hats/crown.png";
+            default -> switch (hat == null ? "common" : hat.rarity().toLowerCase()) {
+                case "rare" -> "game/hats/beanie.png";
+                case "epic" -> "game/hats/halo.png";
+                case "legendary" -> "game/hats/crown.png";
+                default -> "game/hats/cap.png";
+            };
+        };
+    }
+
+    /** The picture of a floating weapon: matched by name, then by rarity for any item without its own art. */
+    public static String weaponSprite(Cosmetic weapon) {
+        String name = weapon == null ? "" : weapon.name().toLowerCase();
+        return switch (name) {
+            case "pencil" -> "game/weapons/pencil.png";
+            case "ruler" -> "game/weapons/ruler.png";
+            case "code blade" -> "game/weapons/ice.png";
+            case "pointer spear" -> "game/weapons/spear.png";
+            case "debug hammer" -> "game/weapons/hammer.png";
+            case "compiler staff" -> "game/weapons/staff.png";
+            default -> switch (weapon == null ? "common" : weapon.rarity().toLowerCase()) {
+                case "rare" -> "game/weapons/ice.png";
+                case "epic" -> "game/weapons/crystal.png";
+                case "legendary" -> "game/weapons/sun.png";
+                default -> "game/weapons/wooden.png";
+            };
+        };
     }
 
     public static Color colorOf(Cosmetic cosmetic) {

@@ -116,8 +116,7 @@ public class CertificateScreen extends BaseScreen {
         solidButton("Save PDF", 1360f, 240f, 480f, 90f, new Color(0.12f, 0.3f, 0.12f, 1f), this::savePdf);
         solidButton(backLabel, 1360f, 360f, 480f, 90f, new Color(0.3f, 0.1f, 0.1f, 1f), back);
 
-        status = new Label("", new Label.LabelStyle(defaultFont(), new Color(0.8f, 0.9f, 0.7f, 1f)));
-        status.setFontScale(1.2f);
+        status = new Label("", new Label.LabelStyle(PixelFonts.forScale(1.2f, true), new Color(0.8f, 0.9f, 0.7f, 1f)));
         status.setWrap(true);
         status.setAlignment(Align.topLeft);
         placeTopLeft(status, 1360f, 490f, 480f, 200f);

@@ -36,7 +36,7 @@ public class MainMenuScreen extends BaseScreen {
         menuButton("certificates", btnX, startY + spacing * 3, btnWidth, btnHeight,
                 () -> game.setScreen(new CertificatesScreen(game, username)));
 
-        text("Student:  " + username, VIRTUAL_WIDTH - 620, 28, 380, 40, 1.5f, new Color(0.8f, 0.87f, 1f, 1f), Align.right);
+        outlinedText("Student:  " + username, VIRTUAL_WIDTH - 620, 28, 380, 40, 1.5f, new Color(0.8f, 0.87f, 1f, 1f), Align.right);
         solidButton("Log out", VIRTUAL_WIDTH - 220, 20, 180, 56, new Color(0.2f, 0.26f, 0.5f, 1f),
                 () -> game.setScreen(new LoginScreen(game)));
     }
