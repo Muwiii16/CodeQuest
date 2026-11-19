@@ -1094,9 +1094,29 @@ public class PlayScreen extends InputAdapter implements Screen {
         return out;
     }
 
-    private static Color shade(Color base, boolean lit) {
-        return lit ? new Color(Math.min(1f, base.r + 0.1f), Math.min(1f, base.g + 0.1f), Math.min(1f, base.b + 0.1f), 1f)
-                : base;
+    private static final float LIFT = 8f;
+    private static final float ROW_LIFT = 5f;
+
+    /** How far a button is raised right now: the mouse is over it and it can be pressed. The colors never change. */
+    private float lift(Rect r, boolean enabled, float amount) {
+        return enabled && r.contains(mouseX, mouseY) ? amount : 0f;
+    }
+
+    private float lift(Rect r) {
+        return lift(r, true, LIFT);
+    }
+
+    /** A button's fill: raised over a soft shadow while the mouse is over it (its label must use the same {@link #lift}). */
+    private void buttonFill(Rect r, Color color, boolean enabled, float amount) {
+        float up = lift(r, enabled, amount);
+        if (up > 0f) {
+            fill(r.x + 5, r.y + 8, r.w - 10, r.h, new Color(0f, 0f, 0f, 0.55f));
+        }
+        fill(r.x, r.y - up, r.w, r.h, color);
+    }
+
+    private void buttonFill(Rect r, Color color) {
+        buttonFill(r, color, true, LIFT);
     }
 
     // ── Drawing ──────────────────────────────────────────
@@ -1104,6 +1124,9 @@ public class PlayScreen extends InputAdapter implements Screen {
     private void draw() {
         ScreenUtils.clear(0.04f, 0.06f, 0.15f, 1f);
         viewport.apply();
+        Vector2 pointer = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
+        mouseX = pointer.x;
+        mouseY = H - pointer.y;
         batch.setProjectionMatrix(camera.combined);
         sr.setProjectionMatrix(camera.combined);
 
@@ -1126,7 +1149,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 fill(60, explainTop, 1280, 8, explainCorrect ? new Color(0.3f, 0.8f, 0.3f, 1f) : new Color(0.9f, 0.3f, 0.25f, 1f));
                 Rect go = explainContinueButton();
                 Color base = new Color(0.12f, 0.3f, 0.12f, 1f);
-                fill(go.x, go.y, go.w, go.h, explainAge > 0.4f ? shade(base, go.contains(mouseX, mouseY)) : new Color(0.14f, 0.16f, 0.22f, 1f));
+                buttonFill(go, explainAge > 0.4f ? base : new Color(0.14f, 0.16f, 0.22f, 1f), explainAge > 0.4f, LIFT);
             }
         } else if (phase == Phase.RESULT) {
             fill(0, 0, W, H, new Color(0f, 0f, 0f, 0.82f));
@@ -1134,17 +1157,17 @@ public class PlayScreen extends InputAdapter implements Screen {
                 fill(180, 90, W - 360, 900, new Color(0.05f, 0.07f, 0.17f, 1f));
                 fill(180, 90, W - 360, 8, new Color(0.45f, 0.35f, 0.8f, 1f));
                 Rect close = aiCloseButton();
-                fill(close.x, close.y, close.w, close.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+                buttonFill(close, new Color(0.3f, 0.1f, 0.1f, 1f));
             } else {
                 Rect cont = continueButton();
-                fill(cont.x, cont.y, cont.w, cont.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+                buttonFill(cont, new Color(0.3f, 0.1f, 0.1f, 1f), saveDone, LIFT);
                 if (certificateEligible()) {
                     Rect cert = certButton();
-                    fill(cert.x, cert.y, cert.w, cert.h, new Color(0.12f, 0.3f, 0.12f, 1f));
+                    buttonFill(cert, new Color(0.12f, 0.3f, 0.12f, 1f));
                 }
                 if (feedbackAvailable()) {
                     Rect fb = feedbackButton();
-                    fill(fb.x, fb.y, fb.w, fb.h, new Color(0.25f, 0.18f, 0.5f, 1f));
+                    buttonFill(fb, new Color(0.25f, 0.18f, 0.5f, 1f));
                 }
             }
         }
@@ -1314,7 +1337,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             fill(SIDEBAR_X + 20, 150, 480 * ratio, 26, hpColor);
         }
         if (phase != Phase.RESULT) {
-            fill(QUIT_BTN.x, QUIT_BTN.y, QUIT_BTN.w, QUIT_BTN.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+            buttonFill(QUIT_BTN, new Color(0.3f, 0.1f, 0.1f, 1f));
         }
     }
 
@@ -1325,7 +1348,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 : new Color(0.9f, 0.25f, 0.2f, 1f));
         if (!hintShown && !classTest) {
             Rect h = hintButton();
-            fill(h.x, h.y, h.w, h.h, new Color(0.35f, 0.28f, 0.08f, 1f));
+            buttonFill(h, new Color(0.35f, 0.28f, 0.08f, 1f));
         }
         Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
         mouseX = m.x;
@@ -1335,43 +1358,44 @@ public class PlayScreen extends InputAdapter implements Screen {
             case CHOICE, TRUE_FALSE -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect b = tokenButton(i);
-                    fill(b.x, b.y, b.w, b.h, shade(idle, b.contains(mouseX, mouseY)));
+                    buttonFill(b, idle);
                 }
             }
             case FIND_BUG -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect r = lineRect(i);
                     boolean picked = i == pickedLine;
-                    fill(r.x, r.y, r.w, r.h, picked ? new Color(0.5f, 0.31f, 0.08f, 1f)
-                            : shade(new Color(0.09f, 0.12f, 0.21f, 1f), r.contains(mouseX, mouseY)));
-                    fill(r.x, r.y, 50, r.h, picked ? new Color(0.8f, 0.5f, 0.12f, 1f) : new Color(0.16f, 0.2f, 0.32f, 1f));
+                    float up = lift(r, true, ROW_LIFT);
+                    if (up > 0f) {
+                        fill(r.x + 5, r.y + 6, r.w - 10, r.h, new Color(0f, 0f, 0f, 0.55f));
+                    }
+                    fill(r.x, r.y - up, r.w, r.h, picked ? new Color(0.5f, 0.31f, 0.08f, 1f) : new Color(0.09f, 0.12f, 0.21f, 1f));
+                    fill(r.x, r.y - up, 50, r.h, picked ? new Color(0.8f, 0.5f, 0.12f, 1f) : new Color(0.16f, 0.2f, 0.32f, 1f));
                 }
                 Rect check = bugCheckButton();
-                fill(check.x, check.y, check.w, check.h, pickedLine < 0 ? new Color(0.14f, 0.16f, 0.22f, 1f)
-                        : shade(new Color(0.12f, 0.3f, 0.12f, 1f), check.contains(mouseX, mouseY)));
+                buttonFill(check, pickedLine < 0 ? new Color(0.14f, 0.16f, 0.22f, 1f) : new Color(0.12f, 0.3f, 0.12f, 1f),
+                        pickedLine >= 0, LIFT);
             }
             case FILL_BLANK -> {
                 Rect box = answerBox();
                 fill(box.x, box.y, box.w, box.h, new Color(0.02f, 0.03f, 0.09f, 1f));
                 fill(box.x, box.y + box.h - 4, box.w, 4, new Color(0.45f, 0.6f, 0.9f, 1f));
                 Rect go = submitButton();
-                fill(go.x, go.y, go.w, go.h, shade(new Color(0.12f, 0.3f, 0.12f, 1f), go.contains(mouseX, mouseY)));
+                buttonFill(go, new Color(0.12f, 0.3f, 0.12f, 1f));
             }
             case ARRANGE -> {
                 fill(90, builtY() - 8, ROW_WIDTH, CHIP_H + 16, new Color(0.02f, 0.03f, 0.09f, 1f));
                 float scale = chipScale();
                 for (Rect r : chipRects(labels(placed), builtY(), scale)) {
-                    fill(r.x, r.y, r.w, r.h, shade(new Color(0.16f, 0.32f, 0.2f, 1f), r.contains(mouseX, mouseY)));
+                    buttonFill(r, new Color(0.16f, 0.32f, 0.2f, 1f), true, ROW_LIFT);
                 }
                 for (Rect r : chipRects(labels(remaining()), bankY(), scale)) {
-                    fill(r.x, r.y, r.w, r.h, shade(idle, r.contains(mouseX, mouseY)));
+                    buttonFill(r, idle, true, ROW_LIFT);
                 }
                 Rect check = checkButton();
-                fill(check.x, check.y, check.w, check.h,
-                        shade(new Color(0.12f, 0.3f, 0.12f, 1f), check.contains(mouseX, mouseY)));
+                buttonFill(check, new Color(0.12f, 0.3f, 0.12f, 1f));
                 Rect clear = clearButton();
-                fill(clear.x, clear.y, clear.w, clear.h,
-                        shade(new Color(0.3f, 0.1f, 0.1f, 1f), clear.contains(mouseX, mouseY)));
+                buttonFill(clear, new Color(0.3f, 0.1f, 0.1f, 1f));
             }
         }
     }
@@ -1428,7 +1452,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
         if (phase != Phase.RESULT) {
             drawCentered(classTest ? "Leave (you can resume)" : "Quit (progress is saved)", QUIT_BTN.x + QUIT_BTN.w / 2f,
-                    QUIT_BTN.y + 18, 1.4f, Color.WHITE);
+                    QUIT_BTN.y + 18 - lift(QUIT_BTN), 1.4f, Color.WHITE);
         }
     }
 
@@ -1504,7 +1528,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             // no hints in a class test
         } else if (!hintShown) {
             Rect h = hintButton();
-            drawCentered("Hint", h.x + h.w / 2f, h.y + 13, 1.7f, Color.WHITE);
+            drawCentered("Hint", h.x + h.w / 2f, h.y + 13 - lift(h), 1.7f, Color.WHITE);
         } else if (active.hint() != null) {
             if (kind == AnswerKind.FIND_BUG || kind == AnswerKind.ARRANGE) {
                 // their rows fill the lower panel: arrange has room under its sentence, find the bug under its code lines
@@ -1520,26 +1544,28 @@ public class PlayScreen extends InputAdapter implements Screen {
                     Rect b = tokenButton(i);
                     String tok = options.get(i);
                     boolean tiny = tok.length() <= 2;
-                    drawCentered(Face.MONO, tok, b.x + b.w / 2f, b.y + (tiny ? 14 : 24), tiny ? 3.0f : 2.2f, Color.WHITE);
+                    drawCentered(Face.MONO, tok, b.x + b.w / 2f, b.y + (tiny ? 14 : 24) - lift(b), tiny ? 3.0f : 2.2f, Color.WHITE);
                 }
             }
             case TRUE_FALSE -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect b = tokenButton(i);
-                    drawCentered(Face.SANS, options.get(i), b.x + b.w / 2f, b.y + 22, 2.4f, Color.WHITE);
+                    drawCentered(Face.SANS, options.get(i), b.x + b.w / 2f, b.y + 22 - lift(b), 2.4f, Color.WHITE);
                 }
             }
             case FIND_BUG -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect r = lineRect(i);
-                    drawCentered(Face.MONO, String.valueOf(i + 1), r.x + 25, r.y + 6, 1.45f, new Color(0.65f, 0.72f, 0.9f, 1f));
-                    text(Face.MONO, active.codeLines().get(i), r.x + 66, r.y + 6, 1.55f, Color.WHITE);
+                    float up = lift(r, true, ROW_LIFT);
+                    drawCentered(Face.MONO, String.valueOf(i + 1), r.x + 25, r.y + 6 - up, 1.45f, new Color(0.65f, 0.72f, 0.9f, 1f));
+                    text(Face.MONO, active.codeLines().get(i), r.x + 66, r.y + 6 - up, 1.55f, Color.WHITE);
                 }
                 Rect check = bugCheckButton();
+                float checkUp = lift(check, pickedLine >= 0, LIFT);
                 drawCentered(Face.SANS, pickedLine < 0 ? "Pick a line" : "Check line " + (pickedLine + 1),
-                        check.x + check.w / 2f, check.y + 18, 1.5f, pickedLine < 0 ? Color.GRAY : Color.WHITE);
+                        check.x + check.w / 2f, check.y + 18 - checkUp, 1.5f, pickedLine < 0 ? Color.GRAY : Color.WHITE);
                 drawCentered(Face.SANS, pickedLine < 0 ? "tap the buggy one" : "or press Enter", check.x + check.w / 2f,
-                        check.y + 50, 1.05f, pickedLine < 0 ? Color.DARK_GRAY : new Color(0.75f, 0.95f, 0.75f, 1f));
+                        check.y + 50 - checkUp, 1.05f, pickedLine < 0 ? Color.DARK_GRAY : new Color(0.75f, 0.95f, 0.75f, 1f));
             }
             case FILL_BLANK -> {
                 Rect box = answerBox();
@@ -1551,7 +1577,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                     text(Face.MONO, typed + (caret ? "|" : ""), box.x + 24, box.y + 22, 2.2f, Color.WHITE);
                 }
                 Rect go = submitButton();
-                drawCentered(Face.SANS, "Answer  (Enter)", go.x + go.w / 2f, go.y + 26, 1.8f, Color.WHITE);
+                drawCentered(Face.SANS, "Answer  (Enter)", go.x + go.w / 2f, go.y + 26 - lift(go), 1.8f, Color.WHITE);
                 if (run.difficulty() == Difficulty.EASY && !active.correctToken().isEmpty()) {
                     // an easy typed answer shows its shape: how it starts and how long it is
                     String shape = "Starts with \"" + active.correctToken().charAt(0) + "\"  -  " + active.correctToken().length()
@@ -1568,9 +1594,9 @@ public class PlayScreen extends InputAdapter implements Screen {
                 List<String> left = labels(remaining());
                 drawChips(chipRects(left, bankY(), scale), left, scale);
                 Rect check = checkButton();
-                drawCentered(Face.SANS, "Check  (Enter)", check.x + check.w / 2f, check.y + 11, 1.5f, Color.WHITE);
+                drawCentered(Face.SANS, "Check  (Enter)", check.x + check.w / 2f, check.y + 11 - lift(check), 1.5f, Color.WHITE);
                 Rect clear = clearButton();
-                drawCentered(Face.SANS, "Clear", clear.x + clear.w / 2f, clear.y + 11, 1.5f, Color.WHITE);
+                drawCentered(Face.SANS, "Clear", clear.x + clear.w / 2f, clear.y + 11 - lift(clear), 1.5f, Color.WHITE);
             }
         }
     }
@@ -1578,8 +1604,8 @@ public class PlayScreen extends InputAdapter implements Screen {
     private void drawChips(List<Rect> rects, List<String> chipLabels, float scale) {
         for (int i = 0; i < rects.size(); i++) {
             Rect r = rects.get(i);
-            drawCentered(Face.MONO, chipLabels.get(i), r.x + r.w / 2f, r.y + (CHIP_H - PixelFonts.BASE * scale) / 2f - 2f,
-                    scale, Color.WHITE);
+            drawCentered(Face.MONO, chipLabels.get(i), r.x + r.w / 2f,
+                    r.y + (CHIP_H - PixelFonts.BASE * scale) / 2f - 2f - lift(r, true, ROW_LIFT), scale, Color.WHITE);
         }
     }
 
@@ -1621,7 +1647,8 @@ public class PlayScreen extends InputAdapter implements Screen {
         drawWrapped(Face.SANS, c.explanationText(), 90, next + 24, 1.5f, Color.WHITE, 1160f);
 
         Rect go = explainContinueButton();
-        drawCentered(Face.SANS, explainAge > 0.4f ? "Continue  (Enter)" : "...", go.x + go.w / 2f, go.y + 15, 1.6f,
+        drawCentered(Face.SANS, explainAge > 0.4f ? "Continue  (Enter)" : "...", go.x + go.w / 2f,
+                go.y + 15 - lift(go, explainAge > 0.4f, LIFT), 1.6f,
                 explainAge > 0.4f ? Color.WHITE : Color.GRAY);
     }
 
@@ -1649,7 +1676,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         drawCentered(Face.SANS, "Written by AI from your answers in this lesson (no name is sent). It can make mistakes.", W / 2f, 825,
                 1.2f, new Color(0.6f, 0.65f, 0.8f, 1f));
         Rect close = aiCloseButton();
-        drawCentered("Close", close.x + close.w / 2f, close.y + 28, 1.8f, Color.WHITE);
+        drawCentered("Close", close.x + close.w / 2f, close.y + 28 - lift(close), 1.8f, Color.WHITE);
     }
 
     private void drawResultText() {
@@ -1689,14 +1716,14 @@ public class PlayScreen extends InputAdapter implements Screen {
             drawCentered("Rank B or higher: you earned a lesson certificate", W / 2f, 780, 1.5f,
                     new Color(0.6f, 0.95f, 0.6f, 1f));
             Rect cert = certButton();
-            drawCentered("Get certificate", cert.x + cert.w / 2f, cert.y + 28, 1.8f, Color.WHITE);
+            drawCentered("Get certificate", cert.x + cert.w / 2f, cert.y + 28 - lift(cert), 1.8f, Color.WHITE);
         }
         if (feedbackAvailable()) {
             Rect fb = feedbackButton();
-            drawCentered("Get feedback (AI)", fb.x + fb.w / 2f, fb.y + 28, 1.7f, Color.WHITE);
+            drawCentered("Get feedback (AI)", fb.x + fb.w / 2f, fb.y + 28 - lift(fb), 1.7f, Color.WHITE);
         }
         Rect cont = continueButton();
-        drawCentered(saveDone ? "Continue" : "Saving...", cont.x + cont.w / 2f, cont.y + 28, 1.8f, Color.WHITE);
+        drawCentered(saveDone ? "Continue" : "Saving...", cont.x + cont.w / 2f, cont.y + 28 - lift(cont, saveDone, LIFT), 1.8f, Color.WHITE);
     }
 
     private static BitmapFont font(Face face, float scale) {

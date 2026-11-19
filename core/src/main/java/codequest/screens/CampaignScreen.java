@@ -185,7 +185,7 @@ public class CampaignScreen extends StudentScreen {
         } else if (unlocked) {
             solidButton(done ? "Replay" : "Play", 1460, y + 27, 270, 56, GOOD, () -> play(lesson, false));
         } else {
-            solidButton("Locked", 1460, y + 27, 270, 56, new Color(0.2f, 0.22f, 0.3f, 1f), Color.GRAY, () -> { });
+            solidButton("Locked", 1460, y + 27, 270, 56, new Color(0.2f, 0.22f, 0.3f, 1f), Color.GRAY, INERT);
         }
 
         float next = y + 124;

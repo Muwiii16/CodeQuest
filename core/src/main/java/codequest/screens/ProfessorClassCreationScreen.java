@@ -53,7 +53,7 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
             String language = LANGUAGES[i];
             float x = 90 + i * (lw + 13.3f);
             if (playable) {
-                solidButton(language, x, 730, lw, 70, new Color(0.55f, 0.37f, 0.08f, 1f), () -> { });
+                solidButton(language, x, 730, lw, 70, new Color(0.55f, 0.37f, 0.08f, 1f), INERT);
             } else {
                 solidButton(language, x, 730, lw, 70, new Color(0.14f, 0.16f, 0.21f, 1f), Color.GRAY,
                         () -> toast(language + " is coming soon. C is the only language available for now.", false));

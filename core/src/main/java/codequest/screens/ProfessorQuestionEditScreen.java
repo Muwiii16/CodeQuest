@@ -388,18 +388,18 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
                 case CHOICE -> {
                     float y = 570;
                     if (!d.correct().isEmpty()) {
-                        solidButton(d.correct(), 1220, y, 610, 56, GOOD, Color.WHITE, Face.MONO, () -> { });
+                        solidButton(d.correct(), 1220, y, 610, 56, GOOD, Color.WHITE, Face.MONO, INERT);
                         y += 66;
                     }
                     for (String w : d.distractors()) {
-                        solidButton(w, 1220, y, 610, 56, BUTTON, Color.WHITE, Face.MONO, () -> { });
+                        solidButton(w, 1220, y, 610, 56, BUTTON, Color.WHITE, Face.MONO, INERT);
                         y += 66;
                     }
                 }
                 case FILL_BLANK -> {
-                    solidButton("(student types here)", 1220, 570, 610, 56, BUTTON, Color.WHITE, Face.SANS, () -> { });
+                    solidButton("(student types here)", 1220, 570, 610, 56, BUTTON, Color.WHITE, Face.SANS, INERT);
                     solidButton(d.correct().isEmpty() ? "(answer)" : d.correct(), 1220, 636, 610, 56, GOOD, Color.WHITE, Face.MONO,
-                            () -> { });
+                            INERT);
                     if (!d.accepted().isEmpty()) {
                         text("Also counts: " + String.join("   ", d.accepted()), 1220, 706, 610, 60, 1.3f, MUTED,
                                 Align.topLeft, Face.MONO).setWrap(true);
@@ -408,8 +408,8 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
                 case TRUE_FALSE -> {
                     boolean isTrue = Challenge.TRUE.equals(d.correct());
                     boolean isFalse = Challenge.FALSE.equals(d.correct());
-                    solidButton("True", 1220, 570, 295, 80, isTrue ? GOOD : BUTTON, Color.WHITE, Face.SANS, () -> { });
-                    solidButton("False", 1535, 570, 295, 80, isFalse ? GOOD : BUTTON, Color.WHITE, Face.SANS, () -> { });
+                    solidButton("True", 1220, 570, 295, 80, isTrue ? GOOD : BUTTON, Color.WHITE, Face.SANS, INERT);
+                    solidButton("False", 1535, 570, 295, 80, isFalse ? GOOD : BUTTON, Color.WHITE, Face.SANS, INERT);
                 }
                 case ARRANGE -> {
                     List<String> right = AnswerMatcher.splitTokens(d.correct());
@@ -454,7 +454,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
                 cx = x;
                 cy += 54f;
             }
-            solidButton(t, cx, cy, w, 46, color, Color.WHITE, Face.MONO, () -> { });
+            solidButton(t, cx, cy, w, 46, color, Color.WHITE, Face.MONO, INERT);
             cx += w + 10f;
         }
     }

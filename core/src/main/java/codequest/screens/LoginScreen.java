@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
@@ -149,13 +150,35 @@ public class LoginScreen extends BaseScreen {
 
     private void tab(String label, float x, boolean selected, Runnable onClick) {
         Image hit = rect(x, CARD_Y + 14, 150, 52, new Color(0, 0, 0, 0));
+        Label caption = text(label, x, CARD_Y + 14, 150, 52, 1.7f, selected ? INK : SOFT_INK, Align.center);
+        caption.setTouchable(Touchable.disabled);
+        float captionY = caption.getY();
         hit.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override
+            public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
+                if (pointer == -1) {
+                    caption.clearActions();
+                    caption.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.moveTo(caption.getX(), captionY + 6f, 0.07f,
+                            com.badlogic.gdx.math.Interpolation.fade));
+                    Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
+                }
+            }
+
+            @Override
+            public void exit(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor to) {
+                if (pointer == -1) {
+                    caption.clearActions();
+                    caption.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.moveTo(caption.getX(), captionY, 0.07f,
+                            com.badlogic.gdx.math.Interpolation.fade));
+                    Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
+                }
+            }
+
             @Override
             public void clicked(InputEvent event, float cx, float cy) {
                 onClick.run();
             }
         });
-        text(label, x, CARD_Y + 14, 150, 52, 1.7f, selected ? INK : SOFT_INK, Align.center);
         if (selected) {
             rect(x + 20, CARD_Y + 64, 110, 4, INK).setTouchable(Touchable.disabled);
         }

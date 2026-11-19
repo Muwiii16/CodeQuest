@@ -358,22 +358,78 @@ public abstract class BaseScreen implements Screen {
         return solidButton(text, x, yFromTop, w, h, fill, textColor, PixelFonts.Face.PIXEL, action);
     }
 
-    /** A solid button whose label is in the given face (MONO for a button that shows code). */
+    /** Pass this as the action of a button that does nothing (locked, selected, a preview): it gets no hover effect. */
+    protected static final Runnable INERT = () -> { };
+
+    /** How far a button rises when the mouse is over it (pixels), and how long that takes. */
+    private static final float HOVER_LIFT = 8f;
+    private static final float HOVER_SECONDS = 0.07f;
+
+    /**
+     * A solid button whose label is in the given face (MONO for a button that shows code). Flat: the outline is a darker
+     * shade of the button. When the mouse is over a clickable button it rises a few pixels over a soft shadow and the
+     * cursor becomes a hand; the colors never change.
+     */
     protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Color textColor,
             PixelFonts.Face face, Runnable action) {
-        // flat: the outline is a darker shade of the button (a light outline made colored buttons look lit up), and the
-        // fill does not change on hover
+        boolean live = action != INERT;
+        Image shadow = null;
+        if (live) {
+            shadow = rect(x + 5, yFromTop + 10, w - 10, h - 4, new Color(0f, 0f, 0f, 0f));
+            shadow.setTouchable(Touchable.disabled);
+        }
         Color border = new Color(fill.r * 0.7f, fill.g * 0.7f, fill.b * 0.7f, 1f);
-        rect(x, yFromTop, w, h, border).setTouchable(Touchable.disabled);
+        Image frame = rect(x, yFromTop, w, h, border);
+        frame.setTouchable(Touchable.disabled);
         Image body = rect(x + 3, yFromTop + 3, w - 6, h - 6, fill);
-        body.addListener(new ClickListener() {
+        body.setTouchable(Touchable.disabled);
+        Label label = text(text, x, yFromTop, w, h, Math.min(1.9f, h / 38f), textColor, Align.center, face);
+        label.setTouchable(Touchable.disabled);
+        // the part that takes the mouse stays where the button was, so a raised button never flickers at its lower edge
+        Image hit = rect(x, yFromTop, w, h, new Color(0f, 0f, 0f, 0f));
+        Image shade = shadow;
+        float frameY = frame.getY();
+        float bodyY = body.getY();
+        float labelY = label.getY();
+        hit.addListener(new ClickListener() {
+            @Override
+            public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
+                if (!live || pointer != -1) {
+                    return;
+                }
+                rise(frame, frameY + HOVER_LIFT);
+                rise(body, bodyY + HOVER_LIFT);
+                rise(label, labelY + HOVER_LIFT);
+                shade.clearActions();
+                shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0.55f, HOVER_SECONDS));
+                Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
+            }
+
+            @Override
+            public void exit(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor to) {
+                if (!live || pointer != -1) {
+                    return;
+                }
+                rise(frame, frameY);
+                rise(body, bodyY);
+                rise(label, labelY);
+                shade.clearActions();
+                shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0f, HOVER_SECONDS));
+                Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
+            }
+
             @Override
             public void clicked(InputEvent event, float cx, float cy) {
                 action.run();
             }
         });
-        text(text, x, yFromTop, w, h, Math.min(1.9f, h / 38f), textColor, Align.center, face);
-        return body;
+        return hit;
+    }
+
+    private static void rise(com.badlogic.gdx.scenes.scene2d.Actor actor, float toY) {
+        actor.clearActions();
+        actor.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.moveTo(actor.getX(), toY, HOVER_SECONDS,
+                com.badlogic.gdx.math.Interpolation.fade));
     }
 
     /** A text input on a dark box with a hint shown while empty. */
@@ -466,6 +522,9 @@ public abstract class BaseScreen implements Screen {
 
         stage.getViewport().apply();
         if (background != null) {
+            // the batch keeps the color of the last thing it drew (a button's invisible hit layer is transparent), which
+            // would tint or hide the background
+            stage.getBatch().setColor(Color.WHITE);
             stage.getBatch().begin();
             stage.getBatch().draw(background, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
             stage.getBatch().end();
@@ -498,6 +557,7 @@ public abstract class BaseScreen implements Screen {
     @Override
     public void dispose() {
         disposed = true;
+        Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
         stage.dispose();
         for (Texture t : ownedTextures) {
             t.dispose();
