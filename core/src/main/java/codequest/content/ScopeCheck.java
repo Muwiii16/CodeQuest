@@ -74,6 +74,45 @@ public final class ScopeCheck {
         return out;
     }
 
+    private static final Pattern NEGATION = Pattern.compile("(\\bno\\b|\\bnot\\b|\\bwithout\\b|\\bdon'?t\\b|\\bavoid\\b|\\bskip\\b|\\bexcept\\b|\\bnever\\b)[^.;\\n]{0,30}$");
+    private static final Pattern[] MENTION = new Pattern[CTopic.values().length];
+
+    static {
+        MENTION[CTopic.VARIABLES.ordinal()] = Pattern.compile("\\b(variables?|data ?types?|integers?|floats?|doubles?|scanf|user input)\\b");
+        MENTION[CTopic.CONTROL_STRUCTURES.ordinal()] = Pattern.compile("\\b(if[- /]else|else|if statements?|loops?|while|switch|conditionals?)\\b");
+        MENTION[CTopic.FUNCTIONS.ordinal()] = Pattern.compile("(?<!main )\\bfunctions?\\b");
+        MENTION[CTopic.ARRAYS.ordinal()] = Pattern.compile("\\barrays?\\b");
+        MENTION[CTopic.POINTERS.ordinal()] = Pattern.compile("\\bpointers?\\b");
+    }
+
+    /**
+     * The topics a professor's own description asks for ("... variables and an if-else ..."), so that what the lesson
+     * covers is what was described and nothing else. A mention that is negated ("no loops", "without variables") does not
+     * count. SYNTAX (printf, #include, main, return) is never inferred because it is always allowed.
+     */
+    public static Set<CTopic> infer(String description) {
+        Set<CTopic> out = EnumSet.noneOf(CTopic.class);
+        if (description == null) {
+            return out;
+        }
+        String text = description.toLowerCase(java.util.Locale.ROOT);
+        for (CTopic t : CTopic.values()) {
+            Pattern p = MENTION[t.ordinal()];
+            if (p == null) {
+                continue;
+            }
+            Matcher m = p.matcher(text);
+            while (m.find()) {
+                String before = text.substring(Math.max(0, m.start() - 40), m.start());
+                if (!NEGATION.matcher(before).find()) {
+                    out.add(t);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     /** Parses a stored list such as {@code "SYNTAX,VARIABLES"}; unknown names are ignored, null or blank is empty. */
     public static Set<CTopic> parseTopics(String stored) {
         Set<CTopic> out = EnumSet.noneOf(CTopic.class);

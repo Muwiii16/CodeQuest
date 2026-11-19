@@ -17,6 +17,7 @@ import codequest.content.QuestionDraft;
 import codequest.content.Section;
 import codequest.content.Stage;
 import codequest.content.StaticChallengeProvider;
+import codequest.data.AiFeedback;
 import codequest.data.ClassTestData;
 import codequest.data.DatabaseManager;
 import codequest.data.Lesson;
@@ -104,10 +105,9 @@ public class PlayScreen extends InputAdapter implements Screen {
     private static final float PANEL_H = 440f;
 
     private static final Rect QUIT_BTN = new Rect(SIDEBAR_X + 20, 980, 480, 60);
-    private static final Rect CERT_BTN = new Rect(480, 880, 420, 80);
-    private static final Rect CONTINUE_PAIRED = new Rect(1020, 880, 420, 80);
     private static final Color GOLD_TEXT = new Color(1f, 0.82f, 0.3f, 1f);
-    private static final Rect CONTINUE_ALONE = new Rect(760, 880, 400, 80);
+    private static final float RESULT_BTN_W = 400f;
+    private static final float RESULT_BTN_GAP = 40f;
 
     private final Main game;
     private final String username;
@@ -144,6 +144,12 @@ public class PlayScreen extends InputAdapter implements Screen {
     private final ClassTestData tests = new ClassTestData();
     private final ExecutorService uploader;
     private volatile boolean saveDone = true;
+    // what the student answered this run, for the written feedback they can ask for on the result screen (no names)
+    private final List<AiFeedback.Item> feedbackItems = new ArrayList<>();
+    private volatile String aiText;
+    private volatile String aiError;
+    private volatile boolean aiLoading;
+    private boolean aiOpen;
 
     // class test only: live standings
     private record Live(List<ClassTestData.Participant> participants, String status) {
@@ -545,6 +551,21 @@ public class PlayScreen extends InputAdapter implements Screen {
         startAnswerFx(o.correct(), projectileAt, sourceTower);
 
         answers.add(new RunReplay.Answer(token, fraction));
+        if (answered != null && !classTest) {
+            String question = answered.prompt();
+            String given = token == null ? "" : token;
+            if (answered.kind() == AnswerKind.FIND_BUG) {
+                // the AI must see the same line numbers the student saw
+                List<String> lines = answered.codeLines();
+                StringBuilder numbered = new StringBuilder("Find the line with the bug:");
+                for (int i = 0; i < lines.size(); i++) {
+                    numbered.append('\n').append(i + 1).append(": ").append(lines.get(i));
+                }
+                question = numbered.toString();
+                given = token == null ? "" : "line " + token;
+            }
+            feedbackItems.add(new AiFeedback.Item(answered.topic().name(), question, given, answered.answerLabel(), o.correct()));
+        }
         RunCache.save(cacheKey, username, seed, answers);
         recordAnswer(answered, token, o, takenMs, hinted);
 
@@ -745,9 +766,17 @@ public class PlayScreen extends InputAdapter implements Screen {
             if (!saveDone) {
                 return true; // still saving the result: wait for it so the next screen shows it
             }
+            if (aiOpen) {
+                if (aiCloseButton().contains(mx, my)) {
+                    aiOpen = false;
+                }
+                return true;
+            }
             if (continueButton().contains(mx, my)) {
                 leave();
-            } else if (certificateEligible() && CERT_BTN.contains(mx, my)) {
+            } else if (feedbackAvailable() && feedbackButton().contains(mx, my)) {
+                openFeedback();
+            } else if (certificateEligible() && certButton().contains(mx, my)) {
                 game.setScreen(new CertificateScreen(game, username, lesson,
                         run.rank().name(), run.overallAccuracy(), () -> game.setScreen(afterRun())));
             }
@@ -913,8 +942,51 @@ public class PlayScreen extends InputAdapter implements Screen {
         return !classTest && !run.isFailed() && run.rank().passes();
     }
 
+    private boolean feedbackAvailable() {
+        return !classTest && !feedbackItems.isEmpty();
+    }
+
+    /** The result buttons from left to right: feedback (campaign), certificate (rank B or better), continue. */
+    private Rect resultButton(int slot) {
+        int count = 1 + (feedbackAvailable() ? 1 : 0) + (certificateEligible() ? 1 : 0);
+        float total = count * RESULT_BTN_W + (count - 1) * RESULT_BTN_GAP;
+        return new Rect(W / 2f - total / 2f + slot * (RESULT_BTN_W + RESULT_BTN_GAP), 880, RESULT_BTN_W, 80);
+    }
+
+    private Rect feedbackButton() {
+        return resultButton(0);
+    }
+
+    private Rect certButton() {
+        return resultButton(feedbackAvailable() ? 1 : 0);
+    }
+
     private Rect continueButton() {
-        return certificateEligible() ? CONTINUE_PAIRED : CONTINUE_ALONE;
+        return resultButton((feedbackAvailable() ? 1 : 0) + (certificateEligible() ? 1 : 0));
+    }
+
+    private Rect aiCloseButton() {
+        return new Rect(W / 2f - 200f, 880, 400, 80);
+    }
+
+    /** Asks the AI for feedback on this run (once; the answer is kept for the rest of the result screen). */
+    private void openFeedback() {
+        aiOpen = true;
+        if (aiText != null || aiLoading) {
+            return;
+        }
+        aiLoading = true;
+        aiError = null;
+        List<AiFeedback.Item> items = List.copyOf(feedbackItems);
+        String title = lesson.title();
+        String rank = run.rank().name();
+        int accuracy = (int) Math.round(run.overallAccuracy() * 100);
+        uploader.submit(() -> {
+            AiFeedback.Result r = new AiFeedback().forStudent(title, rank, accuracy, items);
+            aiText = r.text();
+            aiError = r.error();
+            aiLoading = false;
+        });
     }
 
     private Rect explainContinueButton() {
@@ -1059,16 +1131,30 @@ public class PlayScreen extends InputAdapter implements Screen {
             }
         } else if (phase == Phase.RESULT) {
             fill(0, 0, W, H, new Color(0f, 0f, 0f, 0.82f));
-            Rect cont = continueButton();
-            fill(cont.x, cont.y, cont.w, cont.h, new Color(0.3f, 0.1f, 0.1f, 1f));
-            if (certificateEligible()) {
-                fill(CERT_BTN.x, CERT_BTN.y, CERT_BTN.w, CERT_BTN.h, new Color(0.12f, 0.3f, 0.12f, 1f));
+            if (aiOpen) {
+                fill(180, 90, W - 360, 900, new Color(0.05f, 0.07f, 0.17f, 1f));
+                fill(180, 90, W - 360, 8, new Color(0.45f, 0.35f, 0.8f, 1f));
+                Rect close = aiCloseButton();
+                fill(close.x, close.y, close.w, close.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+            } else {
+                Rect cont = continueButton();
+                fill(cont.x, cont.y, cont.w, cont.h, new Color(0.3f, 0.1f, 0.1f, 1f));
+                if (certificateEligible()) {
+                    Rect cert = certButton();
+                    fill(cert.x, cert.y, cert.w, cert.h, new Color(0.12f, 0.3f, 0.12f, 1f));
+                }
+                if (feedbackAvailable()) {
+                    Rect fb = feedbackButton();
+                    fill(fb.x, fb.y, fb.w, fb.h, new Color(0.25f, 0.18f, 0.5f, 1f));
+                }
             }
         }
         sr.end();
 
         batch.begin();
-        drawSidebarText();
+        if (!(phase == Phase.RESULT && aiOpen)) {
+            drawSidebarText(); // the feedback panel covers the sidebar: its text must not show through
+        }
         if (phase == Phase.WALKING) {
             text("Section " + run.currentSectionNumber() + " / " + run.sectionCount(), 30, 20, 1.5f, Color.WHITE);
         } else if (phase == Phase.ENCOUNTER) {
@@ -1558,7 +1644,27 @@ public class PlayScreen extends InputAdapter implements Screen {
         font.draw(batch, s, x, H - yTop, width, com.badlogic.gdx.utils.Align.left, true);
     }
 
+    /** The AI's written feedback for this run, in a panel over the result screen. */
+    private void drawAiFeedback() {
+        drawCentered("Feedback from your AI tutor", W / 2f, 130, 2.4f, new Color(0.75f, 0.68f, 1f, 1f));
+        if (aiLoading) {
+            drawCentered(Face.SANS, "Writing your feedback...", W / 2f, 420, 2.0f, Color.LIGHT_GRAY);
+        } else if (aiError != null) {
+            drawWrapped(Face.SANS, aiError, 260, 260, 1.7f, new Color(1f, 0.55f, 0.5f, 1f), W - 520);
+        } else if (aiText != null) {
+            drawWrapped(Face.SANS, aiText, 260, 230, 1.7f, Color.WHITE, W - 520);
+        }
+        drawCentered(Face.SANS, "Written by AI from your answers in this lesson (no name is sent). It can make mistakes.", W / 2f, 825,
+                1.2f, new Color(0.6f, 0.65f, 0.8f, 1f));
+        Rect close = aiCloseButton();
+        drawCentered("Close", close.x + close.w / 2f, close.y + 28, 1.8f, Color.WHITE);
+    }
+
     private void drawResultText() {
+        if (aiOpen) {
+            drawAiFeedback();
+            return;
+        }
         boolean cleared = !run.isFailed();
         drawCentered(classTest ? (timesUp ? "TIME IS UP" : "TEST FINISHED") : cleared ? "LESSON COMPLETE" : "RUN FAILED", W / 2f, 130, 3f,
                 cleared ? new Color(0.6f, 0.95f, 0.6f, 1f) : new Color(1f, 0.5f, 0.45f, 1f));
@@ -1590,7 +1696,12 @@ public class PlayScreen extends InputAdapter implements Screen {
         if (certificateEligible()) {
             drawCentered("Rank B or higher: you earned a lesson certificate", W / 2f, 780, 1.5f,
                     new Color(0.6f, 0.95f, 0.6f, 1f));
-            drawCentered("Get certificate", CERT_BTN.x + CERT_BTN.w / 2f, CERT_BTN.y + 28, 1.8f, Color.WHITE);
+            Rect cert = certButton();
+            drawCentered("Get certificate", cert.x + cert.w / 2f, cert.y + 28, 1.8f, Color.WHITE);
+        }
+        if (feedbackAvailable()) {
+            Rect fb = feedbackButton();
+            drawCentered("Get feedback (AI)", fb.x + fb.w / 2f, fb.y + 28, 1.7f, Color.WHITE);
         }
         Rect cont = continueButton();
         drawCentered(saveDone ? "Continue" : "Saving...", cont.x + cont.w / 2f, cont.y + 28, 1.8f, Color.WHITE);

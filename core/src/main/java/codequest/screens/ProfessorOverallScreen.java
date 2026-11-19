@@ -2,6 +2,7 @@ package codequest.screens;
 
 import codequest.Main;
 import codequest.content.DefaultStages;
+import codequest.data.AiFeedback;
 import codequest.data.CampaignData;
 import codequest.data.CampaignData.ClassInfo;
 import codequest.data.CampaignData.Progress;
@@ -11,12 +12,14 @@ import codequest.session.Grades;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Align;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Overall class performance: every student's result on every lesson, from lesson 1 to the latest,
- * as a grid. The written AI analysis is a placeholder for now.
+ * as a grid, with a written AI analysis the professor asks for.
  */
 public class ProfessorOverallScreen extends ProfessorScreen {
 
@@ -37,9 +40,12 @@ public class ProfessorOverallScreen extends ProfessorScreen {
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         card(60, 140, 1800, 650);
         card(60, 810, 1800, 210);
-        text("AI analysis (Gemini)", 90, 825, 700, 36, 1.8f, AMBER, Align.left);
-        text("A written summary of how each student and the whole class progressed across the lessons is coming in a "
-                + "later version.", 90, 870, 1740, 110, 1.5f, MUTED, Align.topLeft).setWrap(true);
+        text("AI analysis", 90, 825, 700, 36, 1.8f, AMBER, Align.left);
+        text("A written summary of how each student and the whole class progressed across the lessons. Only grades and "
+                + "ranks are sent to the AI, never names.", 90, 872, 1740, 60, 1.3f, MUTED, Align.topLeft,
+                PixelFonts.Face.SANS).setWrap(true);
+        solidButton("Write AI analysis", 90, 950, 520, 60, new Color(0.45f, 0.3f, 0.7f, 1f),
+                () -> showAiAnalysis("Writing the analysis...", this::analyse));
         base = mark();
         load("Loading the results...", () -> {
             ProfessorData data = new ProfessorData();
@@ -52,6 +58,51 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             progress = l.progress();
             rebuild();
         });
+    }
+
+    /** Every student's rank and grade per lesson for the AI, as S1, S2, ... : the names stay in the game. */
+    private AiFeedback.Result analyse() {
+        List<Object> rows = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (int i = 0; i < students.size(); i++) {
+            ProfessorData.Student st = students.get(i);
+            Map<Long, Progress> mine = progress.getOrDefault(st.id(), Map.of());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", AiFeedback.label(i));
+            int sum = 0;
+            int counted = 0;
+            List<Object> perLesson = new ArrayList<>();
+            for (Lesson l : lessons) {
+                Progress p = mine.get(l.stageId());
+                Map<String, Object> cell = new LinkedHashMap<>();
+                cell.put("lesson", l.number());
+                boolean done = p != null && p.completed();
+                cell.put("status", done ? "Completed" : p == null ? "Not started" : "In progress");
+                if (done) {
+                    int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
+                    int grade = Grades.percent(p.score(), max);
+                    cell.put("rank", p.rank());
+                    cell.put("gradePercent", grade);
+                    sum += grade;
+                    counted++;
+                }
+                cell.put("attempts", p == null ? 0 : p.attempts());
+                perLesson.add(cell);
+            }
+            row.put("averageGradePercent", counted == 0 ? null : sum / counted);
+            row.put("lessons", perLesson);
+            rows.add(row);
+            names.add(st.username());
+        }
+        List<Object> lessonList = new ArrayList<>();
+        for (Lesson l : lessons) {
+            lessonList.add("Lesson " + l.number() + ": " + l.title());
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("scope", "all lessons");
+        data.put("lessons", lessonList);
+        data.put("students", rows);
+        return new AiFeedback().forClass(data, names);
     }
 
     private void rebuild() {

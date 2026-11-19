@@ -44,8 +44,17 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private final TextArea promptBox;
     private final int base;
     private int nextNumber = 1;
-    /** What this lesson teaches (the professor picks it). A lesson may only use these and what earlier lessons taught. */
-    private final Set<CTopic> picked = EnumSet.noneOf(CTopic.class);
+    /** What the AI understood of the request (one sentence) and the topics it will use: shown, never assumed in silence. */
+    private String scopeNote = "";
+    private Set<CTopic> usedTopics = EnumSet.of(CTopic.SYNTAX);
+    /** The request as the AI saw it, with the professor's answers to its follow-up questions (saved as the lesson's prompt). */
+    private String fullPrompt;
+    // follow-up questions the AI asked because the request was too wide or unclear; the lesson waits for the answers
+    private java.util.List<String> followUps = java.util.List.of();
+    private String pendingRequest = "";
+    private int clarifyRound;
+    private TextArea answersBox;
+    private String answersText = "";
     /** The topics earlier lessons of this class taught, which this lesson may reuse. */
     private Set<CTopic> taught = EnumSet.noneOf(CTopic.class);
     private String taughtNotes = "";
@@ -67,8 +76,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
 
         card(60, 730, 1800, 290);
         text("Describe what you need for this lesson", 90, 742, 900, 36, 1.7f, AMBER, Align.left);
-        promptBox = textArea("e.g. 10 questions on declaring and initializing int, float and char variables, "
-                + "starting easy for first-year students...", 90, 785, 1740, 150);
+        promptBox = textArea("e.g. Teach printf: printing text, the #include line and return 0. Only that, for "
+                + "first-year students...", 90, 785, 1740, 150);
         solidButton("Generate preview with AI", 90, 945, 760, 60, new Color(0.45f, 0.3f, 0.7f, 1f), this::generate);
         solidButton("Save lesson", 1330, 945, 500, 60, GOOD, this::save);
 
@@ -96,6 +105,10 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     }
 
     private void rebuild() {
+        if (answersBox != null) {
+            answersText = answersBox.getText(); // keep what was typed through a rebuild
+        }
+        answersBox = null;
         clearFrom(base);
         text("Lesson " + nextNumber, 560, 160, 230, 36, 1.7f, MUTED, Align.right);
 
@@ -114,23 +127,18 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                     adaptive = !adaptive;
                     rebuild();
                 });
-        text("This lesson teaches  (it will use only these, plus what earlier lessons taught)", 90, 566, 700, 30, 1.25f, MUTED,
-                Align.left, PixelFonts.Face.SANS);
-        CTopic[] topicList = CTopic.values();
-        for (int i = 0; i < topicList.length; i++) {
-            CTopic t = topicList[i];
-            boolean on = picked.contains(t);
-            solidButton(ProfessorLessonScreen.CosmeticTopic.label(t) + (taught.contains(t) ? "  (taught)" : ""),
-                    90 + (i % 3) * 237, 600 + (i / 3) * 52, 228, 44,
-                    on ? new Color(0.55f, 0.37f, 0.08f, 1f) : taught.contains(t) ? new Color(0.16f, 0.3f, 0.26f, 1f) : BUTTON,
-                    () -> {
-                        if (!picked.remove(t)) {
-                            picked.add(t);
-                        }
-                        rebuild();
-                    });
+        if (!scopeNote.isEmpty()) {
+            text("What the AI understood", 90, 575, 700, 30, 1.25f, MUTED, Align.left, PixelFonts.Face.SANS);
+            text(scopeNote, 90, 610, 700, 90, 1.3f, Color.WHITE, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+        } else {
+            text("The lesson covers only what you describe. If the description is too wide, the AI asks you before it writes "
+                    + "anything.", 90, 580, 700, 100, 1.25f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
         }
 
+        if (!followUps.isEmpty()) {
+            drawFollowUps();
+            return;
+        }
         if (generated != null) {
             drawGenerated();
             return;
@@ -140,22 +148,16 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         placeTopLeft(map, 880, 215, 520, 293);
         map.setTouchable(Touchable.disabled);
         stage.addActor(map);
-        float y = 215;
-        for (Section s : layout.sections()) {
-            StringBuilder topics = new StringBuilder();
-            for (var t : s.towerTopics()) {
-                topics.append(topics.length() == 0 ? "" : ", ").append(t.name().replace('_', ' ').toLowerCase());
-            }
-            text("Section " + s.index() + ":  " + topics, 1430, y, 410, 56, 1.3f, Color.WHITE, Align.topLeft).setWrap(true);
-            y += 66;
-        }
-        text("Standard layout: 4 sections, " + layout.towerCount() + " towers. Describe the lesson below and press "
-                + "\"Generate preview with AI\" to get a program and its questions, or save the lesson and write the "
-                + "questions yourself in the lesson editor.\n\n"
-                + (taught.isEmpty() ? "This is the first lesson with topics: the AI will teach only what you pick, nothing else."
-                        : "Earlier lessons taught " + ScopeCheck.formatTopics(taught).toLowerCase().replace('_', ' ')
-                                + ". This lesson may reuse them, and nothing beyond what you pick."),
-                880, 530, 960, 170, 1.4f, MUTED, Align.topLeft).setWrap(true);
+        text("The map is only the setting. What the lesson teaches comes from your description, and the questions are "
+                + "built from it (a different number of questions is fine).", 1430, 215, 410, 200, 1.3f, MUTED, Align.topLeft,
+                PixelFonts.Face.SANS).setWrap(true);
+        text("Describe the lesson below and press \"Generate preview with AI\" to get a program and its questions, or "
+                + "save the lesson and write the questions yourself in the lesson editor.\n\n"
+                + "The AI uses only what you describe. Variables, if/else, loops, functions, arrays or pointers appear "
+                + "only if you ask for them (or tick them on the left)."
+                + (taught.isEmpty() ? "" : "\n\nEarlier lessons taught "
+                        + ScopeCheck.formatTopics(taught).toLowerCase().replace('_', ' ') + "; this lesson may reuse them."),
+                880, 530, 960, 190, 1.4f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
     }
 
     /** The AI's draft: its program on the left, its questions (in the order the student meets them) on the right. */
@@ -196,18 +198,83 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             toast("Describe what you need first (at least a few words).", false);
             return;
         }
-        if (picked.isEmpty()) {
-            toast("Pick what this lesson teaches first, so the AI stays inside it.", false);
+        followUps = java.util.List.of();
+        clarifyRound = 0;
+        answersText = "";
+        check(request, 0);
+    }
+
+    /** Step 1: the AI reads the request and either says it is clear or asks what it needs to know (it never assumes). */
+    private void check(String request, int round) {
+        String notes = taughtNotes;
+        load("Reading your description...", () -> new LessonGenerator().clarify(request, notes), c -> {
+            if (!c.ok()) {
+                toast(c.error(), false);
+                return;
+            }
+            if (!c.clear() && round < 2) {
+                followUps = c.questions();
+                pendingRequest = request;
+                clarifyRound = round;
+                answersText = "";
+                scopeNote = c.summary();
+                rebuild();
+                return;
+            }
+            write(request, c.topics(), c.summary());
+        });
+    }
+
+    /** The right-hand panel while the AI waits for the professor's answers. */
+    private void drawFollowUps() {
+        text("Before I write this, I need to know:", 880, 205, 960, 36, 1.6f, AMBER, Align.left, PixelFonts.Face.SANS);
+        StringBuilder qs = new StringBuilder();
+        for (int i = 0; i < followUps.size(); i++) {
+            qs.append(i + 1).append(".  ").append(followUps.get(i)).append("\n\n");
+        }
+        text(qs.toString().trim(), 880, 255, 940, 230, 1.4f, Color.WHITE, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+        text("Your answers (one line per question is fine)", 880, 495, 940, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.SANS);
+        answersBox = textArea("e.g. 1. for and while loops   2. no scanf, just printing", 880, 525, 940, 90, PixelFonts.Face.SANS);
+        answersBox.setText(answersText);
+        solidButton("Continue", 880, 630, 460, 56, GOOD, this::answered);
+        solidButton("Change my description", 1360, 630, 460, 56, BUTTON, () -> {
+            followUps = java.util.List.of();
+            scopeNote = "";
+            rebuild();
+        });
+    }
+
+    private void answered() {
+        String answers = answersBox == null ? answersText : answersBox.getText();
+        if (answers.isBlank()) {
+            toast("Answer the questions first, so the AI does not have to guess.", false);
             return;
         }
+        StringBuilder full = new StringBuilder(pendingRequest).append("\n\nThe AI asked, and the professor answered:\n");
+        for (String q : followUps) {
+            full.append("Q: ").append(q).append('\n');
+        }
+        full.append("Professor's answers: ").append(answers.trim());
+        followUps = java.util.List.of();
+        check(full.toString(), clarifyRound + 1);
+    }
+
+    /** Step 2: write the lesson from the request (and the answers), using only what it names. */
+    private void write(String request, Set<CTopic> named, String summary) {
         String difficulty = DIFFICULTIES[difficultyIdx];
-        Set<CTopic> focus = EnumSet.copyOf(picked);
+        Set<CTopic> focus = EnumSet.of(CTopic.SYNTAX);
+        focus.addAll(named);
+        focus.addAll(ScopeCheck.infer(request));
+        usedTopics = focus;
+        fullPrompt = request;
+        scopeNote = (summary.isEmpty() ? "" : summary + "  ") + "Topics: " + describe(focus) + ".";
         Set<CTopic> before = EnumSet.copyOf(taught.isEmpty() ? EnumSet.noneOf(CTopic.class) : taught);
         String notes = taughtNotes;
-        load("Asking Gemini to write the lesson (this can take up to a minute)...",
+        load("Writing the lesson (this can take up to a minute)...",
                 () -> new LessonGenerator().generate(request, difficulty, focus, before, notes), result -> {
             if (!result.ok()) {
                 toast(result.error(), false);
+                rebuild();
                 return;
             }
             generated = result.lesson();
@@ -219,6 +286,23 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         });
     }
 
+    /** The topics of a lesson saved without an AI draft: only what the description names (the basics are always allowed). */
+    private Set<CTopic> scopeFor(String description) {
+        Set<CTopic> out = EnumSet.of(CTopic.SYNTAX);
+        out.addAll(ScopeCheck.infer(description));
+        return out;
+    }
+
+    private static String describe(Set<CTopic> topics) {
+        StringBuilder sb = new StringBuilder();
+        for (CTopic t : CTopic.values()) {
+            if (topics.contains(t)) {
+                sb.append(sb.length() == 0 ? "" : ", ").append(ProfessorLessonScreen.CosmeticTopic.label(t));
+            }
+        }
+        return sb.toString();
+    }
+
     private void save() {
         String title = titleField.getText().trim();
         if (title.isEmpty()) {
@@ -226,9 +310,9 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             return;
         }
         String difficulty = DIFFICULTIES[difficultyIdx];
-        String prompt = promptBox.getText();
+        String prompt = fullPrompt != null && generated != null ? fullPrompt : promptBox.getText();
         GeneratedLesson draft = generated;
-        Set<CTopic> savedTopics = picked.isEmpty() ? Set.of() : EnumSet.copyOf(picked);
+        Set<CTopic> savedTopics = draft != null ? usedTopics : scopeFor(prompt);
         load("Saving the lesson...", () -> {
             Optional<Lesson> saved = campaigns.createLesson(cls.id(), cls.sectionName(), title, difficulty, adaptive, prompt, savedTopics);
             if (saved.isEmpty() || draft == null) {

@@ -237,4 +237,20 @@ class TerminalScopeTest {
                 new GeneratedLesson("t", "printf(\"A\");", "A", List.of(q)).problems().orElse(""));
         assertTrue(new GeneratedLesson("t", "printf(\"A\");", "A\n---\nB", List.of(q)).problems().orElse("").contains("one output for each"));
     }
+
+    @Test
+    void theDescriptionDecidesTheTopics() {
+        // a printf-only description asks for no topic beyond the basics
+        assertEquals(java.util.Set.of(), ScopeCheck.infer("Create multiple sets of code blocks about the basic concept of printf and "
+                + "the important parts such as the #include, the main function and the return 0, and such."));
+        assertEquals(java.util.Set.of(CTopic.VARIABLES, CTopic.CONTROL_STRUCTURES),
+                ScopeCheck.infer("Teach variables and an if-else that prints Adult."));
+        assertEquals(java.util.Set.of(CTopic.FUNCTIONS), ScopeCheck.infer("Writing a function that adds two numbers"));
+    }
+
+    @Test
+    void aNegatedMentionDoesNotCount() {
+        assertEquals(java.util.Set.of(), ScopeCheck.infer("Only printf, no loops and without variables please."));
+        assertEquals(java.util.Set.of(CTopic.CONTROL_STRUCTURES), ScopeCheck.infer("No variables. Teach loops."));
+    }
 }

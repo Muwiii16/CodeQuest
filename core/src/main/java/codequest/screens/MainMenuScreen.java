@@ -3,10 +3,7 @@ package codequest.screens;
 import codequest.Main;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
-import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
-import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 
@@ -28,15 +25,15 @@ public class MainMenuScreen extends BaseScreen {
         float startY = 280f;
         float spacing = 138f;
 
-        menuButton("campaign", btnX, startY, btnWidth, btnHeight, () -> game.setScreen(new CampaignScreen(game, username)));
-        menuButton("class_test", btnX, startY + spacing, btnWidth, btnHeight,
+        menuButton("campaign", "Campaign", btnX, startY, btnWidth, btnHeight, () -> game.setScreen(new CampaignScreen(game, username)));
+        menuButton("class_test", "Class Test", btnX, startY + spacing, btnWidth, btnHeight,
                 () -> game.setScreen(new ClassTestScreen(game, username)));
-        menuButton("cosmetics", btnX, startY + spacing * 2, btnWidth, btnHeight,
+        menuButton("cosmetics", "Cosmetics", btnX, startY + spacing * 2, btnWidth, btnHeight,
                 () -> game.setScreen(new CosmeticsScreen(game, username)));
-        menuButton("certificates", btnX, startY + spacing * 3, btnWidth, btnHeight,
+        menuButton("certificates", "Certificates", btnX, startY + spacing * 3, btnWidth, btnHeight,
                 () -> game.setScreen(new CertificatesScreen(game, username)));
         // C is the only language so far; every class teaching it shares this dictionary
-        menuButton("dictionary", btnX, startY + spacing * 4, btnWidth, btnHeight,
+        menuButton("dictionary", "Dictionary", btnX, startY + spacing * 4, btnWidth, btnHeight,
                 () -> game.setScreen(new DictionaryScreen(game, username, "C")));
 
         outlinedText("Student:  " + username, VIRTUAL_WIDTH - 620, 28, 380, 40, 1.5f, new Color(0.8f, 0.87f, 1f, 1f), Align.right);
@@ -44,15 +41,15 @@ public class MainMenuScreen extends BaseScreen {
                 () -> game.setScreen(new LoginScreen(game)));
     }
 
-    private void menuButton(String name, float x, float y, float w, float h, Runnable action) {
-        ImageButton button = imageButton(Art.def(name), Art.hover(name));
-        placeTopLeft(button, x, y, w, h);
-        button.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float cx, float cy) {
-                action.run();
-            }
-        });
-        stage.addActor(button);
+    /** A flat navy button with the icon on the left and a readable label (the old buttons were pictures with pixel text). */
+    private void menuButton(String name, String label, float x, float y, float w, float h, Runnable action) {
+        solidButton("", x, y, w, h, new Color(0.16f, 0.22f, 0.46f, 1f), action);
+        Image icon = new Image(new TextureRegionDrawable(new TextureRegion(texture("ui/buttons/icon_" + name + ".png"))));
+        float size = h - 56f;
+        placeTopLeft(icon, x + 34f, y + (h - size) / 2f, size, size);
+        icon.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+        icon.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+        stage.addActor(icon);
+        text(label, x + 60f, y, w - 60f, h, 2.7f, Color.WHITE, Align.center).setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
     }
 }

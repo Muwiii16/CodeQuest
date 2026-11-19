@@ -23,35 +23,50 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Write a new question or rewrite an existing one: how it is answered (multiple choice, fill in the blank,
- * true or false, arrange the tokens, find the bug), its topic and difficulty, the question text, the answer
- * and an optional hint. The boxes and labels change with the kind, and a preview shows how it will look.
+ * Write a new question or rewrite an existing one, in three steps so that each page holds only a few boxes:
+ * 1. the kind of question (how the student answers), its topic and difficulty;
+ * 2. the question and the answer;
+ * 3. the help for the student (hint, explanation) and the terminal message for a wrong answer.
+ * A preview on the right shows how the question will look. What was typed is kept when moving between pages.
  */
 public class ProfessorQuestionEditScreen extends ProfessorScreen {
 
-    private static final Color PICKED = new Color(0.55f, 0.37f, 0.08f, 1f);
+    private static final Color PICKED = new Color(0.2f, 0.42f, 0.78f, 1f);
+    private static final Color STEP_DONE = new Color(0.16f, 0.3f, 0.5f, 1f);
+    private static final String[] STEPS = { "1   Kind of question", "2   Question and answer", "3   Help and errors" };
 
     private final QuestionData questionData = new QuestionData();
     private final ClassInfo cls;
     private final Lesson lesson;
     private final Question existing;
     private final Question variantOf;
-    private final TextArea promptBox;
-    private final TextField correctField;
-    private final TextField contextField;
-    private final TextArea explanationBox;
-    private final TextField errorField;
-    private final List<TextField> wrongFields = new ArrayList<>();
-    private final TextField hintField;
-    private final Group pickers;
-    private final Group cover;
-    private final Group chunkRegion;
-    private TextArea chunkBox;
-    private String chunkText = "";
+    private final Group form;
     private final Group preview;
+
+    // what has been typed (kept here so the boxes can be rebuilt for another page)
+    private String promptT = "";
+    private String contextT = "";
+    private String correctT = "";
+    private final String[] wrongT = { "", "", "" };
+    private String chunkT = "";
+    private String hintT = "";
+    private String explanationT = "";
+    private String errorT = "";
+
+    // the boxes of the page being shown (null when that page is not shown)
+    private TextArea promptBox;
+    private TextField contextField;
+    private TextField correctField;
+    private final List<TextField> wrongFields = new ArrayList<>();
+    private TextArea chunkBox;
+    private TextField hintField;
+    private TextArea explanationBox;
+    private TextArea errorBox;
+
     private CTopic topic = CTopic.SYNTAX;
     private Difficulty difficulty = Difficulty.NORMAL;
     private AnswerKind kind = AnswerKind.CHOICE;
+    private int page;
 
     /** existing == null writes a new question. */
     public ProfessorQuestionEditScreen(Main game, String username, ClassInfo cls, Lesson lesson, Question existing) {
@@ -77,30 +92,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
         this.variantOf = variantOf;
 
         card(60, 140, 1100, 880);
-        pickers = region();
-
-        promptBox = textArea("", 90, 466, 1040, 60, Face.MONO);
-        contextField = textField("e.g. Run the next lines only when the person is 18 or older (an adult)", false, 90, 550, 1040, 44,
-                Face.SANS);
-        correctField = textField("", false, 90, 622, 1040, 44, Face.MONO);
-        for (int i = 0; i < QuestionDraft.MAX_DISTRACTORS; i++) {
-            wrongFields.add(textField("", false, 90 + i * 350, 694, 340, 44, Face.MONO));
-        }
-        // drawn above the boxes: hides the ones this kind does not use (a hidden box would leave its dark background)
-        cover = region();
-        chunkRegion = region();
-        hintField = textField("shown when a student asks for a hint in a lesson", false, 90, 766, 1040, 38, Face.SANS);
-        explanationBox = textArea("shown after the student answers: why the right answer is right", 90, 832, 1040, 44, Face.SANS);
-        // the box is only 38 px high: with the default top padding a text area has no room to show even one line
-        if (explanationBox.getStyle().background instanceof com.badlogic.gdx.scenes.scene2d.utils.BaseDrawable pad) {
-            pad.setTopHeight(3f);
-        }
-        errorField = textField("e.g. error: expected ';' before '}' token   (or several lines:  answer :: message)", false, 90, 898, 1040, 38,
-                Face.MONO);
-
-        solidButton("Save question", 90, 952, 520, 56, GOOD, this::save);
-        solidButton("Cancel", 640, 952, 490, 56, BUTTON, () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, lesson)));
-
+        form = region();
         card(1190, 140, 670, 880);
         text("Preview", 1220, 155, 400, 40, 2f, AMBER, Align.left);
         preview = region();
@@ -111,63 +103,149 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
             topic = d.topic();
             difficulty = d.difficulty();
             kind = d.kind();
-            promptBox.setText(d.prompt());
-            correctField.setText(d.correct());
+            promptT = d.prompt();
+            correctT = d.correct();
             // the second row holds wrong answers, other accepted answers or extra tokens, depending on the kind
             List<String> second = kind == AnswerKind.FILL_BLANK ? d.accepted() : d.distractors();
-            for (int i = 0; i < wrongFields.size(); i++) {
-                wrongFields.get(i).setText(i < second.size() ? second.get(i) : "");
+            for (int i = 0; i < wrongT.length; i++) {
+                wrongT[i] = i < second.size() ? second.get(i) : "";
             }
-            hintField.setText(d.hint() == null ? "" : d.hint());
-            contextField.setText(d.context() == null ? "" : d.context());
-            explanationBox.setText(d.explanation() == null ? "" : d.explanation());
-            errorField.setText(d.errorText() == null ? "" : d.errorText());
-            chunkText = d.chunk() == null ? "" : d.chunk();
+            hintT = d.hint() == null ? "" : d.hint();
+            contextT = d.context() == null ? "" : d.context();
+            explanationT = d.explanation() == null ? "" : d.explanation();
+            errorT = d.errorText() == null ? "" : d.errorText();
+            chunkT = d.chunk() == null ? "" : d.chunk();
         }
         if (variantOf != null && newLevel != null) {
             difficulty = newLevel;
         }
-        rebuildPickers();
+        // a question that already has text starts on the page with the words; a new one starts with the kind
+        page = source != null ? 1 : 0;
+        rebuildForm();
         rebuildPreview();
     }
 
-    /** Topic, difficulty and kind rows plus the labels and boxes that depend on the kind (redrawn on every pick). */
-    private void rebuildPickers() {
-        fill(pickers, () -> {
-            text("Topic (the tower this question appears at)", 90, 155, 800, 30, 1.25f, MUTED, Align.left, Face.SANS);
-            CTopic[] topics = CTopic.values();
-            for (int i = 0; i < topics.length; i++) {
-                CTopic t = topics[i];
-                solidButton(ProfessorLessonScreen.CosmeticTopic.label(t), 90 + (i % 3) * 350, 188 + (i / 3) * 52, 340, 46,
-                        t == topic ? PICKED : BUTTON, () -> {
-                            topic = t;
-                            rebuildPickers();
-                        });
+    /** Copies what is typed in the boxes on screen into the fields above. */
+    private void sync() {
+        if (promptBox != null) {
+            promptT = promptBox.getText();
+        }
+        if (contextField != null) {
+            contextT = contextField.getText();
+        }
+        if (correctField != null) {
+            correctT = correctField.getText();
+        }
+        for (int i = 0; i < wrongFields.size() && i < wrongT.length; i++) {
+            wrongT[i] = wrongFields.get(i).getText();
+        }
+        if (chunkBox != null) {
+            chunkT = chunkBox.getText();
+        }
+        if (hintField != null) {
+            hintT = hintField.getText();
+        }
+        if (explanationBox != null) {
+            explanationT = explanationBox.getText();
+        }
+        if (errorBox != null) {
+            errorT = errorBox.getText();
+        }
+    }
+
+    private void goTo(int next) {
+        sync();
+        page = next;
+        rebuildForm();
+        rebuildPreview();
+    }
+
+    // ── the form ─────────────────────────────────────────
+
+    private void rebuildForm() {
+        sync();
+        promptBox = null;
+        contextField = null;
+        correctField = null;
+        wrongFields.clear();
+        chunkBox = null;
+        hintField = null;
+        explanationBox = null;
+        errorBox = null;
+        fill(form, () -> {
+            for (int i = 0; i < STEPS.length; i++) {
+                int step = i;
+                solidButton(STEPS[i], 90 + i * 350, 152, 340, 56, i == page ? PICKED : STEP_DONE, () -> goTo(step));
             }
-            Difficulty[] ds = Difficulty.values();
-            for (int i = 0; i < ds.length; i++) {
-                Difficulty d = ds[i];
-                solidButton("difficulty: " + d.name().toLowerCase(), 90 + i * 350, 296, 340, 46,
-                        d == difficulty ? PICKED : BUTTON, () -> {
-                            difficulty = d;
-                            rebuildPickers();
-                        });
+            switch (page) {
+                case 0 -> pageKind();
+                case 1 -> pageQuestion();
+                default -> pageHelp();
             }
-            text("How the student answers", 90, 354, 800, 30, 1.25f, MUTED, Align.left, Face.SANS);
-            AnswerKind[] kinds = AnswerKind.values();
-            for (int i = 0; i < kinds.length; i++) {
-                AnswerKind k = kinds[i];
-                solidButton(k.label(), 90 + i * 210, 382, 200, 46, k == kind ? PICKED : BUTTON, () -> {
-                    kind = k;
-                    rebuildPickers();
-                    rebuildPreview();
-                });
+            if (page > 0) {
+                solidButton("< Back", 90, 952, 170, 56, BUTTON, () -> goTo(page - 1));
             }
-            labelsForKind();
+            if (page < 2) {
+                solidButton("Next >", 280, 952, 170, 56, PICKED, () -> goTo(page + 1));
+            }
+            solidButton("Save question", 560, 952, 360, 56, GOOD, this::save);
+            solidButton("Cancel", 940, 952, 190, 56, BUTTON,
+                    () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, lesson)));
         });
-        showFieldsForKind();
-        rebuildCover();
-        rebuildChunk();
+    }
+
+    private void heading(String s, float y) {
+        text(s, 90, y, 1040, 30, 1.45f, Color.WHITE, Align.left);
+    }
+
+    private void help(String s, float y, float h) {
+        text(s, 90, y, 1040, h, 1.2f, MUTED, Align.topLeft, Face.SANS).setWrap(true);
+    }
+
+    /** Page 1: how the student answers, the topic and the difficulty. */
+    private void pageKind() {
+        heading("How does the student answer?", 232);
+        AnswerKind[] kinds = AnswerKind.values();
+        for (int i = 0; i < kinds.length; i++) {
+            AnswerKind k = kinds[i];
+            float y = 274 + i * 66;
+            solidButton(k.label(), 90, y, 290, 54, k == kind ? PICKED : BUTTON, () -> {
+                kind = k;
+                rebuildForm();
+                rebuildPreview();
+            });
+            text(describe(k), 400, y, 730, 54, 1.25f, k == kind ? Color.WHITE : MUTED, Align.left, Face.SANS);
+        }
+        heading("Topic: which idea does this question teach?", 626);
+        CTopic[] topics = CTopic.values();
+        for (int i = 0; i < topics.length; i++) {
+            CTopic t = topics[i];
+            solidButton(ProfessorLessonScreen.CosmeticTopic.label(t), 90 + i * 171, 666, 163, 48, t == topic ? PICKED : BUTTON, () -> {
+                topic = t;
+                rebuildForm();
+            });
+        }
+        heading("Difficulty", 736);
+        Difficulty[] ds = Difficulty.values();
+        for (int i = 0; i < ds.length; i++) {
+            Difficulty d = ds[i];
+            String name = d.name().charAt(0) + d.name().substring(1).toLowerCase();
+            solidButton(name, 90 + i * 350, 776, 340, 48, d == difficulty ? PICKED : BUTTON, () -> {
+                difficulty = d;
+                rebuildForm();
+            });
+        }
+        help("Next, press Next to write the question and its answer. You can come back to this page at any time.", 850, 60);
+    }
+
+    private static String describe(AnswerKind k) {
+        return switch (k) {
+            case CHOICE -> "The student picks the right token for a blank from a few choices.";
+            case FILL_BLANK -> "The student types the missing code themselves. Harder than choices.";
+            case TRUE_FALSE -> "A statement about the code. The student says True or False.";
+            case ARRANGE -> "The student taps tokens in the right order to build one line.";
+            case FIND_BUG -> "The student taps the line of code that has the mistake.";
+        };
     }
 
     /** True/false and find-the-bug questions of a lesson that builds a program say which lines they add. */
@@ -175,117 +253,120 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
         return lesson.hasProgram() && (kind == AnswerKind.TRUE_FALSE || kind == AnswerKind.FIND_BUG);
     }
 
-    /** The box for those lines; it replaces the wrong-answer row, which these kinds do not use. */
-    private void rebuildChunk() {
-        if (chunkBox != null) {
-            chunkText = chunkBox.getText();
-        }
-        chunkBox = null;
-        fill(chunkRegion, () -> {
-            if (needsChunk()) {
-                chunkBox = textArea(kind == AnswerKind.FIND_BUG ? "the code with the bug fixed, as it is in the program"
-                        : "the lines of the program this statement is about", 90, 694, 1040, 46, Face.MONO);
-                chunkBox.setText(chunkText);
-            }
-        });
-    }
+    /** Page 2: the question text and the answer, with the boxes the chosen kind needs. */
+    private void pageQuestion() {
+        help("Kind: " + kind.label() + ".  " + describe(kind), 228, 28);
 
-    /** Covers the boxes this kind does not use, and holds the True / False buttons (which take the place of a box). */
-    private void rebuildCover() {
-        fill(cover, () -> {
-            if (kind == AnswerKind.TRUE_FALSE) {
-                rect(90, 622, 1040, 44, CARD);
-                boolean isTrue = Challenge.TRUE.equalsIgnoreCase(correctField.getText().trim());
-                boolean isFalse = Challenge.FALSE.equalsIgnoreCase(correctField.getText().trim());
-                solidButton("True", 90, 622, 510, 44, isTrue ? GOOD : BUTTON, () -> {
-                    correctField.setText(Challenge.TRUE);
-                    rebuildCover();
-                    rebuildPreview();
-                });
-                solidButton("False", 620, 622, 510, 44, isFalse ? GOOD : BUTTON, () -> {
-                    correctField.setText(Challenge.FALSE);
-                    rebuildCover();
-                    rebuildPreview();
-                });
-            }
-            if (kind == AnswerKind.TRUE_FALSE || kind == AnswerKind.FIND_BUG) {
-                rect(90, 694, 1040, 44, CARD);
-            }
-        });
-    }
-
-    /** The captions above the boxes, and the True / False buttons, for the chosen kind. */
-    private void labelsForKind() {
-        text(switch (kind) {
-            case TRUE_FALSE -> "Statement (the student says if it is true)";
-            case FIND_BUG -> "Code (one line per row: the student taps the line with the bug)";
-            case FILL_BLANK -> "Question (type ___ where the student's answer goes)";
-            case ARRANGE -> "Question (say what line to build)";
+        heading(switch (kind) {
+            case TRUE_FALSE -> "Statement";
+            case FIND_BUG -> "Code with the mistake (one line per row)";
+            case FILL_BLANK -> "Question (type ___ where the answer goes)";
+            case ARRANGE -> "What should the student build?";
             case CHOICE -> "Question (type ___ where the answer goes)";
-        }, 90, 440, 1040, 28, 1.25f, MUTED, Align.left, Face.SANS);
-        text(switch (kind) {
-            case TRUE_FALSE -> "Is the statement true or false?";
-            case FIND_BUG -> "Number of the line that has the bug";
-            case FILL_BLANK -> "The answer the student types";
-            case ARRANGE -> "The tokens in the right order, separated by spaces";
-            case CHOICE -> "Correct answer";
-        }, 90, 600, 1040, 22, 1.2f, MUTED, Align.left, Face.SANS);
-        text("What this code is for (one sentence shown above the question; it makes a blank have only one right answer)",
-                90, 528, 1040, 22, 1.2f, MUTED, Align.left, Face.SANS);
-        String secondLabel = needsChunk() ? "The lines of the program this question adds to the code block" : switch (kind) {
-            case CHOICE -> "Wrong answers (1 to 3)";
-            case FILL_BLANK -> "Other answers that also count (optional)";
-            case ARRANGE -> "Extra tokens that do not belong (optional, one word each)";
-            default -> "";
-        };
-        if (!secondLabel.isEmpty()) {
-            text(secondLabel, 90, 672, 1040, 22, 1.2f, MUTED, Align.left, Face.SANS);
-        }
-        text("Hint (optional)", 90, 744, 400, 22, 1.15f, MUTED, Align.left, Face.SANS);
-        text("Explanation  (why the answer is right; needed in a lesson with a program)", 90, 810, 1040, 22, 1.15f, MUTED, Align.left,
-                Face.SANS);
-        text("Terminal message if a wrong answer breaks the code  (optional; the student sees it in the terminal)", 90, 876, 1040,
-                22, 1.15f, MUTED, Align.left, Face.SANS);
-    }
-
-    /** Shows only the boxes the kind needs and updates their hint texts. */
-    private void showFieldsForKind() {
-        setFieldFace(promptBox, PixelFonts.faceForPrompt(kind, promptBox.getText()));
-        promptBox.setMessageText(switch (kind) {
+        }, 268);
+        promptBox = textArea(switch (kind) {
             case TRUE_FALSE -> "e.g. Every C program starts running at main.";
             case FIND_BUG -> "int x = 5;\nint *p = x;\nprintf(\"%d\", *p);";
             case FILL_BLANK -> "e.g. for (int i = 0; i < 3; i___)";
-            case ARRANGE -> "e.g. Build the line that prints Hi:";
+            case ARRANGE -> "e.g. Build the line that prints Hi.";
             case CHOICE -> "e.g. printf(\"Hello\")___";
-        });
-        correctField.setVisible(kind != AnswerKind.TRUE_FALSE);
-        correctField.setMessageText(switch (kind) {
-            case FIND_BUG -> "e.g. 2";
-            case FILL_BLANK -> "e.g. ++";
-            case ARRANGE -> "e.g. printf ( \"Hi\" ) ;";
-            default -> "the token that fills the blank, e.g. ;";
-        });
-        boolean secondRow = kind == AnswerKind.CHOICE || kind == AnswerKind.FILL_BLANK || kind == AnswerKind.ARRANGE;
-        for (int i = 0; i < wrongFields.size(); i++) {
-            TextField f = wrongFields.get(i);
-            f.setVisible(secondRow);
-            f.setMessageText(switch (kind) {
-                case FILL_BLANK -> "other answer (optional)";
-                case ARRANGE -> "extra token (optional)";
-                default -> i == 0 ? "wrong answer" : "wrong answer (optional)";
+        }, 90, 304, 1040, 90, PixelFonts.faceForPrompt(kind, promptT));
+        promptBox.setText(promptT);
+
+        boolean goalRequired = kind == AnswerKind.CHOICE || kind == AnswerKind.FILL_BLANK;
+        heading("Goal line" + (goalRequired ? "" : "  (optional)"), 412);
+        contextField = textField("What the code is for, so only one answer fits. e.g. Run only when the person is 18 or older",
+                false, 90, 448, 1040, 52, Face.SANS);
+        contextField.setText(contextT);
+
+        heading(switch (kind) {
+            case TRUE_FALSE -> "Is the statement true or false?";
+            case FIND_BUG -> "Number of the line that has the bug";
+            case FILL_BLANK -> "The answer the student types";
+            case ARRANGE -> "The line, token by token (separate with spaces)";
+            case CHOICE -> "Correct answer";
+        }, 520);
+        if (kind == AnswerKind.TRUE_FALSE) {
+            boolean isTrue = Challenge.TRUE.equalsIgnoreCase(correctT.trim());
+            boolean isFalse = Challenge.FALSE.equalsIgnoreCase(correctT.trim());
+            solidButton("True", 90, 556, 510, 52, isTrue ? GOOD : BUTTON, () -> {
+                correctT = Challenge.TRUE;
+                rebuildForm();
+                rebuildPreview();
             });
+            solidButton("False", 620, 556, 510, 52, isFalse ? GOOD : BUTTON, () -> {
+                correctT = Challenge.FALSE;
+                rebuildForm();
+                rebuildPreview();
+            });
+        } else {
+            correctField = textField(switch (kind) {
+                case FIND_BUG -> "e.g. 2";
+                case FILL_BLANK -> "e.g. ++";
+                case ARRANGE -> "e.g. printf ( \"Hi\" ) ;";
+                default -> "the token that fills the blank, e.g. ;";
+            }, false, 90, 556, 1040, 52, Face.MONO);
+            correctField.setText(correctT);
         }
+
+        if (needsChunk()) {
+            heading(kind == AnswerKind.FIND_BUG ? "The same code with the bug fixed (as it is in the program)"
+                    : "The lines of the program this statement is about", 628);
+            chunkBox = textArea(kind == AnswerKind.FIND_BUG ? "the code with the bug fixed" : "the lines this statement is about",
+                    90, 664, 1040, 90, Face.MONO);
+            chunkBox.setText(chunkT);
+        } else if (kind == AnswerKind.CHOICE || kind == AnswerKind.FILL_BLANK || kind == AnswerKind.ARRANGE) {
+            heading(switch (kind) {
+                case FILL_BLANK -> "Other answers that also count  (optional)";
+                case ARRANGE -> "Extra tokens that do not belong  (optional, one word each)";
+                default -> "Wrong answers  (1 to 3)";
+            }, 628);
+            for (int i = 0; i < wrongT.length; i++) {
+                TextField f = textField(switch (kind) {
+                    case FILL_BLANK -> "other answer";
+                    case ARRANGE -> "extra token";
+                    default -> i == 0 ? "wrong answer" : "wrong answer (optional)";
+                }, false, 90 + i * 350, 664, 340, 52, Face.MONO);
+                f.setText(wrongT[i]);
+                wrongFields.add(f);
+            }
+        }
+        help("Press Refresh preview on the right to see how it looks.", 790, 28);
+    }
+
+    /** Page 3: hint, explanation and the terminal message. */
+    private void pageHelp() {
+        help("None of these is needed to save, except the explanation in a lesson that builds a program.", 228, 28);
+
+        heading("Hint  (optional)", 268);
+        hintField = textField("A nudge shown when the student asks for a hint", false, 90, 304, 1040, 52, Face.SANS);
+        hintField.setText(hintT);
+
+        heading("Explanation  (shown after the student answers)", 384);
+        help("Say why the right answer is right. Needed in a lesson that builds a program.", 416, 26);
+        explanationBox = textArea("e.g. #include <stdio.h> loads the library that contains printf. Without it the compiler "
+                + "does not know printf.", 90, 448, 1040, 124, Face.SANS);
+        explanationBox.setText(explanationT);
+
+        heading("Terminal message  (optional)", 600);
+        help("What the student's terminal shows when a wrong answer breaks the code. One message for every wrong answer, "
+                + "or one line per answer written  answer :: message  (use  * :: message  for any other).", 632, 56);
+        errorBox = textArea("e.g. error: expected ';' before 'return'", 90, 696, 1040, 110, Face.MONO);
+        errorBox.setText(errorT);
     }
 
     private QuestionDraft draft() {
+        sync();
         List<String> second = new ArrayList<>();
-        wrongFields.forEach(f -> second.add(f.getText()));
+        for (String w : wrongT) {
+            second.add(w);
+        }
         boolean other = kind == AnswerKind.FILL_BLANK;
-        return new QuestionDraft(topic, difficulty, promptBox.getText(), correctField.getText(),
-                other ? List.of() : second, hintField.getText(), kind, other ? second : List.of(),
-                chunkBox != null ? chunkBox.getText() : chunkText, contextField.getText(), explanationBox.getText(),
-                errorField.getText());
+        return new QuestionDraft(topic, difficulty, promptT, correctT, other ? List.of() : second, hintT, kind,
+                other ? second : List.of(), chunkT, contextT, explanationT, errorT);
     }
+
+    // ── the preview ──────────────────────────────────────
 
     private void rebuildPreview() {
         fill(preview, () -> {

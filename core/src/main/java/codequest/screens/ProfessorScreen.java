@@ -47,4 +47,27 @@ public abstract class ProfessorScreen extends BaseScreen {
     protected Image card(float x, float y, float w, float h) {
         return rect(x, y, w, h, CARD);
     }
+
+    /**
+     * Asks the AI for a written analysis (the work runs in the background behind the loading cover) and shows it in a
+     * panel over the screen with a Close button. The panel is built last, so closing it just removes what was added.
+     */
+    protected void showAiAnalysis(String message, java.util.function.Supplier<codequest.data.AiFeedback.Result> work) {
+        load(message, work, result -> {
+            int panel = mark();
+            rect(60, 130, 1800, 900, new Color(0.07f, 0.08f, 0.13f, 1f));
+            rect(60, 130, 1800, 6, AMBER);
+            text("AI analysis", 100, 150, 1000, 50, 2.2f, AMBER, Align.left);
+            if (result.ok()) {
+                text(result.text(), 100, 220, 1720, 650, 1.55f, Color.WHITE, Align.topLeft,
+                        codequest.screens.PixelFonts.Face.SANS).setWrap(true);
+            } else {
+                text(result.error(), 100, 220, 1720, 200, 1.6f, new Color(1f, 0.55f, 0.5f, 1f), Align.topLeft,
+                        codequest.screens.PixelFonts.Face.SANS).setWrap(true);
+            }
+            text("Written by AI from statistics only: no student name is sent. It can make mistakes, so check it before acting on it.",
+                    100, 885, 1720, 40, 1.2f, MUTED, Align.left, codequest.screens.PixelFonts.Face.SANS).setWrap(true);
+            solidButton("Close", 760, 945, 400, 66, BUTTON, () -> clearFrom(panel));
+        });
+    }
 }

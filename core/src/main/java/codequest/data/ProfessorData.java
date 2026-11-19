@@ -268,6 +268,31 @@ public class ProfessorData {
         return out;
     }
 
+    /** Per student and topic: {right, total} for a lesson, from the answer log (students with no answers are absent). */
+    public Map<Long, Map<String, int[]>> studentTopicAccuracy(List<Student> students, long stageId) {
+        Map<Long, Map<String, int[]>> out = new HashMap<>();
+        if (students.isEmpty()) {
+            return out;
+        }
+        JsonValue rows = SupabaseClient.get("submissions?stage_id=eq." + stageId + "&student_id=in.(" + idList(students)
+                + ")&select=student_id,topic,is_correct&limit=5000");
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                String topic = r.getString("topic", null);
+                if (topic == null) {
+                    continue;
+                }
+                int[] c = out.computeIfAbsent(r.getLong("student_id"), k -> new java.util.TreeMap<>())
+                        .computeIfAbsent(topic, k -> new int[2]);
+                c[1]++;
+                if (r.getBoolean("is_correct", false)) {
+                    c[0]++;
+                }
+            }
+        }
+        return out;
+    }
+
     private static String idList(List<Student> students) {
         StringBuilder ids = new StringBuilder();
         for (Student s : students) {

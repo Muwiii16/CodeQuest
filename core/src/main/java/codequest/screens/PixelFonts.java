@@ -8,10 +8,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The game's pixel font (Pixelify Sans, SIL Open Font License, see assets/ui/fonts). The font is baked into bitmap
- * fonts at fixed pixel sizes, so every text is drawn at a size the font was made for instead of being stretched,
- * which is what made the old text blurry. Each size comes plain and with a dark outline; the outlined one stays
- * readable over pictures. The fonts are shared by every screen and live as long as the game does.
+ * The game's fonts (DejaVu Sans, Sans Bold and Sans Mono, see assets/ui/fonts). They are baked into smooth bitmap fonts at
+ * fixed pixel sizes, so every text is drawn at a size the font was made for instead of being stretched. The bold UI font
+ * (menus, labels, buttons) comes plain and with a dark outline that keeps it readable over pictures. The fonts are shared
+ * by every screen and live as long as the game does. (The name is from the pixel font the game used before.)
  */
 public final class PixelFonts {
 
@@ -20,6 +20,9 @@ public final class PixelFonts {
 
     /** The text height, in pixels, that a font scale of 1.0 stands for (the size the old default font had). */
     static final float BASE = 15f;
+
+    /** The UI font is wider than the pixel font it replaced, so its size is this much of what the scale asks for. */
+    private static final float UI_WIDTH_FACTOR = 0.9f;
 
     private static final Map<String, BitmapFont> CACHE = new HashMap<>();
 
@@ -99,18 +102,12 @@ public final class PixelFonts {
         return font;
     }
 
-    /** The font for a scale (1.0 is about 15 px tall, like the old default); outlined = dark outline for text over pictures. */
+    /**
+     * The font for menus, labels and buttons at a scale (1.0 is about 15 px tall, like the old default); outlined = dark
+     * outline for text over pictures. This used to be the pixel font; it is now DejaVu Sans Bold, smooth and easy to read
+     * (make_fonts_ui.py). DejaVu is wider than the pixel font was, so the size is a little smaller for the same scale.
+     */
     public static BitmapFont forScale(float scale, boolean outlined) {
-        int size = nearestSize(scale);
-        String path = "ui/fonts/pixel_" + (outlined ? "o_" : "") + size + ".fnt";
-        BitmapFont font = CACHE.get(path);
-        if (font == null) {
-            font = new BitmapFont(Gdx.files.internal(path));
-            // sharp when enlarged, smooth when the window shrinks the game
-            font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Nearest);
-            font.setUseIntegerPositions(true);
-            CACHE.put(path, font);
-        }
-        return font;
+        return smooth(outlined ? "ui_o" : "ui", nearest(SIZES, scale * UI_WIDTH_FACTOR));
     }
 }
