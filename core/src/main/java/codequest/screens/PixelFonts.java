@@ -22,7 +22,14 @@ public final class PixelFonts {
     static final float BASE = 15f;
 
     /** The UI font is wider than the pixel font it replaced, so its size is this much of what the scale asks for. */
-    private static final float UI_WIDTH_FACTOR = 0.9f;
+    private static final float UI_WIDTH_FACTOR = 1.0f;
+
+    /** Nothing is drawn smaller than this (pixels): tiny text was hard to read. */
+    private static final int MIN_UI = 16;
+    private static final int MIN_SANS = 18;
+    private static final int MIN_CODE = 16;
+    /** Sentences are drawn a little larger than the scale asks for: DejaVu Sans looks smaller than the pixel font did. */
+    private static final float SANS_BOOST = 1.12f;
 
     private static final Map<String, BitmapFont> CACHE = new HashMap<>();
 
@@ -82,12 +89,32 @@ public final class PixelFonts {
 
     /** Smooth sans-serif for text a student has to read (questions, hints, answers). */
     public static BitmapFont readable(float scale) {
-        return smooth("read", nearestReadSize(scale));
+        return smooth("read", Math.max(MIN_SANS, nearestReadSize(scale * SANS_BOOST)));
     }
 
     /** Smooth monospace for code (code in questions, answer tokens, the code block). */
     public static BitmapFont code(float scale) {
-        return smooth("code", nearestReadSize(scale));
+        return smooth("code", Math.max(MIN_CODE, nearestReadSize(scale)));
+    }
+
+    /** One loading step per font size the game can use (menus plain and outlined, sentences, code). */
+    static java.util.List<Assets.Task> preloadTasks() {
+        java.util.List<Assets.Task> out = new java.util.ArrayList<>();
+        for (int size : SIZES) {
+            if (size >= MIN_UI) {
+                out.add(new Assets.Task("fonts", () -> smooth("ui", size)));
+                out.add(new Assets.Task("fonts", () -> smooth("ui_o", size)));
+            }
+        }
+        for (int size : READ_SIZES) {
+            if (size >= MIN_SANS) {
+                out.add(new Assets.Task("fonts", () -> smooth("read", size)));
+            }
+            if (size >= MIN_CODE) {
+                out.add(new Assets.Task("fonts", () -> smooth("code", size)));
+            }
+        }
+        return out;
     }
 
     private static BitmapFont smooth(String face, int size) {
@@ -108,6 +135,6 @@ public final class PixelFonts {
      * (make_fonts_ui.py). DejaVu is wider than the pixel font was, so the size is a little smaller for the same scale.
      */
     public static BitmapFont forScale(float scale, boolean outlined) {
-        return smooth(outlined ? "ui_o" : "ui", nearest(SIZES, scale * UI_WIDTH_FACTOR));
+        return smooth(outlined ? "ui_o" : "ui", Math.max(MIN_UI, nearest(SIZES, scale * UI_WIDTH_FACTOR)));
     }
 }

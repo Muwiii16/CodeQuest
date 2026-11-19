@@ -4,6 +4,7 @@ import codequest.Main;
 import codequest.data.DatabaseManager;
 import codequest.data.DatabaseManager.Cosmetic;
 import codequest.session.GachaRoll;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
@@ -14,6 +15,7 @@ import com.badlogic.gdx.utils.Align;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -223,17 +225,31 @@ public class CosmeticsScreen extends StudentScreen {
         return fallback;
     }
 
+    /**
+     * Equips at once (the screen changes right away, so nothing dims or goes dark while the server saves it) and writes
+     * the change in the background. If the server refuses it, the wardrobe is read again and the screen shows the truth.
+     */
     private void equip(Cosmetic c) {
-        load("Equipping...", () -> {
-            if (!db.equipCosmetic(studentId, c.category(), c.id())) {
-                throw new IllegalStateException("could not equip");
+        Map<String, Long> next = new HashMap<>(equipped);
+        next.put(c.category(), c.id());
+        equipped = next;
+        rebuild();
+        toast("Equipped " + c.name() + ".", true);
+        long student = studentId;
+        CompletableFuture.supplyAsync(() -> db.equipCosmetic(student, c.category(), c.id())).thenAccept(ok -> {
+            if (ok) {
+                return;
             }
-            return fetchWardrobe(studentId);
-        }, w -> {
-            owned = w.owned();
-            equipped = w.equipped();
-            rebuild();
-            toast("Equipped " + c.name() + ".", true);
+            Wardrobe w = fetchWardrobe(student);
+            Gdx.app.postRunnable(() -> {
+                if (isDisposed()) {
+                    return;
+                }
+                owned = w.owned();
+                equipped = w.equipped();
+                rebuild();
+                toast("Could not equip " + c.name() + ". Check your connection.", false);
+            });
         });
     }
 }

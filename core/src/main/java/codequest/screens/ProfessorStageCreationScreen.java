@@ -151,13 +151,12 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         text("The map is only the setting. What the lesson teaches comes from your description, and the questions are "
                 + "built from it (a different number of questions is fine).", 1430, 215, 410, 200, 1.3f, MUTED, Align.topLeft,
                 PixelFonts.Face.SANS).setWrap(true);
-        text("Describe the lesson below and press \"Generate preview with AI\" to get a program and its questions, or "
-                + "save the lesson and write the questions yourself in the lesson editor.\n\n"
-                + "The AI uses only what you describe. Variables, if/else, loops, functions, arrays or pointers appear "
-                + "only if you ask for them (or tick them on the left)."
+        text("Describe the lesson below, then press \"Generate preview with AI\". Or save the lesson and write the questions "
+                + "yourself in the lesson editor.\n\nThe AI uses only what you describe. Nothing is added that you did not "
+                + "ask for."
                 + (taught.isEmpty() ? "" : "\n\nEarlier lessons taught "
                         + ScopeCheck.formatTopics(taught).toLowerCase().replace('_', ' ') + "; this lesson may reuse them."),
-                880, 530, 960, 190, 1.4f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+                880, 525, 960, 170, 1.3f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
     }
 
     /** The AI's draft: its program on the left, its questions (in the order the student meets them) on the right. */

@@ -12,6 +12,12 @@ public class Main extends Game {
         setScreen(new IntroScreen(this));
     }
 
+    @Override
+    public void dispose() {
+        super.dispose();
+        codequest.screens.Assets.disposeAll();
+    }
+
     /** Disposes the outgoing screen's textures once the new one has taken over. */
     @Override
     public void setScreen(Screen screen) {

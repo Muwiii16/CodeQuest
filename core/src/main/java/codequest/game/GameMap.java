@@ -63,9 +63,7 @@ public class GameMap {
 
     private Texture load(String path) {
         try {
-            Texture texture = new Texture(Gdx.files.internal(path));
-            texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear); // shown smaller than its size
-            return texture;
+            return codequest.screens.Assets.texture(path); // shared: shown smaller than its size, so Linear
         } catch (Exception e) {
             Gdx.app.error("GameMap", "Could not load " + path, e);
             return null;
@@ -120,8 +118,6 @@ public class GameMap {
     }
 
     public void dispose() {
-        if (mapImage != null) {
-            mapImage.dispose();
-        }
+        // the map picture belongs to the shared cache (Assets) and stays loaded
     }
 }

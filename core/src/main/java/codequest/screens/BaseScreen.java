@@ -51,12 +51,9 @@ public abstract class BaseScreen implements Screen {
         stage = new Stage(new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
     }
 
-    /** Loads a texture from assets/ and tracks it so dispose() cleans it up. */
+    /** A picture from assets/, from the shared cache (see {@link Assets}): it stays loaded, so a screen must not dispose it. */
     protected Texture texture(String assetPath) {
-        Texture t = new Texture(Gdx.files.internal(assetPath));
-        t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest); // pixel art: never smoothed
-        ownedTextures.add(t);
-        return t;
+        return Assets.texture(assetPath);
     }
 
     protected void setBackground(String assetPath) {
@@ -238,6 +235,11 @@ public abstract class BaseScreen implements Screen {
     });
 
     private boolean disposed;
+
+    /** True once this screen was left: background work must not touch it any more. */
+    protected boolean isDisposed() {
+        return disposed;
+    }
     private int pendingLoads;
     private Group loadingCover;
 
@@ -346,7 +348,7 @@ public abstract class BaseScreen implements Screen {
                 com.badlogic.gdx.scenes.scene2d.actions.Actions.removeActor()));
     }
 
-    /** A flat colored button with a border and a hover color; returns the clickable fill. */
+    /** A flat colored button with a darker outline (no glow, no hover color); returns the clickable fill. */
     protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Runnable action) {
         return solidButton(text, x, yFromTop, w, h, fill, Color.WHITE, action);
     }
@@ -359,23 +361,12 @@ public abstract class BaseScreen implements Screen {
     /** A solid button whose label is in the given face (MONO for a button that shows code). */
     protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Color textColor,
             PixelFonts.Face face, Runnable action) {
-        Color border = new Color(Math.min(1f, fill.r + 0.25f), Math.min(1f, fill.g + 0.25f),
-                Math.min(1f, fill.b + 0.25f), 1f);
-        Color hover = new Color(Math.min(1f, fill.r + 0.12f), Math.min(1f, fill.g + 0.12f),
-                Math.min(1f, fill.b + 0.12f), 1f);
+        // flat: the outline is a darker shade of the button (a light outline made colored buttons look lit up), and the
+        // fill does not change on hover
+        Color border = new Color(fill.r * 0.7f, fill.g * 0.7f, fill.b * 0.7f, 1f);
         rect(x, yFromTop, w, h, border).setTouchable(Touchable.disabled);
         Image body = rect(x + 3, yFromTop + 3, w - 6, h - 6, fill);
         body.addListener(new ClickListener() {
-            @Override
-            public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
-                body.setColor(hover);
-            }
-
-            @Override
-            public void exit(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor to) {
-                body.setColor(fill);
-            }
-
             @Override
             public void clicked(InputEvent event, float cx, float cy) {
                 action.run();

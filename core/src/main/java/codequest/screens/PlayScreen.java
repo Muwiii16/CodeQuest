@@ -172,7 +172,6 @@ public class PlayScreen extends InputAdapter implements Screen {
     private final Viewport viewport = new FitViewport(W, H, camera);
     private final SpriteBatch batch = new SpriteBatch();
     private final ShapeRenderer sr = new ShapeRenderer();
-    private final Map<String, Texture> sprites = new HashMap<>();
     private final GlyphLayout layout = new GlyphLayout();
     private final Random rng;
 
@@ -1196,14 +1195,7 @@ public class PlayScreen extends InputAdapter implements Screen {
      * their pictures and the glow textures are soft, so those use Linear.
      */
     private Texture sprite(String path) {
-        return sprites.computeIfAbsent(path, p -> {
-            Texture t = new Texture(Gdx.files.internal(p));
-            boolean smooth = p.startsWith("game/hero/") || p.startsWith("game/towers/") || p.equals("game/glow.png")
-                    || p.equals("game/ring.png");
-            Texture.TextureFilter filter = smooth ? Texture.TextureFilter.Linear : Texture.TextureFilter.Nearest;
-            t.setFilter(filter, filter);
-            return t;
-        });
+        return Assets.texture(path);
     }
 
     private void drawProjectile(float x, float y, float size, float alpha, float rotation) {
@@ -1758,7 +1750,6 @@ public class PlayScreen extends InputAdapter implements Screen {
     public void dispose() {
         batch.dispose();
         sr.dispose();
-        sprites.values().forEach(Texture::dispose);
         map.dispose();
         if (standings != null) {
             standings.close();

@@ -11,18 +11,38 @@ import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Align;
+
+import java.util.List;
 
 /**
- * First screen of the game: the logo fades in over the intro background, then
- * waits for a click or key press (or moves on by itself after a few seconds).
+ * First screen of the game: the logo fades in over the intro background while every picture and font is loaded into
+ * the shared cache ({@link Assets}) behind a loading bar, so nothing has to be read from disk later and moving between
+ * screens is smooth. When loading is done it waits for a click or key press (or moves on by itself after a few seconds).
  */
 public class IntroScreen extends BaseScreen {
 
     private static final float AUTO_ADVANCE_SECONDS = 7f;
+    /** How long one frame may spend loading before it draws again (so the bar keeps moving). */
+    private static final long BUDGET_NANOS = 12_000_000L;
+
+    private static final float BAR_X = 360f;
+    private static final float BAR_Y = 905f;
+    private static final float BAR_W = 1200f;
+    private static final float BAR_H = 22f;
 
     private final Main game;
-    private float elapsed;
+    private final List<Assets.Task> tasks;
+    private int done;
+    private boolean ready;
+    private float sinceReady;
     private boolean leaving;
+
+    private final Image barFill;
+    private final Image barTrack;
+    private final Image barFrame;
+    private final Label status;
+    private final Label prompt;
 
     public IntroScreen(Main game) {
         this.game = game;
@@ -39,13 +59,17 @@ public class IntroScreen extends BaseScreen {
                 com.badlogic.gdx.math.Interpolation.fade)));
         stage.addActor(logo);
 
-        Label prompt = new Label("Click anywhere or press any key to start",
+        // the loading bar: a frame, a dark track and the part that fills
+        barFrame = rect(BAR_X - 4f, BAR_Y - 4f, BAR_W + 8f, BAR_H + 8f, new Color(1f, 1f, 1f, 0.85f));
+        barTrack = rect(BAR_X, BAR_Y, BAR_W, BAR_H, new Color(0.05f, 0.08f, 0.2f, 1f));
+        barFill = rect(BAR_X, BAR_Y, 1f, BAR_H, new Color(0.35f, 0.85f, 0.75f, 1f));
+        status = outlinedText("Loading...", 0, BAR_Y - 52f, VIRTUAL_WIDTH, 40, 1.9f, new Color(0.9f, 0.94f, 1f, 1f), Align.center);
+
+        prompt = new Label("Click anywhere or press any key to start",
                 new Label.LabelStyle(PixelFonts.forScale(2.2f, true), new Color(0.9f, 0.94f, 1f, 1f)));
         prompt.pack();
-        placeTopLeft(prompt, (VIRTUAL_WIDTH - prompt.getWidth()) / 2f, 800f, prompt.getWidth(), prompt.getHeight());
+        placeTopLeft(prompt, (VIRTUAL_WIDTH - prompt.getWidth()) / 2f, 880f, prompt.getWidth(), prompt.getHeight());
         prompt.getColor().a = 0f;
-        prompt.addAction(Actions.sequence(Actions.delay(1.8f), Actions.forever(Actions.sequence(
-                Actions.alpha(1f, 0.9f), Actions.alpha(0.25f, 0.9f)))));
         stage.addActor(prompt);
 
         Label note = new Label("work in progress - more art coming soon",
@@ -53,6 +77,8 @@ public class IntroScreen extends BaseScreen {
         note.pack();
         placeTopLeft(note, (VIRTUAL_WIDTH - note.getWidth()) / 2f, 1010f, note.getWidth(), note.getHeight());
         stage.addActor(note);
+
+        tasks = Assets.tasks();
 
         stage.addListener(new InputListener() {
             @Override
@@ -77,9 +103,13 @@ public class IntroScreen extends BaseScreen {
 
     @Override
     public void render(float delta) {
-        elapsed += delta;
-        if (elapsed > AUTO_ADVANCE_SECONDS || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-            advance();
+        if (!ready) {
+            loadSome();
+        } else {
+            sinceReady += delta;
+            if (sinceReady > AUTO_ADVANCE_SECONDS || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                advance();
+            }
         }
         if (leaving) {
             return; // the next screen has taken over and this one is disposed: do not draw it
@@ -87,8 +117,31 @@ public class IntroScreen extends BaseScreen {
         super.render(delta);
     }
 
+    /** Runs loading steps until this frame's time is used up, then moves the bar. */
+    private void loadSome() {
+        long start = System.nanoTime();
+        while (done < tasks.size() && System.nanoTime() - start < BUDGET_NANOS) {
+            tasks.get(done).run().run();
+            done++;
+        }
+        float progress = tasks.isEmpty() ? 1f : (float) done / tasks.size();
+        barFill.setWidth(Math.max(1f, BAR_W * progress));
+        if (done < tasks.size()) {
+            status.setText("Loading " + tasks.get(done).label() + "...  " + Math.round(progress * 100f) + "%");
+            return;
+        }
+        // everything is cached: swap the bar for the prompt
+        ready = true;
+        barFrame.remove();
+        barTrack.remove();
+        barFill.remove();
+        status.remove();
+        prompt.addAction(Actions.sequence(Actions.alpha(1f, 0.4f), Actions.forever(Actions.sequence(
+                Actions.alpha(0.25f, 0.9f), Actions.alpha(1f, 0.9f)))));
+    }
+
     private void advance() {
-        if (leaving || elapsed < 0.5f) {
+        if (!ready || leaving || sinceReady < 0.4f) {
             return;
         }
         leaving = true;
