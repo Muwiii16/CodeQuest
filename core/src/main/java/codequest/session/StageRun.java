@@ -1,6 +1,8 @@
 package codequest.session;
 
+import codequest.content.AnswerKind;
 import codequest.content.Challenge;
+import codequest.content.ProgramLayout;
 import codequest.content.ChallengeProvider;
 import codequest.content.Difficulty;
 import codequest.content.Section;
@@ -16,8 +18,8 @@ import java.util.Optional;
  * score, the growing code block, and per-section accuracy. Pure rules with no
  * LibGDX dependency, so the whole game logic can be unit tested.
  *
- * Correctness is judged locally and instantly (the token equals the stored
- * correct one) — AI never runs during play. Class Test Mode keeps difficulty
+ * Correctness is judged locally and instantly (the answer matches the stored
+ * one, see AnswerMatcher) — AI never runs during play. Class Test Mode keeps difficulty
  * fixed; Campaign Mode adapts it after every section.
  */
 public class StageRun {
@@ -25,7 +27,7 @@ public class StageRun {
     public enum Mode { CAMPAIGN, CLASS_TEST }
 
     /**
-     * correctToken is always filled in so the UI can show the right answer after a miss.
+     * correctToken is always filled in (as the right answer in words, e.g. "line 3") so the UI can show it after a miss.
      * points is what this answer added to the score; streak is the current run of correct answers.
      */
     public record Outcome(boolean correct, int damage, String correctToken, SectionResult sectionClosed, int points,
@@ -49,6 +51,7 @@ public class StageRun {
     private final Mode mode;
     private final boolean adaptive;
     private final CodeBlock codeBlock = new CodeBlock();
+    private ProgramLayout layout;
     private final List<SectionResult> sectionResults = new ArrayList<>();
 
     private Difficulty difficulty;
@@ -80,13 +83,27 @@ public class StageRun {
         this.provider = provider;
     }
 
-    /** Seconds the player has before the projectile lands. Easier = more time. */
+    /** Seconds the player has to read a one-line question before the projectile lands. Easier = more time. */
     public static float flightSeconds(Difficulty d) {
         return switch (d) {
-            case EASY -> 10f;
-            case NORMAL -> 7f;
-            case HARD -> 5f;
+            case EASY -> 16f;
+            case NORMAL -> 13f;
+            case HARD -> 10f;
         };
+    }
+
+    /** Extra seconds for every line of code after the first one, up to this many lines. */
+    public static final float SECONDS_PER_EXTRA_LINE = 2f;
+    public static final int MAX_EXTRA_LINES = 6;
+
+    /**
+     * Seconds the player has for one question: the difficulty's time, longer for the kinds that take longer to answer
+     * (typing, building), plus a little for every extra line of code there is to read.
+     */
+    public static float flightSeconds(Challenge c, Difficulty d) {
+        int lines = c.prompt().split("\n", -1).length;
+        float extra = Math.min(MAX_EXTRA_LINES, Math.max(0, lines - 1)) * SECONDS_PER_EXTRA_LINE;
+        return flightSeconds(d) * c.kind().timeFactor() + extra;
     }
 
     /** The challenge for the next tower, or empty once the stage is done or failed. Repeat calls return the same one until answered. */
@@ -142,11 +159,20 @@ public class StageRun {
         pending = null;
 
         boolean speedScoring = mode == Mode.CLASS_TEST;
-        boolean correct = token != null && token.equals(c.correctToken());
+        boolean correct = c.isCorrect(token);
         int damage = 0;
         int points = 0;
+        boolean build = provider.buildsProgram();
+        String chunk = build ? c.codeChunk() : null;
+        // which program of the lesson this question belongs to, and where its first line sits in it
+        ProgramLayout.Slot where = layout != null && totalAnswered < layout.slots().size() ? layout.slots().get(totalAnswered)
+                : new ProgramLayout.Slot(0, 1);
         if (correct) {
-            codeBlock.append(new CodeBlock.Token(token, true));
+            if (chunk != null) {
+                codeBlock.append(new CodeBlock.Token(chunk, true, 0, where.block(), where.startLine(), null));
+            } else if (!build && c.kind().addsToCode()) {
+                codeBlock.append(new CodeBlock.Token(c.correctToken(), true)); // the canonical spelling, not the typed one
+            }
             streak++;
             bestStreak = Math.max(bestStreak, streak);
             points = speedScoring ? speedPoints(timeLeftFraction) + streakBonus(streak) : POINTS_PER_CORRECT;
@@ -155,7 +181,15 @@ public class StageRun {
             totalCorrect++;
         } else {
             streak = 0;
-            if (token != null) {
+            if (chunk != null) {
+                // The student's answer goes into the code, in red, so the code really has their mistake in it and the
+                // terminal can show what the compiler would say. A missed find-the-bug leaves the buggy code, with only
+                // the line that held the bug in red. A wrong true/false changes no code.
+                String wrong = c.wrongCode(token);
+                String text = wrong == null ? chunk : wrong;
+                codeBlock.append(new CodeBlock.Token(text, false, c.kind() == AnswerKind.FIND_BUG ? bugLine(c) : 0,
+                        where.block(), where.startLine(), wrong == null ? null : c.errorFor(token)));
+            } else if (!build && token != null && c.kind().addsToCode()) {
                 codeBlock.append(new CodeBlock.Token(token, false));
             }
             if (!speedScoring) {
@@ -176,7 +210,50 @@ public class StageRun {
                 finished = true;
             }
         }
-        return new Outcome(correct, damage, c.correctToken(), closed, points, streak);
+        return new Outcome(correct, damage, c.answerLabel(), closed, points, streak);
+    }
+
+    private static int bugLine(Challenge c) {
+        try {
+            return Integer.parseInt(c.correctToken().trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** Tells the run where each question's chunk sits among the lesson's programs (needed for the terminal). */
+    public void useLayout(ProgramLayout layout) {
+        this.layout = layout;
+    }
+
+    public ProgramLayout layout() {
+        return layout;
+    }
+
+    /** The program of the lesson the student is building now: the one the next question belongs to. */
+    public int displayBlock() {
+        if (layout == null || layout.slots().isEmpty()) {
+            return 0;
+        }
+        int next = Math.min(totalAnswered, layout.slots().size() - 1);
+        return layout.slots().get(next).block();
+    }
+
+    /** The terminal of the latest program that has all its questions answered; empty until one is finished. */
+    public List<Terminal.Row> terminal() {
+        if (layout == null) {
+            return List.of();
+        }
+        for (int program = layout.blocks() - 1; program >= 0; program--) {
+            int answeredIn = 0;
+            for (CodeBlock.Token t : codeBlock.tokens()) {
+                answeredIn += t.block() == program ? 1 : 0;
+            }
+            if (layout.slotsIn(program) > 0 && answeredIn >= layout.slotsIn(program)) {
+                return Terminal.run(codeBlock, layout, program);
+            }
+        }
+        return List.of();
     }
 
     public void useHint() {
@@ -205,6 +282,11 @@ public class StageRun {
 
     public Rank rank() {
         return failed ? Rank.F : RankCalculator.rankFor(overallAccuracy());
+    }
+
+    /** Whether the code block is the lesson's program being built chunk by chunk. */
+    public boolean buildsProgram() {
+        return provider.buildsProgram();
     }
 
     public boolean isFinished() {

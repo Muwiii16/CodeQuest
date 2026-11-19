@@ -1,13 +1,19 @@
 package codequest.screens;
 
 import codequest.Main;
+import codequest.content.AnswerKind;
+import codequest.content.BuiltInPrograms;
 import codequest.content.CTopic;
 import codequest.content.Challenge;
 import codequest.content.ChallengeProvider;
 import codequest.content.DefaultStages;
 import codequest.content.Difficulty;
 import codequest.content.FallbackChallengeProvider;
+import codequest.content.KindRotation;
 import codequest.content.PooledChallengeProvider;
+import codequest.content.ProgramChallengeProvider;
+import codequest.content.ProgramLayout;
+import codequest.content.QuestionDraft;
 import codequest.content.Section;
 import codequest.content.Stage;
 import codequest.content.StaticChallengeProvider;
@@ -21,10 +27,13 @@ import codequest.session.RunSummary;
 import codequest.game.GameMap;
 import codequest.game.TowerPlacement;
 import codequest.game.TowerSlots;
+import codequest.screens.PixelFonts.Face;
 import codequest.session.CodeBlock;
 import codequest.session.SectionResult;
+import codequest.session.Terminal;
 import codequest.session.StageRun;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
@@ -170,6 +179,14 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     private Challenge active;
     private List<String> options = List.of();
+    /** Arrange questions: which options (by position in {@link #options}) are in the student's line, in order. */
+    private final List<Integer> placed = new ArrayList<>();
+    /** Fill-in-the-blank questions: what the student has typed so far. */
+    private final StringBuilder typed = new StringBuilder();
+    /** Find the bug: the line the student has picked (0-based), or -1. Nothing counts until Check is pressed. */
+    private int pickedLine = -1;
+    private float mouseX;
+    private float mouseY;
     private float timeLeft;
     private float flightTime;
     private boolean hintShown;
@@ -178,6 +195,12 @@ public class PlayScreen extends InputAdapter implements Screen {
     private String feedback = "";
     private Color feedbackColor = Color.WHITE;
     private float feedbackTimer;
+    // after an answer: the explanation panel (what was asked, the right answer and why)
+    private Challenge explainChallenge;
+    private String explainToken;
+    private boolean explainCorrect;
+    private float explainTop;
+    private float explainAge;
     private boolean saved;
 
     /** Everything the screen needs from the database, fetched beforehand (see {@link #open}) so starting never freezes. */
@@ -230,13 +253,46 @@ public class PlayScreen extends InputAdapter implements Screen {
         this.seed = classTest ? testSession.id() : savedRun.map(RunCache.Saved::seed).orElseGet(() -> new Random().nextLong());
         this.rng = new Random(seed);
 
-        Stage stage = DefaultStages.forNumber(DefaultStages.layoutFor(lesson.number()));
+        // A lesson with a program (or with no questions at all, which plays a built-in program) is built block by block:
+        // one tower per chunk, in program order. Any other lesson draws its questions at random as before.
+        int layout = DefaultStages.layoutFor(lesson.number());
+        List<Challenge> programSlots = programSlots(lesson, data.authored(), layout);
+        Stage stage;
+        ChallengeProvider provider;
+        ProgramLayout programLayout = null;
+        if (programSlots != null) {
+            ProgramChallengeProvider byProgram = new ProgramChallengeProvider(programSlots);
+            provider = byProgram;
+            // the lesson's program text (several small programs are separated by ---) and what each prints
+            String programText;
+            String outputsText;
+            if (data.authored().isEmpty()) {
+                BuiltInPrograms.Program builtIn = BuiltInPrograms.forLayout(layout);
+                programText = builtIn.text();
+                outputsText = builtIn.outputs();
+            } else {
+                programText = lesson.program();
+                outputsText = lesson.outputs();
+            }
+            List<String> chunks = new ArrayList<>();
+            byProgram.slots().forEach(c -> chunks.add(c.codeChunk()));
+            programLayout = ProgramLayout.of(programText, outputsText, chunks);
+            stage = ProgramChallengeProvider.stageFor(lesson.title(), "map" + layout, byProgram.slots());
+        } else {
+            stage = DefaultStages.forNumber(layout);
+            // D4 (campaign content) first; the built-in questions only cover what D4 does not have yet.
+            // One rotation feeds both sources, so the lesson gets a mix of answer kinds; both are seeded, so a class test
+            // gives everyone the same questions and a resumed lesson replays exactly.
+            KindRotation rotation = new KindRotation();
+            provider = new FallbackChallengeProvider(
+                    new PooledChallengeProvider(data.authored(), seed, rotation), new StaticChallengeProvider(seed + 1, rotation));
+        }
         this.towerCount = stage.towerCount();
-        // D4 (campaign content) first; the built-in questions only cover what D4 does not have yet.
-        ChallengeProvider provider = new FallbackChallengeProvider(new PooledChallengeProvider(data.authored(), seed),
-                new StaticChallengeProvider());
         this.run = new StageRun(stage, startDifficulty, classTest ? StageRun.Mode.CLASS_TEST : StageRun.Mode.CAMPAIGN,
                 provider, lesson.adaptive());
+        if (programLayout != null) {
+            run.useLayout(programLayout);
+        }
         applyLook(data);
 
         this.uploader = Executors.newSingleThreadExecutor(r -> {
@@ -316,6 +372,21 @@ public class PlayScreen extends InputAdapter implements Screen {
         } else {
             RunCache.clear(cacheKey, username);
         }
+    }
+
+    /**
+     * The questions of a lesson that is built block by block, in program order, or null when the lesson draws its
+     * questions at random. A lesson with a program and questions that all say which lines they add is built from its own
+     * questions; a lesson with no questions at all plays the built-in program of its map.
+     */
+    private static List<Challenge> programSlots(Lesson lesson, List<Challenge> authored, int layout) {
+        if (authored.isEmpty()) {
+            return BuiltInPrograms.forLayout(layout).slots();
+        }
+        if (lesson.hasProgram() && authored.stream().allMatch(c -> c.codeChunk() != null)) {
+            return authored;
+        }
+        return null;
     }
 
     /** The area a tower's picture covers when its spot is (x, y): the picture is drawn 60 px below the spot and reaches up from there. */
@@ -423,6 +494,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 }
             }
             case FEEDBACK -> {
+                explainAge += dt;
                 feedbackTimer -= dt;
                 if (feedbackTimer <= 0f) {
                     if (run.isFailed()) {
@@ -444,12 +516,12 @@ public class PlayScreen extends InputAdapter implements Screen {
             return;
         }
         active = next.get();
-        List<String> shuffled = new ArrayList<>();
-        shuffled.add(active.correctToken());
-        shuffled.addAll(active.distractors());
-        Collections.shuffle(shuffled, rng);
-        options = shuffled;
-        flightTime = StageRun.flightSeconds(run.difficulty());
+        options = active.bank(rng);
+        placed.clear();
+        typed.setLength(0);
+        pickedLine = -1;
+        // typing and building take longer than tapping, so those kinds get more of the projectile's flight time
+        flightTime = StageRun.flightSeconds(active, run.difficulty());
         timeLeft = flightTime;
         hintShown = false;
 
@@ -516,6 +588,16 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
         feedback = sb.toString();
         feedbackTimer = closed != null ? 2.8f : 1.5f;
+        explainChallenge = answered != null && !answered.explanationText().isEmpty() ? answered : null;
+        if (explainChallenge != null) {
+            explainToken = token;
+            explainCorrect = o.correct();
+            explainAge = 0f;
+            // the explanation sits on the other side of the map from where the question was; a campaign lesson waits for
+            // the student to press Continue, a class test moves on by itself after a while
+            explainTop = panelTop < 300f ? 620f : 200f;
+            feedbackTimer = classTest ? 9f : 3600f;
+        }
         phase = Phase.FEEDBACK;
     }
 
@@ -675,20 +757,156 @@ public class PlayScreen extends InputAdapter implements Screen {
             leave();
             return true;
         }
+        if (phase == Phase.FEEDBACK && explainChallenge != null && explainAge > 0.4f
+                && explainContinueButton().contains(mx, my)) {
+            feedbackTimer = 0f;
+            return true;
+        }
         if (phase == Phase.ENCOUNTER) {
             if (!classTest && !hintShown && hintButton().contains(mx, my)) {
                 hintShown = true;
                 run.useHint();
                 return true;
             }
-            for (int i = 0; i < options.size(); i++) {
-                if (tokenButton(i).contains(mx, my)) {
-                    resolve(options.get(i));
-                    return true;
+            tapEncounter(mx, my);
+        }
+        return true;
+    }
+
+    /** A tap inside the question panel, handled by the way this question is answered. */
+    private void tapEncounter(float mx, float my) {
+        switch (active.kind()) {
+            case CHOICE, TRUE_FALSE -> {
+                for (int i = 0; i < options.size(); i++) {
+                    if (tokenButton(i).contains(mx, my)) {
+                        resolve(options.get(i));
+                        return;
+                    }
+                }
+            }
+            case FIND_BUG -> {
+                if (bugCheckButton().contains(mx, my)) {
+                    submitBugLine();
+                    return;
+                }
+                for (int i = 0; i < options.size(); i++) {
+                    if (lineRect(i).contains(mx, my)) {
+                        pickedLine = i; // only picks it: a slip of the mouse cannot cost an answer
+                        return;
+                    }
+                }
+            }
+            case FILL_BLANK -> {
+                if (submitButton().contains(mx, my)) {
+                    submitTyped();
+                }
+            }
+            case ARRANGE -> {
+                if (checkButton().contains(mx, my)) {
+                    submitArranged();
+                    return;
+                }
+                if (clearButton().contains(mx, my)) {
+                    placed.clear();
+                    return;
+                }
+                float scale = chipScale();
+                List<Rect> built = chipRects(labels(placed), builtY(), scale);
+                for (int i = 0; i < built.size(); i++) {
+                    if (built.get(i).contains(mx, my)) {
+                        placed.remove(i); // back to the bank
+                        return;
+                    }
+                }
+                List<Integer> left = remaining();
+                List<Rect> bank = chipRects(labels(left), bankY(), scale);
+                for (int i = 0; i < bank.size(); i++) {
+                    if (bank.get(i).contains(mx, my)) {
+                        placed.add(left.get(i));
+                        return;
+                    }
                 }
             }
         }
-        return true;
+    }
+
+    private void submitBugLine() {
+        if (pickedLine >= 0 && pickedLine < options.size()) {
+            resolve(options.get(pickedLine));
+        }
+    }
+
+    private void submitTyped() {
+        String t = typed.toString().trim();
+        if (!t.isEmpty()) {
+            resolve(t);
+        }
+    }
+
+    private void submitArranged() {
+        if (!placed.isEmpty()) {
+            resolve(String.join(" ", labels(placed)));
+        }
+    }
+
+    @Override
+    public boolean keyTyped(char c) {
+        if (phase == Phase.ENCOUNTER && active != null && active.kind() == AnswerKind.FILL_BLANK
+                && c >= 32 && c != 127 && typed.length() < QuestionDraft.MAX_TOKEN) {
+            typed.append(c);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean keyDown(int keycode) {
+        if (phase == Phase.FEEDBACK && explainChallenge != null && explainAge > 0.4f
+                && (keycode == Input.Keys.ENTER || keycode == Input.Keys.NUMPAD_ENTER || keycode == Input.Keys.SPACE)) {
+            feedbackTimer = 0f;
+            return true;
+        }
+        if (phase != Phase.ENCOUNTER || active == null) {
+            return false;
+        }
+        if (active.kind() == AnswerKind.FIND_BUG) {
+            if (keycode == Input.Keys.ENTER || keycode == Input.Keys.NUMPAD_ENTER) {
+                submitBugLine();
+                return true;
+            }
+            if (keycode == Input.Keys.UP && !options.isEmpty()) {
+                pickedLine = pickedLine <= 0 ? options.size() - 1 : pickedLine - 1;
+                return true;
+            }
+            if (keycode == Input.Keys.DOWN && !options.isEmpty()) {
+                pickedLine = (pickedLine + 1) % options.size();
+                return true;
+            }
+            if (keycode >= Input.Keys.NUM_1 && keycode <= Input.Keys.NUM_8 && keycode - Input.Keys.NUM_1 < options.size()) {
+                pickedLine = keycode - Input.Keys.NUM_1;
+                return true;
+            }
+        }
+        if (active.kind() == AnswerKind.FILL_BLANK) {
+            if (keycode == Input.Keys.ENTER || keycode == Input.Keys.NUMPAD_ENTER) {
+                submitTyped();
+                return true;
+            }
+            if (keycode == Input.Keys.BACKSPACE && typed.length() > 0) {
+                typed.setLength(typed.length() - 1);
+                return true;
+            }
+        } else if (active.kind() == AnswerKind.ARRANGE) {
+            if (keycode == Input.Keys.ENTER || keycode == Input.Keys.NUMPAD_ENTER) {
+                submitArranged();
+                return true;
+            }
+            if (keycode == Input.Keys.BACKSPACE && !placed.isEmpty()) {
+                placed.remove(placed.size() - 1);
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean certificateEligible() {
@@ -697,6 +915,10 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     private Rect continueButton() {
         return certificateEligible() ? CONTINUE_PAIRED : CONTINUE_ALONE;
+    }
+
+    private Rect explainContinueButton() {
+        return new Rect(1040, explainTop + 336, 260, 56);
     }
 
     private Rect hintButton() {
@@ -709,6 +931,101 @@ public class PlayScreen extends InputAdapter implements Screen {
         float total = options.size() * bw + (options.size() - 1) * gap;
         float startX = (MAP_WIDTH - total) / 2f;
         return new Rect(startX + i * (bw + gap), panelTop + 335, bw, 80);
+    }
+
+    // find the bug: one tappable row per line of code
+    private Rect lineRect(int i) {
+        return new Rect(90, panelTop + 80 + i * 42f, 1040, 38);
+    }
+
+    private Rect bugCheckButton() {
+        return new Rect(1150, panelTop + 80, 180, 84);
+    }
+
+    // fill in the blank: the box the answer is typed into, and its button
+    private Rect answerBox() {
+        return new Rect(90, panelTop + 335, 800, 80);
+    }
+
+    private Rect submitButton() {
+        return new Rect(910, panelTop + 335, 300, 80);
+    }
+
+    // arrange: the student's line, the tokens still to place, and the two buttons under them
+    private float builtY() {
+        return panelTop + 215;
+    }
+
+    private float bankY() {
+        return panelTop + 318;
+    }
+
+    private Rect checkButton() {
+        return new Rect(1010, panelTop + 384, 250, 48);
+    }
+
+    private Rect clearButton() {
+        return new Rect(90, panelTop + 384, 160, 48);
+    }
+
+    /** Options that are not in the student's line yet, in their original order. */
+    private List<Integer> remaining() {
+        List<Integer> left = new ArrayList<>();
+        for (int i = 0; i < options.size(); i++) {
+            if (!placed.contains(i)) {
+                left.add(i);
+            }
+        }
+        return left;
+    }
+
+    private List<String> labels(List<Integer> indexes) {
+        List<String> out = new ArrayList<>();
+        for (int i : indexes) {
+            out.add(options.get(i));
+        }
+        return out;
+    }
+
+    private static final float CHIP_GAP = 12f;
+    private static final float CHIP_H = 60f;
+    private static final float ROW_WIDTH = 1170f;
+
+    private float chipWidth(String label, float scale) {
+        BitmapFont font = PixelFonts.code(scale);
+        layout.setText(font, label);
+        return Math.max(70f, layout.width + 40f);
+    }
+
+    /** One size for every chip of the question, small enough that the whole bank fits on one row. */
+    private float chipScale() {
+        for (float scale : new float[] { 2.2f, 1.8f, 1.4f }) {
+            float total = 0f;
+            for (String o : options) {
+                total += chipWidth(o, scale) + CHIP_GAP;
+            }
+            if (total - CHIP_GAP <= ROW_WIDTH) {
+                return scale;
+            }
+        }
+        return 1.1f;
+    }
+
+    /** Chips laid out left to right on a row starting at the panel's left edge. */
+    private List<Rect> chipRects(List<String> chipLabels, float y, float scale) {
+        List<Rect> out = new ArrayList<>();
+        float x = 90f;
+        for (String label : chipLabels) {
+            float w = chipWidth(label, scale);
+            out.add(new Rect(x, y, w, CHIP_H));
+            x += w + CHIP_GAP;
+        }
+        return out;
+    }
+
+    private static Color shade(Color base, boolean lit) {
+        return lit ? new Color(Math.min(1f, base.r + 0.1f), Math.min(1f, base.g + 0.1f), Math.min(1f, base.b + 0.1f), 1f)
+                : base;
     }
 
     // ── Drawing ──────────────────────────────────────────
@@ -733,6 +1050,13 @@ public class PlayScreen extends InputAdapter implements Screen {
             drawEncounterShapes();
         } else if (phase == Phase.FEEDBACK) {
             fill(60, 30, 1280, 150, new Color(0.04f, 0.06f, 0.15f, 0.92f));
+            if (explainChallenge != null) {
+                fill(60, explainTop, 1280, 410, new Color(0.05f, 0.07f, 0.17f, 0.96f));
+                fill(60, explainTop, 1280, 8, explainCorrect ? new Color(0.3f, 0.8f, 0.3f, 1f) : new Color(0.9f, 0.3f, 0.25f, 1f));
+                Rect go = explainContinueButton();
+                Color base = new Color(0.12f, 0.3f, 0.12f, 1f);
+                fill(go.x, go.y, go.w, go.h, explainAge > 0.4f ? shade(base, go.contains(mouseX, mouseY)) : new Color(0.14f, 0.16f, 0.22f, 1f));
+            }
         } else if (phase == Phase.RESULT) {
             fill(0, 0, W, H, new Color(0f, 0f, 0f, 0.82f));
             Rect cont = continueButton();
@@ -750,7 +1074,10 @@ public class PlayScreen extends InputAdapter implements Screen {
         } else if (phase == Phase.ENCOUNTER) {
             drawEncounterText();
         } else if (phase == Phase.FEEDBACK) {
-            drawCentered(feedback, MAP_WIDTH / 2f, 50, 2.2f, feedbackColor);
+            drawCentered(Face.SANS, feedback, MAP_WIDTH / 2f, 46, 2.0f, feedbackColor);
+            if (explainChallenge != null) {
+                drawExplanation();
+            }
         } else if (phase == Phase.RESULT) {
             drawResultText();
         }
@@ -896,6 +1223,9 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     private void drawSidebarShapes() {
         fill(SIDEBAR_X, 0, W - SIDEBAR_X, H, new Color(0.05f, 0.07f, 0.17f, 0.96f));
+        if (run.buildsProgram()) {
+            fill(SIDEBAR_X + 10, 680, W - SIDEBAR_X - 20, 290, new Color(0.01f, 0.02f, 0.06f, 1f)); // the terminal
+        }
         float ratio = classTest ? 0f : run.hp() / (float) StageRun.MAX_HP;
         if (!classTest) {
             fill(SIDEBAR_X + 20, 150, 480, 26, new Color(0.25f, 0.05f, 0.05f, 1f));
@@ -919,9 +1249,52 @@ public class PlayScreen extends InputAdapter implements Screen {
             Rect h = hintButton();
             fill(h.x, h.y, h.w, h.h, new Color(0.35f, 0.28f, 0.08f, 1f));
         }
-        for (int i = 0; i < options.size(); i++) {
-            Rect b = tokenButton(i);
-            fill(b.x, b.y, b.w, b.h, new Color(0.14f, 0.18f, 0.28f, 1f));
+        Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
+        mouseX = m.x;
+        mouseY = H - m.y;
+        Color idle = new Color(0.14f, 0.18f, 0.28f, 1f);
+        switch (active.kind()) {
+            case CHOICE, TRUE_FALSE -> {
+                for (int i = 0; i < options.size(); i++) {
+                    Rect b = tokenButton(i);
+                    fill(b.x, b.y, b.w, b.h, shade(idle, b.contains(mouseX, mouseY)));
+                }
+            }
+            case FIND_BUG -> {
+                for (int i = 0; i < options.size(); i++) {
+                    Rect r = lineRect(i);
+                    boolean picked = i == pickedLine;
+                    fill(r.x, r.y, r.w, r.h, picked ? new Color(0.5f, 0.31f, 0.08f, 1f)
+                            : shade(new Color(0.09f, 0.12f, 0.21f, 1f), r.contains(mouseX, mouseY)));
+                    fill(r.x, r.y, 50, r.h, picked ? new Color(0.8f, 0.5f, 0.12f, 1f) : new Color(0.16f, 0.2f, 0.32f, 1f));
+                }
+                Rect check = bugCheckButton();
+                fill(check.x, check.y, check.w, check.h, pickedLine < 0 ? new Color(0.14f, 0.16f, 0.22f, 1f)
+                        : shade(new Color(0.12f, 0.3f, 0.12f, 1f), check.contains(mouseX, mouseY)));
+            }
+            case FILL_BLANK -> {
+                Rect box = answerBox();
+                fill(box.x, box.y, box.w, box.h, new Color(0.02f, 0.03f, 0.09f, 1f));
+                fill(box.x, box.y + box.h - 4, box.w, 4, new Color(0.45f, 0.6f, 0.9f, 1f));
+                Rect go = submitButton();
+                fill(go.x, go.y, go.w, go.h, shade(new Color(0.12f, 0.3f, 0.12f, 1f), go.contains(mouseX, mouseY)));
+            }
+            case ARRANGE -> {
+                fill(90, builtY() - 8, ROW_WIDTH, CHIP_H + 16, new Color(0.02f, 0.03f, 0.09f, 1f));
+                float scale = chipScale();
+                for (Rect r : chipRects(labels(placed), builtY(), scale)) {
+                    fill(r.x, r.y, r.w, r.h, shade(new Color(0.16f, 0.32f, 0.2f, 1f), r.contains(mouseX, mouseY)));
+                }
+                for (Rect r : chipRects(labels(remaining()), bankY(), scale)) {
+                    fill(r.x, r.y, r.w, r.h, shade(idle, r.contains(mouseX, mouseY)));
+                }
+                Rect check = checkButton();
+                fill(check.x, check.y, check.w, check.h,
+                        shade(new Color(0.12f, 0.3f, 0.12f, 1f), check.contains(mouseX, mouseY)));
+                Rect clear = clearButton();
+                fill(clear.x, clear.y, clear.w, clear.h,
+                        shade(new Color(0.3f, 0.1f, 0.1f, 1f), clear.contains(mouseX, mouseY)));
+            }
         }
     }
 
@@ -943,16 +1316,37 @@ public class PlayScreen extends InputAdapter implements Screen {
             text("Score " + run.score(), x, 230, 1.5f, new Color(0.7f, 0.9f, 0.55f, 1f));
         }
 
+        int blocks = run.layout() == null ? 1 : run.layout().blocks();
         text("CODE BLOCK", x, 290, 1.4f, Color.LIGHT_GRAY);
-        List<CodeBlock.Token> tokens = run.codeBlock().tokens();
-        if (tokens.isEmpty()) {
-            text("(empty)", x, 335, 1.3f, Color.GRAY);
+        if (run.buildsProgram() && blocks > 1) {
+            text("Program " + (run.displayBlock() + 1) + " of " + blocks, x + 250, 292, 1.2f, GOLD_TEXT);
         }
-        int first = Math.max(0, tokens.size() - 16);
-        for (int i = first; i < tokens.size(); i++) {
-            CodeBlock.Token t = tokens.get(i);
-            text((t.correct() ? "+ " : "x ") + t.text(), x, 335 + (i - first) * 36f, 1.5f,
-                    t.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
+        if (run.buildsProgram()) {
+            // the program being built: every answered question added its lines, green if right and red if wrong
+            List<CodeBlock.Line> lines = run.codeBlock().lines(run.displayBlock());
+            if (lines.isEmpty()) {
+                text("(empty)", x, 335, 1.3f, Color.GRAY);
+            }
+            int firstLine = Math.max(0, lines.size() - 14);
+            for (int i = firstLine; i < lines.size(); i++) {
+                CodeBlock.Line l = lines.get(i);
+                float ly = 332 + (i - firstLine) * 24f;
+                text(Face.MONO, String.valueOf(l.number()), x, ly, 1.0f, new Color(0.45f, 0.5f, 0.65f, 1f));
+                text(Face.MONO, l.text(), x + 34, ly, 1.1f,
+                        l.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
+            }
+            drawTerminal(x, 690, 965);
+        } else {
+            List<CodeBlock.Token> tokens = run.codeBlock().tokens();
+            if (tokens.isEmpty()) {
+                text("(empty)", x, 335, 1.3f, Color.GRAY);
+            }
+            int first = Math.max(0, tokens.size() - 16);
+            for (int i = first; i < tokens.size(); i++) {
+                CodeBlock.Token t = tokens.get(i);
+                text(Face.MONO, (t.correct() ? "+ " : "x ") + t.text(), x, 335 + (i - first) * 36f, 1.45f,
+                        t.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
+            }
         }
         if (phase != Phase.RESULT) {
             drawCentered(classTest ? "Leave (you can resume)" : "Quit (progress is saved)", QUIT_BTN.x + QUIT_BTN.w / 2f,
@@ -960,25 +1354,208 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
     }
 
+    /** The terminal under the code block: what the finished program prints, or the compiler's messages for the mistakes in it. */
+    private void drawTerminal(float x, float top, float bottom) {
+        text("TERMINAL", x, top, 1.4f, Color.LIGHT_GRAY);
+        List<Terminal.Row> rows = run.terminal();
+        float width = 470f;
+        if (rows.isEmpty()) {
+            drawWrapped(Face.SANS, "Finish a program to run it. You will see what it prints here, or the compiler's error "
+                    + "if a wrong answer broke the code.", x, top + 40, 1.1f, new Color(0.55f, 0.6f, 0.78f, 1f), width);
+            return;
+        }
+        // keep the end of the terminal (the output) when there is more than fits
+        List<Float> heights = new ArrayList<>();
+        List<GlyphLayout> layouts = new ArrayList<>();
+        for (Terminal.Row r : rows) {
+            BitmapFont f = font(r.kind() == Terminal.Kind.NOTE ? Face.SANS : Face.MONO, r.kind() == Terminal.Kind.NOTE ? 1.0f : 1.0f);
+            GlyphLayout gl = new GlyphLayout(f, r.text(), Color.WHITE, width, com.badlogic.gdx.utils.Align.left, true);
+            layouts.add(gl);
+            heights.add(gl.height + 6f);
+        }
+        float total = 0f;
+        for (float h : heights) {
+            total += h;
+        }
+        int from = 0;
+        float avail = bottom - (top + 36);
+        while (total > avail && from < rows.size() - 1) {
+            total -= heights.get(from++);
+        }
+        float y = top + 36;
+        for (int i = from; i < rows.size(); i++) {
+            Terminal.Row r = rows.get(i);
+            Color c = switch (r.kind()) {
+                case COMMAND -> new Color(0.6f, 0.8f, 1f, 1f);
+                case ERROR -> new Color(1f, 0.45f, 0.4f, 1f);
+                case WARNING -> new Color(1f, 0.85f, 0.4f, 1f);
+                case CODE -> new Color(0.8f, 0.82f, 0.9f, 1f);
+                case OUTPUT -> Color.WHITE;
+                case NOTE -> new Color(0.6f, 0.66f, 0.85f, 1f);
+            };
+            BitmapFont f = font(r.kind() == Terminal.Kind.NOTE ? Face.SANS : Face.MONO, 1.0f);
+            f.setColor(c);
+            f.draw(batch, r.text(), x, H - y, width, com.badlogic.gdx.utils.Align.left, true);
+            y += heights.get(i);
+        }
+    }
+
     private void drawEncounterText() {
         text("Tower: " + active.topic().name().replace('_', ' '), 90, panelTop + 25, 1.4f,
                 topicColor(active.topic()));
+        AnswerKind kind = active.kind();
+        Color muted = new Color(0.75f, 0.8f, 0.95f, 1f);
+        if (kind == AnswerKind.FIND_BUG) {
+            // unmistakable: this is not a multiple choice, one of the lines has a mistake
+            text("FIND THE BUG", 520, panelTop + 18, 1.7f, new Color(1f, 0.6f, 0.2f, 1f));
+            text(Face.SANS, "One line has a mistake. Tap it, then Check.", 735, panelTop + 22, 1.2f,
+                    new Color(1f, 0.82f, 0.55f, 1f));
+        } else {
+            text(Face.SANS, kind.label() + "  -  " + kind.instruction(), 520, panelTop + 22, 1.2f, muted);
+        }
         int lines = active.prompt().split("\n", -1).length;
-        text(active.prompt(), 90, panelTop + 80, lines <= 5 ? 2.0f : 1.55f, Color.WHITE);
+        if (active.context() != null) {
+            // what the code is for, so a blank like  if (age ___ 18)  has exactly one right answer
+            text(Face.SANS, "Goal: " + shorten(active.context(), 105), 90, panelTop + 46, 1.2f, new Color(0.65f, 0.9f, 1f, 1f));
+        }
+        if (kind != AnswerKind.FIND_BUG) {
+            drawWrapped(faceFor(active), active.prompt(), 90, panelTop + 76, lines <= 5 ? 1.9f : 1.5f, Color.WHITE, 1060f);
+        }
+        Color gold = new Color(0.95f, 0.85f, 0.45f, 1f);
         if (classTest) {
             // no hints in a class test
         } else if (!hintShown) {
             Rect h = hintButton();
             drawCentered("Hint", h.x + h.w / 2f, h.y + 13, 1.7f, Color.WHITE);
         } else if (active.hint() != null) {
-            text("Hint: " + active.hint(), 90, panelTop + 285, 1.5f, new Color(0.95f, 0.85f, 0.45f, 1f));
+            if (kind == AnswerKind.FIND_BUG || kind == AnswerKind.ARRANGE) {
+                // their rows fill the lower panel: arrange has room under its sentence, find the bug under its code lines
+                float hintY = kind == AnswerKind.ARRANGE ? panelTop + 146 : panelTop + 80 + lines * 42f + 10f;
+                text(Face.SANS, "Hint: " + shorten(active.hint(), 100), 90, hintY, 1.15f, gold);
+            } else {
+                drawWrapped(Face.SANS, "Hint: " + active.hint(), 90, panelTop + 285, 1.4f, gold, 1160f);
+            }
         }
-        for (int i = 0; i < options.size(); i++) {
-            Rect b = tokenButton(i);
-            String tok = options.get(i);
-            boolean tiny = tok.length() <= 2;
-            drawCentered(tok, b.x + b.w / 2f, b.y + (tiny ? 10 : 20), tiny ? 3.6f : 2.6f, Color.WHITE);
+        switch (kind) {
+            case CHOICE -> {
+                for (int i = 0; i < options.size(); i++) {
+                    Rect b = tokenButton(i);
+                    String tok = options.get(i);
+                    boolean tiny = tok.length() <= 2;
+                    drawCentered(Face.MONO, tok, b.x + b.w / 2f, b.y + (tiny ? 14 : 24), tiny ? 3.0f : 2.2f, Color.WHITE);
+                }
+            }
+            case TRUE_FALSE -> {
+                for (int i = 0; i < options.size(); i++) {
+                    Rect b = tokenButton(i);
+                    drawCentered(Face.SANS, options.get(i), b.x + b.w / 2f, b.y + 22, 2.4f, Color.WHITE);
+                }
+            }
+            case FIND_BUG -> {
+                for (int i = 0; i < options.size(); i++) {
+                    Rect r = lineRect(i);
+                    drawCentered(Face.MONO, String.valueOf(i + 1), r.x + 25, r.y + 6, 1.45f, new Color(0.65f, 0.72f, 0.9f, 1f));
+                    text(Face.MONO, active.codeLines().get(i), r.x + 66, r.y + 6, 1.55f, Color.WHITE);
+                }
+                Rect check = bugCheckButton();
+                drawCentered(Face.SANS, pickedLine < 0 ? "Pick a line" : "Check line " + (pickedLine + 1),
+                        check.x + check.w / 2f, check.y + 18, 1.5f, pickedLine < 0 ? Color.GRAY : Color.WHITE);
+                drawCentered(Face.SANS, pickedLine < 0 ? "tap the buggy one" : "or press Enter", check.x + check.w / 2f,
+                        check.y + 50, 1.05f, pickedLine < 0 ? Color.DARK_GRAY : new Color(0.75f, 0.95f, 0.75f, 1f));
+            }
+            case FILL_BLANK -> {
+                Rect box = answerBox();
+                boolean caret = ((int) (animTime * 2f)) % 2 == 0;
+                if (typed.length() == 0) {
+                    text(Face.MONO, caret ? "|" : " ", box.x + 24, box.y + 22, 2.2f, Color.WHITE);
+                    text(Face.SANS, "   type your answer", box.x + 24, box.y + 26, 1.7f, new Color(0.5f, 0.55f, 0.7f, 1f));
+                } else {
+                    text(Face.MONO, typed + (caret ? "|" : ""), box.x + 24, box.y + 22, 2.2f, Color.WHITE);
+                }
+                Rect go = submitButton();
+                drawCentered(Face.SANS, "Answer  (Enter)", go.x + go.w / 2f, go.y + 26, 1.8f, Color.WHITE);
+                if (run.difficulty() == Difficulty.EASY && !active.correctToken().isEmpty()) {
+                    // an easy typed answer shows its shape: how it starts and how long it is
+                    String shape = "Starts with \"" + active.correctToken().charAt(0) + "\"  -  " + active.correctToken().length()
+                            + (active.correctToken().length() == 1 ? " character" : " characters");
+                    text(Face.SANS, shape, box.x, box.y - 26, 1.15f, new Color(0.65f, 0.9f, 1f, 1f));
+                }
+            }
+            case ARRANGE -> {
+                float scale = chipScale();
+                text(Face.SANS, "Your line  (tap a token to take it back)", 90, panelTop + 178, 1.1f,
+                        new Color(0.65f, 0.72f, 0.9f, 1f));
+                text(Face.SANS, "Tokens", 90, panelTop + 290, 1.1f, new Color(0.65f, 0.72f, 0.9f, 1f));
+                drawChips(chipRects(labels(placed), builtY(), scale), labels(placed), scale);
+                List<String> left = labels(remaining());
+                drawChips(chipRects(left, bankY(), scale), left, scale);
+                Rect check = checkButton();
+                drawCentered(Face.SANS, "Check  (Enter)", check.x + check.w / 2f, check.y + 11, 1.5f, Color.WHITE);
+                Rect clear = clearButton();
+                drawCentered(Face.SANS, "Clear", clear.x + clear.w / 2f, clear.y + 11, 1.5f, Color.WHITE);
+            }
         }
+    }
+
+    private void drawChips(List<Rect> rects, List<String> chipLabels, float scale) {
+        for (int i = 0; i < rects.size(); i++) {
+            Rect r = rects.get(i);
+            drawCentered(Face.MONO, chipLabels.get(i), r.x + r.w / 2f, r.y + (CHIP_H - PixelFonts.BASE * scale) / 2f - 2f,
+                    scale, Color.WHITE);
+        }
+    }
+
+    /** After an answer: the verdict, the right answer, what the student answered, and why. */
+    private void drawExplanation() {
+        Challenge c = explainChallenge;
+        float y = explainTop;
+        Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
+        mouseX = m.x;
+        mouseY = H - m.y;
+        boolean timedOut = explainToken == null;
+        Color verdict = explainCorrect ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.55f, 0.5f, 1f);
+        text(Face.SANS, explainCorrect ? "Correct!" : timedOut ? "Time ran out" : "Not quite", 90, y + 22, 2.1f, verdict);
+
+        String right = switch (c.kind()) {
+            case FIND_BUG -> {
+                int n = 0;
+                try {
+                    n = Integer.parseInt(c.correctToken().trim());
+                } catch (NumberFormatException ignored) {
+                    // keep 0
+                }
+                yield n >= 1 && n <= c.codeLines().size() ? "line " + n + ":   " + c.codeLines().get(n - 1).trim() : "line " + c.correctToken();
+            }
+            case ARRANGE -> c.codeChunk() != null ? c.codeChunk() : c.correctToken();
+            default -> c.correctToken();
+        };
+        text(Face.SANS, "Right answer", 90, y + 76, 1.15f, new Color(0.65f, 0.72f, 0.9f, 1f));
+        text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, right, 90, y + 98, 1.8f, Color.WHITE);
+
+        float next = y + 150;
+        if (!explainCorrect && !timedOut) {
+            String yours = c.kind() == AnswerKind.FIND_BUG ? "line " + explainToken : explainToken;
+            text(Face.SANS, "You answered", 90, next, 1.15f, new Color(0.65f, 0.72f, 0.9f, 1f));
+            text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, shorten(yours, 70), 90, next + 22, 1.6f, verdict);
+            next += 62;
+        }
+        text(Face.SANS, "Why", 90, next, 1.15f, GOLD_TEXT);
+        drawWrapped(Face.SANS, c.explanationText(), 90, next + 24, 1.5f, Color.WHITE, 1160f);
+
+        Rect go = explainContinueButton();
+        drawCentered(Face.SANS, explainAge > 0.4f ? "Continue  (Enter)" : "...", go.x + go.w / 2f, go.y + 15, 1.6f,
+                explainAge > 0.4f ? Color.WHITE : Color.GRAY);
+    }
+
+    private static String shorten(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max - 3) + "...";
+    }
+
+    /** Text that wraps at the given width (explicit new lines still break). */
+    private void drawWrapped(Face face, String s, float x, float yTop, float scale, Color c, float width) {
+        BitmapFont font = font(face, scale);
+        font.setColor(c);
+        font.draw(batch, s, x, H - yTop, width, com.badlogic.gdx.utils.Align.left, true);
     }
 
     private void drawResultText() {
@@ -1019,17 +1596,34 @@ public class PlayScreen extends InputAdapter implements Screen {
         drawCentered(saveDone ? "Continue" : "Saving...", cont.x + cont.w / 2f, cont.y + 28, 1.8f, Color.WHITE);
     }
 
+    private static BitmapFont font(Face face, float scale) {
+        return PixelFonts.font(face, scale);
+    }
+
     private void text(String s, float x, float yTop, float scale, Color c) {
-        BitmapFont font = PixelFonts.forScale(scale, false);
+        text(Face.PIXEL, s, x, yTop, scale, c);
+    }
+
+    private void text(Face face, String s, float x, float yTop, float scale, Color c) {
+        BitmapFont font = font(face, scale);
         font.setColor(c);
         font.draw(batch, s, x, H - yTop);
     }
 
     private void drawCentered(String s, float centerX, float yTop, float scale, Color c) {
-        BitmapFont font = PixelFonts.forScale(scale, false);
+        drawCentered(Face.PIXEL, s, centerX, yTop, scale, c);
+    }
+
+    private void drawCentered(Face face, String s, float centerX, float yTop, float scale, Color c) {
+        BitmapFont font = font(face, scale);
         font.setColor(c);
         layout.setText(font, s);
         font.draw(batch, s, centerX - layout.width / 2f, H - yTop);
+    }
+
+    /** Code reads best in the monospace face; sentences in the sans face. */
+    private static Face faceFor(Challenge c) {
+        return PixelFonts.faceForPrompt(c.kind(), c.prompt());
     }
 
     @Override

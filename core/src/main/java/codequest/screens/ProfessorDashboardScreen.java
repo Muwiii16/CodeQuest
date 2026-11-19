@@ -55,11 +55,13 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
             solidButton("", x, y, cardW, cardH, CARD, () -> game.setScreen(new ProfessorSectionScreen(game, username, c)));
             rect(x + 3, y + 3, cardW - 6, 8, AMBER).setTouchable(Touchable.disabled);
             text(c.sectionName(), x + 40, y + 50, cardW - 80, 70, 3.2f, Color.WHITE, Align.left);
-            text(c.courseCode() + "   -   " + c.language(), x + 40, y + 135, cardW - 80, 40, 1.8f, AMBER, Align.left);
+            text(c.subjectName() + (c.termLabel().isEmpty() ? "" : "  -  " + c.termLabel()), x + 40, y + 135, cardW - 80, 40,
+                    1.5f, AMBER, Align.left);
             text(c.studentCount() + (c.studentCount() == 1 ? " student" : " students") + "   -   " + c.lessonCount()
                     + (c.lessonCount() == 1 ? " lesson" : " lessons"), x + 40, y + 190, cardW - 80, 40, 1.6f, MUTED,
                     Align.left);
-            text("Open  >", x + 40, y + 240, cardW - 80, 40, 1.6f, Color.WHITE, Align.left);
+            text((c.ended() ? "ENDED   -   " : "") + "Open  >", x + 40, y + 240, cardW - 80, 40, 1.6f,
+                    c.ended() ? new Color(1f, 0.75f, 0.4f, 1f) : Color.WHITE, Align.left);
         }
         if (classes.size() > PAGE_SIZE) {
             int pages = (classes.size() + PAGE_SIZE - 1) / PAGE_SIZE;

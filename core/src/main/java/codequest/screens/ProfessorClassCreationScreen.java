@@ -25,6 +25,8 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
     private final List<String> students = new ArrayList<>();
     private final TextField sectionField;
     private final TextField courseField;
+    private final TextField subjectField;
+    private final TextField termField;
     private final TextField studentField;
     private final int base;
 
@@ -39,22 +41,27 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         text("Course code", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
         courseField = textField("e.g. CC102", false, 90, 368, 820, 64);
         courseField.setText("CC102");
-        text("Programming language", 90, 455, 600, 30, 1.4f, MUTED, Align.left);
+        text("Subject name (what students see)", 90, 455, 600, 30, 1.4f, MUTED, Align.left);
+        subjectField = textField("e.g. Programming 1", false, 90, 488, 820, 64);
+        text("Term", 90, 575, 600, 30, 1.4f, MUTED, Align.left);
+        termField = textField("e.g. 1st Sem 2026-2027", false, 90, 608, 820, 64);
+        termField.setText(codequest.data.Terms.current(java.time.LocalDate.now()));
+        text("Programming language", 90, 695, 600, 30, 1.4f, MUTED, Align.left);
         float lw = 195;
         for (int i = 0; i < LANGUAGES.length; i++) {
             boolean playable = i == 0;
             String language = LANGUAGES[i];
             float x = 90 + i * (lw + 13.3f);
             if (playable) {
-                solidButton(language, x, 490, lw, 70, new Color(0.55f, 0.37f, 0.08f, 1f), () -> { });
+                solidButton(language, x, 730, lw, 70, new Color(0.55f, 0.37f, 0.08f, 1f), () -> { });
             } else {
-                solidButton(language, x, 490, lw, 70, new Color(0.14f, 0.16f, 0.21f, 1f), Color.GRAY,
+                solidButton(language, x, 730, lw, 70, new Color(0.14f, 0.16f, 0.21f, 1f), Color.GRAY,
                         () -> toast(language + " is coming soon. C is the only language available for now.", false));
-                text("coming soon", x, 565, lw, 24, 1.1f, MUTED, Align.center);
+                text("coming soon", x, 805, lw, 24, 1.1f, MUTED, Align.center);
             }
         }
-        text("When Gemini is connected, the class dictionary for the chosen language will be generated here.", 90, 640,
-                820, 80, 1.3f, MUTED, Align.topLeft).setWrap(true);
+        text("Students can open the language's dictionary from their menu. A class that has ended moves to the "
+                + "student's past subjects and stays playable.", 90, 835, 820, 80, 1.3f, MUTED, Align.topLeft).setWrap(true);
         solidButton("Create class", 90, 930, 820, 70, GOOD, this::create);
 
         // ── students ──
@@ -120,18 +127,20 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
             return;
         }
         String finalCourse = course.isEmpty() ? "CC102" : course;
+        String subject = subjectField.getText().trim();
+        String term = termField.getText().trim();
         List<String> toEnroll = new ArrayList<>(students);
         load("Creating the class...", () -> {
             long professorId = data.professorId(username);
             return professorId < 0 ? Optional.<ProfessorData.CreatedClass>empty()
-                    : data.createClass(professorId, section, finalCourse, "C", toEnroll);
+                    : data.createClass(professorId, section, finalCourse, "C", toEnroll, subject, term);
         }, created -> {
             if (created.isEmpty()) {
                 toast("Could not create the class. Check your connection.", false);
                 return;
             }
             ClassInfo info = new ClassInfo(created.get().classId(), finalCourse, section, "C",
-                    created.get().enrolled().size(), 0);
+                    created.get().enrolled().size(), 0, subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, false);
             game.setScreen(new ProfessorSectionScreen(game, username, info));
         });
     }

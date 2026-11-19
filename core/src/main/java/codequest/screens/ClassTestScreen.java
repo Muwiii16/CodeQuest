@@ -54,7 +54,7 @@ public class ClassTestScreen extends StudentScreen {
         load("Looking for your class test...", () -> {
             long id = new DatabaseManager().profileId(username);
             List<Long> classIds = new ArrayList<>();
-            campaigns.studentClasses(id).forEach(c -> classIds.add(c.id()));
+            campaigns.studentClasses(id).stream().filter(c -> !c.ended()).forEach(c -> classIds.add(c.id())); // not in finished subjects
             return new Init(id, classIds);
         }, init -> {
             studentId = init.id();

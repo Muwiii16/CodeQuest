@@ -1,5 +1,6 @@
 package codequest.session;
 
+import codequest.content.AnswerKind;
 import codequest.content.CTopic;
 import codequest.content.Challenge;
 import codequest.content.ChallengeProvider;
@@ -173,6 +174,48 @@ class StageRunTest {
         assertEquals(0, miss.streak());
         assertEquals(StageRun.MAX_HP, run.hp());
         assertEquals(1, run.bestStreak());
+    }
+
+    @Test
+    void moreTimeForHarderToAnswerKindsAndForLongerCode() {
+        Challenge oneLine = new Challenge("a", CTopic.SYNTAX, Difficulty.NORMAL, "x ___", "y", List.of("z"), null);
+        Challenge fourLines = new Challenge("b", CTopic.SYNTAX, Difficulty.NORMAL, "a\nb\nc\nd ___", "y", List.of("z"), null);
+        Challenge typed = new Challenge("c", CTopic.SYNTAX, Difficulty.NORMAL, "x ___", "y", List.of(), null,
+                AnswerKind.FILL_BLANK, List.of());
+        float base = StageRun.flightSeconds(Difficulty.NORMAL);
+        assertEquals(base, StageRun.flightSeconds(oneLine, Difficulty.NORMAL), 0.001f);
+        assertEquals(base + 3 * StageRun.SECONDS_PER_EXTRA_LINE, StageRun.flightSeconds(fourLines, Difficulty.NORMAL), 0.001f);
+        assertTrue(StageRun.flightSeconds(typed, Difficulty.NORMAL) > base);
+        assertTrue(StageRun.flightSeconds(Difficulty.EASY) > StageRun.flightSeconds(Difficulty.NORMAL));
+        assertTrue(StageRun.flightSeconds(Difficulty.NORMAL) > StageRun.flightSeconds(Difficulty.HARD));
+        assertTrue(StageRun.flightSeconds(Difficulty.HARD) >= 8f); // nobody gets less than 8 seconds to read a line
+    }
+
+    @Test
+    void aTypedAnswerCountsAndTheCodeBlockKeepsTheRightSpelling() {
+        Challenge typed = new Challenge("f", CTopic.SYNTAX, Difficulty.EASY, "x___", "i++", List.of(), null,
+                AnswerKind.FILL_BLANK, List.of());
+        StageRun run = new StageRun(stage(1, 2), Difficulty.EASY, StageRun.Mode.CAMPAIGN,
+                (topic, difficulty) -> Optional.of(typed));
+        run.nextChallenge();
+        assertTrue(run.answer("i ++").correct());
+        assertEquals("i++", run.codeBlock().tokens().get(0).text());
+    }
+
+    @Test
+    void findTheBugAndTrueFalseDoNotAddToTheCodeBlock() {
+        Challenge bug = new Challenge("b", CTopic.SYNTAX, Difficulty.EASY, "a\nb", "2", List.of(), null,
+                AnswerKind.FIND_BUG, List.of());
+        StageRun run = new StageRun(stage(1, 2), Difficulty.EASY, StageRun.Mode.CAMPAIGN,
+                (topic, difficulty) -> Optional.of(bug));
+        run.nextChallenge();
+        StageRun.Outcome miss = run.answer("1");
+        assertFalse(miss.correct());
+        assertEquals("line 2", miss.correctToken());
+        assertTrue(run.codeBlock().tokens().isEmpty());
+        run.nextChallenge();
+        assertTrue(run.answer("2").correct());
+        assertTrue(run.codeBlock().tokens().isEmpty());
     }
 
     @Test

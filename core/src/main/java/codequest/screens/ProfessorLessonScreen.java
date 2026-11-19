@@ -2,6 +2,7 @@ package codequest.screens;
 
 import codequest.Main;
 import codequest.content.CTopic;
+import codequest.content.ProgramCoverage;
 import codequest.data.CampaignData;
 import codequest.data.CampaignData.ClassInfo;
 import codequest.data.Lesson;
@@ -69,6 +70,13 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         refreshQuestions();
     }
 
+    /** Opens the lesson screen with the lesson as it is stored now (e.g. after its program was changed). */
+    public static void open(Main game, String username, ClassInfo cls, Lesson lesson) {
+        LoadingScreen.open(game, "Loading the lesson...", () -> new CampaignData().lesson(lesson.stageId()).orElse(lesson),
+                fresh -> game.setScreen(new ProfessorLessonScreen(game, username, cls, fresh)),
+                () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, lesson)));
+    }
+
     private void rebuildForm() {
         fill(formRegion, () -> {
             text("Starting difficulty", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
@@ -120,28 +128,49 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         text(questions.size() + (questions.size() == 1 ? " question" : " questions"), 1500, 160, 330, 36, 1.7f, MUTED,
                 Align.right);
         text(coverage.toString(), 820, 205, 1010, 30, 1.25f, MUTED, Align.left);
-        text("A topic with 0 uses the built-in questions. Students get a random question for each tower's topic.", 820, 238,
-                1010, 30, 1.2f, MUTED, Align.left);
+        if (lesson.hasProgram()) {
+            ProgramCoverage.Report report = QuestionData.coverage(lesson.program(), questions);
+            text("Program: " + ProgramCoverage.describe(report), 820, 238, 1010, 30, 1.15f,
+                    report.complete() ? new Color(0.6f, 0.95f, 0.6f, 1f) : report.problem() != null
+                            ? new Color(1f, 0.5f, 0.45f, 1f) : AMBER, Align.left, PixelFonts.Face.SANS);
+        } else {
+            text("Students get a random question for each tower's topic. A topic with 0 uses the built-in questions.", 820,
+                    238, 1010, 30, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
+        }
 
         if (questions.isEmpty()) {
             text("No questions written for this lesson yet.\nAdd your own, or start from the built-in ones and rewrite them.",
                     820, 330, 1010, 150, 1.8f, MUTED, Align.center);
-            solidButton("Add the built-in starter questions", 900, 520, 850, 80, GOOD, this::importBuiltIn);
+            solidButton("Write the program the lesson builds (recommended)", 900, 520, 850, 80, GOOD,
+                    () -> game.setScreen(new ProfessorProgramScreen(game, username, cls, lesson)));
+            solidButton("Add the built-in starter questions (random mode)", 900, 620, 850, 70, BUTTON, this::importBuiltIn);
         }
         int from = page * PAGE_SIZE;
         int to = Math.min(questions.size(), from + PAGE_SIZE);
+        // a chunk's difficulty levels sit together, easiest first
+        List<Question> shown = new java.util.ArrayList<>();
+        QuestionData.bySlot(questions).forEach(shown::addAll);
         float y = 280;
         for (int i = from; i < to; i++) {
-            Question q = questions.get(i);
+            Question q = shown.get(i);
             rect(820, y, 1010, 92, ROW);
-            text(CosmeticTopic.label(q.draft().topic()) + "   -   " + q.draft().difficulty().name().toLowerCase(), 840, y + 8,
-                    600, 30, 1.3f, AMBER, Align.left);
-            text(ellipsize(q.draft().prompt(), 64), 840, y + 40, 700, 40, 1.5f, Color.WHITE, Align.left);
-            text("answer: " + ellipsize(q.draft().correct(), 14), 1260, y + 8, 250, 30, 1.2f, MUTED, Align.left);
-            solidButton("Edit", 1530, y + 22, 120, 48, BUTTON,
+            text((q.slot() > 0 ? "#" + q.slot() + "  " : "") + CosmeticTopic.label(q.draft().topic()) + " - "
+                    + q.draft().difficulty().name().toLowerCase() + " - " + q.draft().kind().label(), 840, y + 8, 440, 30,
+                    1.15f, AMBER, Align.left);
+            text(ellipsize(q.draft().prompt().replace('\n', ' '), 50), 840, y + 40, 600, 40, 1.4f, Color.WHITE, Align.left,
+                    PixelFonts.faceForPrompt(q.draft().kind(), q.draft().prompt()));
+            String answer = q.draft().kind() == codequest.content.AnswerKind.FIND_BUG ? "line " + q.draft().correct()
+                    : q.draft().correct();
+            text("answer: " + ellipsize(answer, 12), 1290, y + 8, 150, 30, 1.0f, MUTED, Align.left, PixelFonts.Face.MONO);
+            solidButton("Edit", 1450, y + 22, 100, 48, BUTTON,
                     () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q)));
+            codequest.content.Difficulty missing = missingLevel(q);
+            if (lesson.hasProgram() && missing != null) {
+                solidButton("+ " + missing.name().toLowerCase(), 1560, y + 22, 130, 48, BUTTON,
+                        () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q, missing)));
+            }
             boolean armed = questionDeleteArmed == q.id();
-            solidButton(armed ? "Sure?" : "Delete", 1665, y + 22, 150, 48,
+            solidButton(armed ? "Sure?" : "Delete", 1700, y + 22, 120, 48,
                     armed ? new Color(0.7f, 0.15f, 0.15f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), () -> deleteQuestion(q));
             y += 100;
         }
@@ -161,8 +190,27 @@ public class ProfessorLessonScreen extends ProfessorScreen {
                 });
             }
         }
+        solidButton(lesson.hasProgram() ? "Edit the program" : "Write the program", 820, 960, 400, 50, BUTTON,
+                () -> game.setScreen(new ProfessorProgramScreen(game, username, cls, lesson)));
         solidButton("+  Add a question", 1400, 960, 430, 50, GOOD,
                 () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, null)));
+    }
+
+    /** The first difficulty this question's chunk has no question for yet, or null (none to add, or no slot). */
+    private codequest.content.Difficulty missingLevel(Question q) {
+        if (q.slot() <= 0) {
+            return null;
+        }
+        for (codequest.content.Difficulty d : codequest.content.Difficulty.values()) {
+            boolean taken = false;
+            for (Question other : questions) {
+                taken |= other.slot() == q.slot() && other.draft().difficulty() == d;
+            }
+            if (!taken) {
+                return d;
+            }
+        }
+        return null;
     }
 
     private static String ellipsize(String s, int max) {
@@ -201,8 +249,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         String prompt = promptBox.getText();
         load("Saving...", () -> campaigns.updateLesson(lesson.stageId(), title, difficulty, adapt, prompt), ok -> {
             if (ok) {
-                lesson = new Lesson(lesson.stageId(), lesson.campaignId(), lesson.number(), title, difficulty, adapt,
-                        prompt.isBlank() ? null : prompt);
+                lesson = lesson.withDetails(title, difficulty, adapt, prompt);
                 toast("Lesson details saved.", true);
             } else {
                 toast("Could not save. Check your connection.", false);

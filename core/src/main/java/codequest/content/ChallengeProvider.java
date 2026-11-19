@@ -10,4 +10,12 @@ import java.util.Optional;
  */
 public interface ChallengeProvider {
     Optional<Challenge> getChallenge(CTopic topic, Difficulty difficulty);
+
+    /**
+     * True when the questions are the chunks of one lesson program: every answer then adds its chunk of the program
+     * to the code block (green when right, red when wrong) instead of a single token.
+     */
+    default boolean buildsProgram() {
+        return false;
+    }
 }

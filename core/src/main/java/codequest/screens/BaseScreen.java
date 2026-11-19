@@ -179,9 +179,23 @@ public abstract class BaseScreen implements Screen {
         return makeText(text, x, yFromTop, w, h, scale, color, align, true);
     }
 
+    /**
+     * Like {@link #text} but in a smooth readable face: SANS for sentences, MONO for code (PIXEL is the same as
+     * {@link #text}). Used where someone has to read questions, answers or code.
+     */
+    protected Label text(String text, float x, float yFromTop, float w, float h, float scale, Color color, int align,
+            PixelFonts.Face face) {
+        return makeLabel(text, x, yFromTop, w, h, PixelFonts.font(face, scale), color, align);
+    }
+
     private Label makeText(String text, float x, float yFromTop, float w, float h, float scale, Color color, int align,
             boolean outlined) {
-        Label label = new Label(text, new Label.LabelStyle(PixelFonts.forScale(scale, outlined), color));
+        return makeLabel(text, x, yFromTop, w, h, PixelFonts.forScale(scale, outlined), color, align);
+    }
+
+    private Label makeLabel(String text, float x, float yFromTop, float w, float h, BitmapFont font, Color color,
+            int align) {
+        Label label = new Label(text, new Label.LabelStyle(font, color));
         label.setAlignment(align);
         label.setTouchable(Touchable.disabled);
         placeTopLeft(label, x, yFromTop, w, h);
@@ -191,10 +205,15 @@ public abstract class BaseScreen implements Screen {
 
     /** A multi-line text box on a dark box with a hint shown while empty. */
     protected com.badlogic.gdx.scenes.scene2d.ui.TextArea textArea(String hint, float x, float yFromTop, float w, float h) {
+        return textArea(hint, x, yFromTop, w, h, PixelFonts.Face.PIXEL);
+    }
+
+    protected com.badlogic.gdx.scenes.scene2d.ui.TextArea textArea(String hint, float x, float yFromTop, float w, float h,
+            PixelFonts.Face face) {
         rect(x, yFromTop, w, h, new Color(0.04f, 0.05f, 0.1f, 1f));
         Texture cursor = solidTexture(Color.WHITE);
         TextField.TextFieldStyle style = new TextField.TextFieldStyle();
-        style.font = scaledFont(1.5f);
+        style.font = PixelFonts.font(face, 1.5f);
         style.fontColor = Color.WHITE;
         style.messageFontColor = new Color(0.6f, 0.62f, 0.7f, 1f);
         TextureRegionDrawable pad = new TextureRegionDrawable(new TextureRegion(solidTexture(new Color(0, 0, 0, 0))));
@@ -334,6 +353,12 @@ public abstract class BaseScreen implements Screen {
 
     protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Color textColor,
             Runnable action) {
+        return solidButton(text, x, yFromTop, w, h, fill, textColor, PixelFonts.Face.PIXEL, action);
+    }
+
+    /** A solid button whose label is in the given face (MONO for a button that shows code). */
+    protected Image solidButton(String text, float x, float yFromTop, float w, float h, Color fill, Color textColor,
+            PixelFonts.Face face, Runnable action) {
         Color border = new Color(Math.min(1f, fill.r + 0.25f), Math.min(1f, fill.g + 0.25f),
                 Math.min(1f, fill.b + 0.25f), 1f);
         Color hover = new Color(Math.min(1f, fill.r + 0.12f), Math.min(1f, fill.g + 0.12f),
@@ -356,7 +381,7 @@ public abstract class BaseScreen implements Screen {
                 action.run();
             }
         });
-        text(text, x, yFromTop, w, h, Math.min(1.9f, h / 38f), textColor, Align.center);
+        text(text, x, yFromTop, w, h, Math.min(1.9f, h / 38f), textColor, Align.center, face);
         return body;
     }
 
@@ -369,11 +394,23 @@ public abstract class BaseScreen implements Screen {
     /** Same input with custom colors (box, underline, typed text, hint text), e.g. for light panels. */
     protected TextField textField(String hint, boolean password, float x, float yFromTop, float w, float h,
             Color box, Color underline, Color textColor, Color hintColor) {
+        return textField(hint, password, x, yFromTop, w, h, box, underline, textColor, hintColor, PixelFonts.Face.PIXEL);
+    }
+
+    /** The same input with default colors in the given face (SANS for sentences, MONO for code). */
+    protected TextField textField(String hint, boolean password, float x, float yFromTop, float w, float h,
+            PixelFonts.Face face) {
+        return textField(hint, password, x, yFromTop, w, h, new Color(0.04f, 0.05f, 0.1f, 1f),
+                new Color(1f, 1f, 1f, 0.25f), Color.WHITE, new Color(0.6f, 0.62f, 0.7f, 1f), face);
+    }
+
+    protected TextField textField(String hint, boolean password, float x, float yFromTop, float w, float h,
+            Color box, Color underline, Color textColor, Color hintColor, PixelFonts.Face face) {
         rect(x, yFromTop, w, h, box);
         rect(x, yFromTop + h - 3, w, 3, underline);
         Texture cursor = solidTexture(Color.WHITE);
         TextField.TextFieldStyle style = new TextField.TextFieldStyle();
-        style.font = scaledFont(Math.min(1.8f, h / 34f));
+        style.font = PixelFonts.font(face, Math.min(1.8f, h / 34f));
         style.fontColor = textColor;
         style.messageFontColor = hintColor;
         TextureRegionDrawable pad = new TextureRegionDrawable(new TextureRegion(solidTexture(new Color(0, 0, 0, 0))));
@@ -390,6 +427,15 @@ public abstract class BaseScreen implements Screen {
         placeTopLeft(field, x, yFromTop, w, h);
         put(field);
         return field;
+    }
+
+    /** Changes the face a text box is typed in (for boxes whose content changes kind, e.g. prose then code). */
+    protected void setFieldFace(TextField field, PixelFonts.Face face) {
+        TextField.TextFieldStyle style = field.getStyle();
+        float scale = field instanceof com.badlogic.gdx.scenes.scene2d.ui.TextArea ? 1.5f
+                : Math.min(1.8f, field.getHeight() / 34f);
+        style.font = PixelFonts.font(face, scale);
+        field.setStyle(style);
     }
 
     /** The pixel font at the given scale (for TextFields, which can't scale per-widget). Shared; do not dispose it. */

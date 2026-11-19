@@ -22,6 +22,9 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     private final TextField addField;
     private final TextField nameField;
     private final TextField courseField;
+    private final TextField subjectField;
+    private final TextField termField;
+    private boolean ended;
     private final int base;
     private long dropArmed = -1;
     private boolean deleteArmed;
@@ -40,11 +43,16 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         // class details and the danger zone sit at the bottom
         rect(90, 800, 1740, 3, new Color(1f, 1f, 1f, 0.12f));
         text("Class details", 90, 815, 400, 36, 1.7f, AMBER, Align.left);
-        nameField = textField("Section name", false, 90, 860, 520, 64);
+        this.ended = cls.ended();
+        nameField = textField("Section", false, 90, 860, 200, 64);
         nameField.setText(cls.sectionName());
-        courseField = textField("Course code", false, 630, 860, 300, 64);
+        courseField = textField("Course code", false, 300, 860, 150, 64);
         courseField.setText(cls.courseCode());
-        solidButton("Save changes", 950, 860, 280, 64, GOOD, this::saveDetails);
+        subjectField = textField("Subject name", false, 460, 860, 400, 64);
+        subjectField.setText(cls.subject() == null ? "" : cls.subject());
+        termField = textField("Term", false, 870, 860, 300, 64);
+        termField.setText(cls.term() == null ? "" : cls.term());
+        solidButton("Save", 1180, 860, 100, 64, GOOD, this::saveDetails);
         base = mark();
         load("Loading the class...", () -> data.roster(cls.id()), students -> rebuild(students));
     }
@@ -57,6 +65,13 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         clearFrom(base);
         text(students.size() + (students.size() == 1 ? " student" : " students") + " in this class", 90, 250, 800, 40, 1.8f,
                 AMBER, Align.left);
+        solidButton(ended ? "ENDED  -  students see it under past subjects (tap to reopen)"
+                : "Running  -  tap when the subject is finished", 1030, 245, 800, 46, ended ? new Color(0.5f, 0.33f, 0.1f, 1f) : GOOD,
+                () -> {
+                    ended = !ended;
+                    toast(ended ? "Marked as ended. Press Save to keep it." : "Marked as running. Press Save to keep it.", true);
+                    refresh();
+                });
         if (students.isEmpty()) {
             text("Nobody is enrolled yet. Add students by their username.", 90, 305, 1700, 40, 1.6f, MUTED, Align.left);
         }
@@ -124,9 +139,13 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
             return;
         }
         String finalCourse = course.isEmpty() ? cls.courseCode() : course;
-        load("Saving...", () -> data.updateClass(cls.id(), section, finalCourse), ok -> {
+        String subject = subjectField.getText().trim();
+        String term = termField.getText().trim();
+        boolean nowEnded = ended;
+        load("Saving...", () -> data.updateClass(cls.id(), section, finalCourse, subject, term, nowEnded), ok -> {
             if (ok) {
-                cls = new ClassInfo(cls.id(), finalCourse, section, cls.language(), cls.studentCount(), cls.lessonCount());
+                cls = new ClassInfo(cls.id(), finalCourse, section, cls.language(), cls.studentCount(), cls.lessonCount(),
+                        subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, nowEnded);
                 toast("Class details saved.", true);
             } else {
                 toast("Could not save. Check your connection.", false);

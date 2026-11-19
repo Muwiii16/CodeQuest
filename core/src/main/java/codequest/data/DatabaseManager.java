@@ -1,5 +1,6 @@
 package codequest.data;
 
+import codequest.content.AnswerKind;
 import codequest.content.CTopic;
 import codequest.content.Challenge;
 import codequest.content.Difficulty;
@@ -160,8 +161,8 @@ public class DatabaseManager {
     public List<Challenge> getStageChallenges(long stageId) {
         List<Challenge> challenges = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("challenges?stage_id=eq." + stageId
-                + "&select=id,topic,difficulty,prompt,correct_token,distractors,hints(hint_text,hint_order)"
-                + "&order=section_index,sequence_index");
+                + "&select=id,topic,difficulty,prompt,correct_token,distractors,kind,accepted_answers,code_chunk,context,sequence_index,explanation,error_text,"
+                + "hints(hint_text,hint_order)&order=section_index,sequence_index");
         if (rows == null) {
             return challenges;
         }
@@ -195,8 +196,17 @@ public class DatabaseManager {
                         }
                     }
                 }
+                List<String> accepted = new ArrayList<>();
+                JsonValue other = row.get("accepted_answers");
+                if (other != null) {
+                    for (JsonValue a : other) {
+                        accepted.add(a.asString());
+                    }
+                }
                 challenges.add(new Challenge("db-" + row.getLong("id"), topic, difficulty, prompt, correct,
-                        distractors, hint));
+                        distractors, hint, AnswerKind.fromDb(row.getString("kind", null)), accepted,
+                        row.getString("code_chunk", null), row.getString("context", null), row.getInt("sequence_index", 0),
+                        row.getString("explanation", null), row.getString("error_text", null)));
             } catch (IllegalArgumentException | NullPointerException e) {
                 System.err.println("Skipping malformed challenge row " + row.getString("id", "?") + ": " + e);
             }

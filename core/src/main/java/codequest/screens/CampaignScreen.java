@@ -29,7 +29,8 @@ public class CampaignScreen extends StudentScreen {
 
     /** Everything the screen shows, fetched together in the background. */
     private record Loaded(long studentId, List<ClassInfo> classes, List<Cosmetic> catalog, Set<Long> owned,
-            Set<Long> rolled, DatabaseManager.RollStats stats, List<Lesson> lessons, Map<Long, Progress> progress) {
+            Set<Long> rolled, DatabaseManager.RollStats stats, List<Lesson> lessons, Map<Long, Progress> progress,
+            int classIdx) {
     }
 
     private record LessonsLoaded(List<Lesson> lessons, Map<Long, Progress> progress) {
@@ -52,6 +53,11 @@ public class CampaignScreen extends StudentScreen {
     private Map<Long, Progress> progress = Map.of();
 
     public CampaignScreen(Main game, String username) {
+        this(game, username, null);
+    }
+
+    /** preferredClassId opens that subject (e.g. the one just played or picked); null opens the current one. */
+    public CampaignScreen(Main game, String username, Long preferredClassId) {
         super(game, username, "Campaign", () -> game.setScreen(new MainMenuScreen(game, username)));
         base = mark();
         load("Loading your lessons...", () -> {
@@ -60,7 +66,8 @@ public class CampaignScreen extends StudentScreen {
                     () -> new Object[] { db.getCatalog(), new HashSet<>(db.getOwnedCosmetics(id)), db.rolledStages(id),
                             db.getRollStats(id) });
             List<ClassInfo> myClasses = data.studentClasses(id);
-            LessonsLoaded l = fetchLessons(id, myClasses.isEmpty() ? null : myClasses.get(0).id());
+            int first = CampaignData.defaultClassIndex(myClasses, preferredClassId);
+            LessonsLoaded l = fetchLessons(id, myClasses.isEmpty() ? null : myClasses.get(first).id());
             Object[] s = shop.join();
             @SuppressWarnings("unchecked")
             List<Cosmetic> cat = (List<Cosmetic>) s[0];
@@ -68,9 +75,10 @@ public class CampaignScreen extends StudentScreen {
             Set<Long> own = (Set<Long>) s[1];
             @SuppressWarnings("unchecked")
             Set<Long> rolls = (Set<Long>) s[2];
-            return new Loaded(id, myClasses, cat, own, rolls, (DatabaseManager.RollStats) s[3], l.lessons(), l.progress());
+            return new Loaded(id, myClasses, cat, own, rolls, (DatabaseManager.RollStats) s[3], l.lessons(), l.progress(), first);
         }, l -> {
             studentId = l.studentId();
+            classIdx = l.classIdx();
             classes = l.classes();
             catalog = l.catalog();
             owned = l.owned();
@@ -88,25 +96,21 @@ public class CampaignScreen extends StudentScreen {
         return new LessonsLoaded(list, progressFuture.join());
     }
 
-    private void switchClass() {
-        classIdx = (classIdx + 1) % classes.size();
-        load("Loading lessons...", () -> fetchLessons(studentId, classes.get(classIdx).id()), l -> {
-            lessons = l.lessons();
-            progress = l.progress();
-            page = 0;
-            expandedStageId = null;
-            rebuild();
-        });
+    /** The subjects screen: this semester's classes, and the past ones the student can still open. */
+    private void openSubjects() {
+        game.setScreen(new StudentSubjectsScreen(game, username, classes, classes.get(classIdx).id()));
     }
 
     private void rebuild() {
         clearFrom(base);
 
         String context = classes.isEmpty() ? "Built-in lessons  (you are not in a class yet)"
-                : classes.get(classIdx).sectionName() + "  -  " + classes.get(classIdx).language();
-        text(context, 160, 128, 1100, 40, 1.8f, MUTED, Align.left);
+                : classes.get(classIdx).subjectName() + "  -  " + classes.get(classIdx).sectionName()
+                        + (classes.get(classIdx).termLabel().isEmpty() ? "" : "  -  " + classes.get(classIdx).termLabel())
+                        + (classes.get(classIdx).ended() ? "   (ended)" : "");
+        text(context, 160, 128, 1300, 40, 1.8f, classes.isEmpty() || !classes.get(classIdx).ended() ? MUTED : GOLD, Align.left);
         if (classes.size() > 1) {
-            solidButton("Switch class", 1500, 122, 260, 52, BUTTON, this::switchClass);
+            solidButton("Subjects", 1500, 122, 260, 52, BUTTON, this::openSubjects);
         }
 
         if (lessons.isEmpty()) {
@@ -141,7 +145,8 @@ public class CampaignScreen extends StudentScreen {
     }
 
     private void play(Lesson lesson, boolean resume) {
-        PlayScreen.open(game, username, lesson, null, resume, () -> game.setScreen(new CampaignScreen(game, username)));
+        Long here = classes.isEmpty() ? null : classes.get(classIdx).id();
+        PlayScreen.open(game, username, lesson, null, resume, () -> game.setScreen(new CampaignScreen(game, username, here)));
     }
 
     /** Draws one lesson row (and its rewards strip if expanded); returns the y for the next row. */

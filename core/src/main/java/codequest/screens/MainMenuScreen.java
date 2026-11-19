@@ -10,7 +10,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 
-/** The student's main menu: Campaign, Class Test, Cosmetics, Certificates. */
+/** The student's main menu: Campaign, Class Test, Cosmetics, Certificates, Dictionary. */
 public class MainMenuScreen extends BaseScreen {
 
     public MainMenuScreen(Main game, String username) {
@@ -23,10 +23,10 @@ public class MainMenuScreen extends BaseScreen {
         stage.addActor(title);
 
         float btnWidth = 560f;
-        float btnHeight = 140f;
+        float btnHeight = 120f;
         float btnX = (VIRTUAL_WIDTH - btnWidth) / 2f;
-        float startY = 290f;
-        float spacing = 165f;
+        float startY = 280f;
+        float spacing = 138f;
 
         menuButton("campaign", btnX, startY, btnWidth, btnHeight, () -> game.setScreen(new CampaignScreen(game, username)));
         menuButton("class_test", btnX, startY + spacing, btnWidth, btnHeight,
@@ -35,6 +35,9 @@ public class MainMenuScreen extends BaseScreen {
                 () -> game.setScreen(new CosmeticsScreen(game, username)));
         menuButton("certificates", btnX, startY + spacing * 3, btnWidth, btnHeight,
                 () -> game.setScreen(new CertificatesScreen(game, username)));
+        // C is the only language so far; every class teaching it shares this dictionary
+        menuButton("dictionary", btnX, startY + spacing * 4, btnWidth, btnHeight,
+                () -> game.setScreen(new DictionaryScreen(game, username, "C")));
 
         outlinedText("Student:  " + username, VIRTUAL_WIDTH - 620, 28, 380, 40, 1.5f, new Color(0.8f, 0.87f, 1f, 1f), Align.right);
         solidButton("Log out", VIRTUAL_WIDTH - 220, 20, 180, 56, new Color(0.2f, 0.26f, 0.5f, 1f),

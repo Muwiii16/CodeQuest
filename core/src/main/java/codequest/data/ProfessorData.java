@@ -53,7 +53,7 @@ public class ProfessorData {
     public List<ClassInfo> listClasses(long professorId) {
         List<ClassInfo> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("classes?professor_id=eq." + professorId
-                + "&select=id,course_code,section_name,language,class_enrollments(count),campaigns(stages(count))"
+                + "&select=id,course_code,section_name,language,subject,term,ended,class_enrollments(count),campaigns(stages(count))"
                 + "&order=created_at");
         if (rows == null) {
             return out;
@@ -68,7 +68,8 @@ public class ProfessorData {
             JsonValue enrolled = r.get("class_enrollments");
             out.add(new ClassInfo(r.getLong("id"), r.getString("course_code", "CC102"),
                     r.getString("section_name", "?"), r.getString("language", "C"),
-                    enrolled != null && enrolled.size > 0 ? enrolled.get(0).getInt("count", 0) : 0, lessons));
+                    enrolled != null && enrolled.size > 0 ? enrolled.get(0).getInt("count", 0) : 0, lessons,
+                    r.getString("subject", null), r.getString("term", null), r.getBoolean("ended", false)));
         }
         return out;
     }
@@ -79,9 +80,16 @@ public class ProfessorData {
      */
     public Optional<CreatedClass> createClass(long professorId, String sectionName, String courseCode,
             String language, List<String> studentUsernames) {
+        return createClass(professorId, sectionName, courseCode, language, studentUsernames, null, null);
+    }
+
+    /** Same, with the subject's name and the term (both optional). */
+    public Optional<CreatedClass> createClass(long professorId, String sectionName, String courseCode,
+            String language, List<String> studentUsernames, String subject, String term) {
         String body = "{\"professor_id\":" + professorId + ",\"section_name\":\"" + CampaignData.escape(sectionName)
                 + "\",\"course_code\":\"" + CampaignData.escape(courseCode) + "\",\"language\":\""
-                + CampaignData.escape(language) + "\"}";
+                + CampaignData.escape(language) + "\",\"subject\":" + jsonOrNull(subject) + ",\"term\":" + jsonOrNull(term)
+                + "}";
         JsonValue inserted = SupabaseClient.post("classes", body);
         if (inserted == null || inserted.size == 0) {
             return Optional.empty();
@@ -96,6 +104,18 @@ public class ProfessorData {
             (r == EnrollResult.ENROLLED || r == EnrollResult.ALREADY_ENROLLED ? enrolled : skipped).add(name);
         }
         return Optional.of(new CreatedClass(classId, enrolled, skipped));
+    }
+
+    private static String jsonOrNull(String s) {
+        return s == null || s.isBlank() ? "null" : "\"" + CampaignData.escape(s.trim()) + "\"";
+    }
+
+    /** Changes a class's section, course code, subject name, term, and whether it has ended. */
+    public boolean updateClass(long classId, String sectionName, String courseCode, String subject, String term,
+            boolean ended) {
+        return SupabaseClient.patch("classes?id=eq." + classId, "{\"section_name\":\"" + CampaignData.escape(sectionName)
+                + "\",\"course_code\":\"" + CampaignData.escape(courseCode) + "\",\"subject\":" + jsonOrNull(subject)
+                + ",\"term\":" + jsonOrNull(term) + ",\"ended\":" + ended + "}") != null;
     }
 
     /** Renames a class (section name and course code). */

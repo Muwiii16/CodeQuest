@@ -17,7 +17,42 @@ public class CampaignData {
 
     /** A class (section) a professor handles and students belong to. */
     public record ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount,
-            int lessonCount) {
+            int lessonCount, String subject, String term, boolean ended) {
+
+        /** A class with no subject name or term yet. */
+        public ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount, int lessonCount) {
+            this(id, courseCode, sectionName, language, studentCount, lessonCount, null, null, false);
+        }
+
+        /** The subject's name, or the course code when none was given. */
+        public String subjectName() {
+            return subject != null && !subject.isBlank() ? subject : courseCode;
+        }
+
+        public String termLabel() {
+            return term == null ? "" : term;
+        }
+    }
+
+    /**
+     * Which of the student's classes to open first: the one asked for, else the newest class that is still running
+     * (a student who has moved on to a new subject lands there), else the newest ended one. The list is oldest
+     * enrollment first, as {@link #studentClasses} returns it.
+     */
+    public static int defaultClassIndex(List<ClassInfo> classes, Long preferredId) {
+        if (preferredId != null) {
+            for (int i = 0; i < classes.size(); i++) {
+                if (classes.get(i).id() == preferredId) {
+                    return i;
+                }
+            }
+        }
+        for (int i = classes.size() - 1; i >= 0; i--) {
+            if (!classes.get(i).ended()) {
+                return i;
+            }
+        }
+        return Math.max(0, classes.size() - 1);
     }
 
     /** A student's best result on one lesson. */
@@ -31,7 +66,7 @@ public class CampaignData {
     public List<ClassInfo> studentClasses(long studentId) {
         List<ClassInfo> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("class_enrollments?student_id=eq." + studentId
-                + "&select=class:classes(id,course_code,section_name,language)&order=enrolled_at");
+                + "&select=class:classes(id,course_code,section_name,language,subject,term,ended)&order=enrolled_at");
         if (rows == null) {
             return out;
         }
@@ -39,7 +74,8 @@ public class CampaignData {
             JsonValue c = r.get("class");
             if (c != null) {
                 out.add(new ClassInfo(c.getLong("id"), c.getString("course_code", "CC102"),
-                        c.getString("section_name", "?"), c.getString("language", "C"), 0, 0));
+                        c.getString("section_name", "?"), c.getString("language", "C"), 0, 0,
+                        c.getString("subject", null), c.getString("term", null), c.getBoolean("ended", false)));
             }
         }
         return out;
@@ -50,14 +86,15 @@ public class CampaignData {
         List<Lesson> out = new ArrayList<>();
         String filter = classId == null ? "campaign.class_id=is.null" : "campaign.class_id=eq." + classId;
         JsonValue rows = SupabaseClient.get("stages?select=id,campaign_id,order_index,title,base_difficulty,"
-                + "adaptive_enabled,prompt,campaign:campaigns!inner(class_id)&" + filter + "&order=order_index");
+                + "adaptive_enabled,prompt,program,topics,outputs,campaign:campaigns!inner(class_id)&" + filter + "&order=order_index");
         if (rows == null) {
             return out;
         }
         for (JsonValue r : rows) {
             out.add(new Lesson(r.getLong("id"), r.getLong("campaign_id"), r.getInt("order_index", out.size() + 1),
                     r.getString("title", "Lesson"), r.getString("base_difficulty", "normal"),
-                    r.getBoolean("adaptive_enabled", true), r.getString("prompt", null)));
+                    r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
+                    r.getString("topics", null), r.getString("outputs", null)));
         }
         return out;
     }
@@ -87,19 +124,26 @@ public class CampaignData {
 
     public Optional<Lesson> lesson(long stageId) {
         JsonValue rows = SupabaseClient.get("stages?id=eq." + stageId
-                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt&limit=1");
+                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs&limit=1");
         if (rows == null || rows.size == 0) {
             return Optional.empty();
         }
         JsonValue r = rows.get(0);
         return Optional.of(new Lesson(r.getLong("id"), r.getLong("campaign_id"), r.getInt("order_index", 1),
                 r.getString("title", "Lesson"), r.getString("base_difficulty", "normal"),
-                r.getBoolean("adaptive_enabled", true), r.getString("prompt", null)));
+                r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
+                r.getString("topics", null), r.getString("outputs", null)));
     }
 
     /** Adds a lesson at the end of the class's campaign, creating the campaign if the class has none yet. */
     public Optional<Lesson> createLesson(long classId, String sectionName, String title, String difficulty,
             boolean adaptive, String prompt) {
+        return createLesson(classId, sectionName, title, difficulty, adaptive, prompt, java.util.Set.of());
+    }
+
+    /** Same, with the topics the lesson teaches (it may only use these and the topics of the lessons before it). */
+    public Optional<Lesson> createLesson(long classId, String sectionName, String title, String difficulty,
+            boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics) {
         Long campaignId = campaignIdFor(classId, sectionName);
         if (campaignId == null) {
             return Optional.empty();
@@ -112,13 +156,14 @@ public class CampaignData {
         int next = last.size > 0 ? last.get(0).getInt("order_index", 0) + 1 : 1;
         String body = "{\"campaign_id\":" + campaignId + ",\"order_index\":" + next + ",\"title\":\"" + escape(title)
                 + "\",\"base_difficulty\":\"" + escape(difficulty) + "\",\"adaptive_enabled\":" + adaptive
-                + (prompt == null || prompt.isBlank() ? "" : ",\"prompt\":\"" + escape(prompt) + "\"") + "}";
+                + (prompt == null || prompt.isBlank() ? "" : ",\"prompt\":\"" + escape(prompt) + "\"")
+                + (topics.isEmpty() ? "" : ",\"topics\":\"" + codequest.content.ScopeCheck.formatTopics(topics) + "\"") + "}";
         JsonValue inserted = SupabaseClient.post("stages", body);
         if (inserted == null || inserted.size == 0) {
             return Optional.empty();
         }
         JsonValue r = inserted.get(0);
-        return Optional.of(new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt));
+        return Optional.of(new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt).withTopics(topics));
     }
 
     /** Changes a lesson's title, starting difficulty, adaptive flag and prompt. */
@@ -126,6 +171,19 @@ public class CampaignData {
         String body = "{\"title\":\"" + escape(title) + "\",\"base_difficulty\":\"" + escape(difficulty)
                 + "\",\"adaptive_enabled\":" + adaptive + ",\"prompt\":"
                 + (prompt == null || prompt.isBlank() ? "null" : "\"" + escape(prompt) + "\"") + "}";
+        return SupabaseClient.patch("stages?id=eq." + stageId, body) != null;
+    }
+
+    /** Saves the full program a lesson builds (blank removes it), with what each of its programs prints. */
+    public boolean updateProgram(long stageId, String program, String outputs) {
+        String body = "{\"program\":" + (program == null || program.isBlank() ? "null" : "\"" + escape(program) + "\"")
+                + ",\"outputs\":" + (outputs == null || outputs.isBlank() ? "null" : "\"" + escape(outputs) + "\"") + "}";
+        return SupabaseClient.patch("stages?id=eq." + stageId, body) != null;
+    }
+
+    /** Saves just the program, leaving the outputs as they are. */
+    public boolean updateProgram(long stageId, String program) {
+        String body = "{\"program\":" + (program == null || program.isBlank() ? "null" : "\"" + escape(program) + "\"") + "}";
         return SupabaseClient.patch("stages?id=eq." + stageId, body) != null;
     }
 

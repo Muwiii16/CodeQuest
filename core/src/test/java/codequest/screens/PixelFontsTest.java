@@ -21,6 +21,17 @@ class PixelFontsTest {
     }
 
     @Test
+    void readableFontsPickTheClosestSizeToo() {
+        assertEquals(16, PixelFonts.nearestReadSize(1f));
+        assertEquals(30, PixelFonts.nearestReadSize(2f));
+        assertEquals(14, PixelFonts.nearestReadSize(0.5f));
+        assertEquals(48, PixelFonts.nearestReadSize(10f));
+        for (int i = 1; i < PixelFonts.READ_SIZES.length; i++) {
+            assertTrue(PixelFonts.READ_SIZES[i] > PixelFonts.READ_SIZES[i - 1]);
+        }
+    }
+
+    @Test
     void theBakedSizesAreSortedSoTheSearchIsSane() {
         for (int i = 1; i < PixelFonts.SIZES.length; i++) {
             assertTrue(PixelFonts.SIZES[i] > PixelFonts.SIZES[i - 1]);

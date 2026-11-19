@@ -69,6 +69,39 @@ final class SupabaseClient {
         }
     }
 
+    /** What an Edge Function answered: the HTTP status (0 when it could not be reached) and the raw body. */
+    record FunctionResult(int status, String body) {
+        boolean ok() {
+            return status >= 200 && status < 300;
+        }
+    }
+
+    /** Calls an Edge Function (the app key is sent as for any call; the function's own secrets stay on the server). */
+    static FunctionResult callFunction(String name, String jsonBody, int timeoutSeconds) {
+        String base = SupabaseConfig.getUrl();
+        String anonKey = SupabaseConfig.getAnonKey();
+        if (base == null || anonKey == null) {
+            return new FunctionResult(0, "Supabase is not configured.");
+        }
+        String url = base.replace("/rest/v1/", "/functions/v1/") + name;
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .header("apikey", anonKey)
+                    .header("Authorization", "Bearer " + anonKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            return new FunctionResult(response.statusCode(), response.body());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new FunctionResult(0, "Interrupted.");
+        } catch (Exception e) {
+            return new FunctionResult(0, "Could not reach the server: " + e.getMessage());
+        }
+    }
+
     /** Escapes text for use inside a JSON string literal (quotes, backslashes and every control character). */
     static String jsonEscape(String value) {
         StringBuilder sb = new StringBuilder(value.length() + 8);
