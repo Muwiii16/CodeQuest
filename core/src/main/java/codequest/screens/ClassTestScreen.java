@@ -152,7 +152,7 @@ public class ClassTestScreen extends StudentScreen {
             return;
         }
 
-        text(session.sectionName() + "   -   Lesson " + session.lessonNumber() + ": " + session.lessonTitle(), 200, 175,
+        text(session.sectionName() + "   -   " + session.label() + ": " + session.lessonTitle(), 200, 175,
                 1520, 50, 2.4f, Color.WHITE, Align.left);
         text("Everyone plays the same questions at the same time. Difficulty stays fixed.", 200, 235, 1520, 36, 1.5f,
                 MUTED, Align.left);

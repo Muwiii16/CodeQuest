@@ -38,7 +38,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
     private final int base;
 
     public ProfessorLessonAnalysisScreen(Main game, String username, ClassInfo cls, Lesson lesson) {
-        super(game, username, "Lesson " + lesson.number() + ": " + lesson.title(),
+        super(game, username, lesson.label() + ": " + lesson.title(),
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         this.cls = cls;
         this.lesson = lesson;
@@ -157,7 +157,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
         }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("scope", "one lesson");
-        data.put("lesson", "Lesson " + lesson.number() + ": " + lesson.title());
+        data.put("lesson", lesson.label() + ": " + lesson.title());
         data.put("topics", topics);
         data.put("students", students);
         return new AiFeedback().forClass(data, names);

@@ -44,6 +44,9 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private final TextArea promptBox;
     private final int base;
     private int nextNumber = 1;
+    private int nextTestNumber = 1;
+    /** What is being made: a lesson of the campaign, or a stage only for class tests (students never see it in the campaign). */
+    private boolean asTest;
     /** What the AI understood of the request (one sentence) and the topics it will use: shown, never assumed in silence. */
     private String scopeNote = "";
     private Set<CTopic> usedTopics = EnumSet.of(CTopic.SYNTAX);
@@ -69,23 +72,23 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
 
         card(60, 140, 760, 560);
         text("Details", 90, 155, 400, 40, 2f, AMBER, Align.left);
-        text("Lesson title", 90, 215, 400, 30, 1.4f, MUTED, Align.left);
+        text("Title", 90, 215, 400, 30, 1.4f, MUTED, Align.left);
         titleField = textField("e.g. Variables and data types", false, 90, 248, 700, 64);
         card(850, 140, 1010, 560);
         text("Stage preview", 880, 155, 500, 40, 2f, AMBER, Align.left);
 
         card(60, 730, 1800, 290);
-        text("Describe what you need for this lesson", 90, 742, 900, 36, 1.7f, AMBER, Align.left);
         promptBox = textArea("e.g. Teach printf: printing text, the #include line and return 0. Only that, for "
                 + "first-year students...", 90, 785, 1740, 150);
         solidButton("Generate preview with AI", 90, 945, 760, 60, new Color(0.45f, 0.3f, 0.7f, 1f), this::generate);
-        solidButton("Save lesson", 1330, 945, 500, 60, GOOD, this::save);
 
         // Everything after this mark is redrawn when the lesson number arrives or a form button is clicked.
         base = mark();
         rebuild();
-        load("Loading...", () -> campaigns.lessons(cls.id()), earlier -> {
+        load("Loading...", () -> Map.entry(campaigns.lessons(cls.id()), campaigns.tests(cls.id())), both -> {
+            java.util.List<Lesson> earlier = both.getKey();
             nextNumber = earlier.size() + 1;
+            nextTestNumber = both.getValue().size() + 1;
             StringBuilder notes = new StringBuilder();
             for (Lesson l : earlier) {
                 taught.addAll(l.topicSet());
@@ -110,9 +113,12 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         }
         answersBox = null;
         clearFrom(base);
-        text("Lesson " + nextNumber, 560, 160, 230, 36, 1.7f, MUTED, Align.right);
+        text(Lesson.label(asTest, asTest ? nextTestNumber : nextNumber), 530, 160, 260, 36, 1.7f, MUTED, Align.right);
+        text(asTest ? "Describe what the class test should cover" : "Describe what you need for this lesson", 90, 742, 1200, 36,
+                1.7f, AMBER, Align.left);
+        solidButton(asTest ? "Save class test" : "Save lesson", 1330, 945, 500, 60, GOOD, this::save);
 
-        text("Starting difficulty", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
+        text(asTest ? "Difficulty of the test" : "Starting difficulty", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
         for (int i = 0; i < DIFFICULTIES.length; i++) {
             int idx = i;
             solidButton(DIFFICULTIES[i].toUpperCase(), 90 + i * 237, 368, 225, 64,
@@ -122,18 +128,30 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                     });
         }
         text("Adaptive difficulty", 90, 465, 400, 30, 1.4f, MUTED, Align.left);
-        solidButton(adaptive ? "ON  -  adjusts after each section" : "OFF  -  stays fixed", 90, 498, 700, 64,
-                adaptive ? GOOD : BUTTON, () -> {
-                    adaptive = !adaptive;
-                    rebuild();
-                });
-        if (!scopeNote.isEmpty()) {
-            text("What the AI understood", 90, 575, 700, 30, 1.25f, MUTED, Align.left, PixelFonts.Face.SANS);
-            text(scopeNote, 90, 610, 700, 90, 1.3f, Color.WHITE, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+        if (asTest) {
+            // a class test is played at one fixed difficulty by everybody, so there is nothing to adapt
+            solidButton("OFF  -  a class test has one fixed difficulty", 90, 498, 700, 64, BUTTON, INERT);
         } else {
-            text("The lesson covers only what you describe. If the description is too wide, the AI asks you before it writes "
-                    + "anything.", 90, 580, 700, 100, 1.25f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+            solidButton(adaptive ? "ON  -  adjusts after each section" : "OFF  -  stays fixed", 90, 498, 700, 64,
+                    adaptive ? GOOD : BUTTON, () -> {
+                        adaptive = !adaptive;
+                        rebuild();
+                    });
         }
+
+        // lesson or class test: what the professor is making
+        text("Use it as", 90, 575, 400, 28, 1.25f, MUTED, Align.left);
+        solidButton("Lesson", 90, 604, 340, 52, asTest ? BUTTON : new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
+            asTest = false;
+            rebuild();
+        });
+        solidButton("Class test", 450, 604, 340, 52, asTest ? new Color(0.2f, 0.42f, 0.78f, 1f) : BUTTON, () -> {
+            asTest = true;
+            rebuild();
+        });
+        text(asTest ? "Only for class tests: students never see it in their campaign."
+                : "Students play it in their campaign, in order, and can run it as a class test too.", 90, 664, 700, 28, 1.1f,
+                MUTED, Align.left, PixelFonts.Face.SANS);
 
         if (!followUps.isEmpty()) {
             drawFollowUps();
@@ -151,11 +169,12 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         text("The map is only the setting. What the lesson teaches comes from your description, and the questions are "
                 + "built from it (a different number of questions is fine).", 1430, 215, 410, 200, 1.3f, MUTED, Align.topLeft,
                 PixelFonts.Face.SANS).setWrap(true);
-        text("Describe the lesson below, then press \"Generate preview with AI\". Or save the lesson and write the questions "
-                + "yourself in the lesson editor.\n\nThe AI uses only what you describe. Nothing is added that you did not "
+        String what = asTest ? "class test" : "lesson";
+        text("Describe the " + what + " below, then press \"Generate preview with AI\". Or save it and write the questions "
+                + "yourself in the editor.\n\nThe AI uses only what you describe. Nothing is added that you did not "
                 + "ask for."
                 + (taught.isEmpty() ? "" : "\n\nEarlier lessons taught "
-                        + ScopeCheck.formatTopics(taught).toLowerCase().replace('_', ' ') + "; this lesson may reuse them."),
+                        + ScopeCheck.formatTopics(taught).toLowerCase().replace('_', ' ') + "; this " + what + " may reuse them."),
                 880, 525, 960, 170, 1.3f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
     }
 
@@ -169,7 +188,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             if (raw.isBlank()) {
                 continue;
             }
-            if (shown == 17) {
+            if (shown == 16) {
                 text("...", 880, y, 500, 22, 1.0f, MUTED, Align.left, PixelFonts.Face.MONO);
                 break;
             }
@@ -187,8 +206,11 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                     26, 1.0f, Color.WHITE, Align.left, PixelFonts.Face.SANS);
             y += 28;
         }
-        text("This is a draft. Save lesson stores it; every question can then be rewritten in the lesson editor.", 880, 640,
-                960, 50, 1.15f, AMBER, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+        text("A draft: Save stores it, and every question can be rewritten in the editor.", 880, 632, 960, 28, 1.15f, AMBER,
+                Align.left, PixelFonts.Face.SANS);
+        if (!scopeNote.isEmpty()) {
+            text("The AI understood:  " + scopeNote, 880, 662, 960, 34, 1.05f, MUTED, Align.left, PixelFonts.Face.SANS).setWrap(true);
+        }
     }
 
     private void generate() {
@@ -305,15 +327,17 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private void save() {
         String title = titleField.getText().trim();
         if (title.isEmpty()) {
-            toast("Give the lesson a title.", false);
+            toast(asTest ? "Give the class test a title." : "Give the lesson a title.", false);
             return;
         }
         String difficulty = DIFFICULTIES[difficultyIdx];
         String prompt = fullPrompt != null && generated != null ? fullPrompt : promptBox.getText();
         GeneratedLesson draft = generated;
+        boolean test = asTest;
         Set<CTopic> savedTopics = draft != null ? usedTopics : scopeFor(prompt);
         load("Saving the lesson...", () -> {
-            Optional<Lesson> saved = campaigns.createLesson(cls.id(), cls.sectionName(), title, difficulty, adaptive, prompt, savedTopics);
+            Optional<Lesson> saved = campaigns.createStage(cls.id(), cls.sectionName(), title, difficulty, adaptive && !test, prompt,
+                    savedTopics, test);
             if (saved.isEmpty() || draft == null) {
                 return saved.map(l -> Map.entry(l, 0)).orElse(null);
             }
@@ -331,7 +355,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             return Map.entry(lesson.withProgram(draft.program(), draft.outputs()), added);
         }, saved -> {
             if (saved == null) {
-                toast("Could not save the lesson. Check your connection.", false);
+                toast("Could not save it. Check your connection.", false);
                 return;
             }
             if (draft != null && saved.getValue() < draft.questions().size()) {

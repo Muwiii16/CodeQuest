@@ -40,7 +40,7 @@ public class ProfessorProgramScreen extends ProfessorScreen {
     private List<Question> questions = List.of();
 
     public ProfessorProgramScreen(Main game, String username, ClassInfo cls, Lesson lesson) {
-        super(game, username, "Program  -  Lesson " + lesson.number() + "  " + lesson.title(),
+        super(game, username, "Program  -  " + lesson.label() + "  " + lesson.title(),
                 () -> ProfessorLessonScreen.open(game, username, cls, lesson));
         this.cls = cls;
         this.lesson = lesson;

@@ -12,7 +12,22 @@ import java.util.Set;
  * each of them prints, and {@code topics} the topics it teaches (null: no limit, for lessons made before topics existed).
  */
 public record Lesson(long stageId, long campaignId, int number, String title, String baseDifficulty, boolean adaptive,
-        String prompt, String program, String topics, String outputs) {
+        String prompt, String program, String topics, String outputs, boolean test) {
+
+    /** A lesson of the campaign (not a class-test stage). */
+    public Lesson(long stageId, long campaignId, int number, String title, String baseDifficulty, boolean adaptive,
+            String prompt, String program, String topics, String outputs) {
+        this(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt, program, topics, outputs, false);
+    }
+
+    /** What it is called: "Lesson 3" for a lesson, "Class test 2" for a stage made only for class tests. */
+    public String label() {
+        return label(test, number);
+    }
+
+    public static String label(boolean test, int number) {
+        return (test ? "Class test " : "Lesson ") + number;
+    }
 
     /** A lesson without a program. */
     public Lesson(long stageId, long campaignId, int number, String title, String baseDifficulty, boolean adaptive,
@@ -43,17 +58,17 @@ public record Lesson(long stageId, long campaignId, int number, String title, St
     public Lesson withProgram(String newProgram, String newOutputs) {
         return new Lesson(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt,
                 newProgram == null || newProgram.isBlank() ? null : newProgram, topics,
-                newOutputs == null || newOutputs.isBlank() ? null : newOutputs);
+                newOutputs == null || newOutputs.isBlank() ? null : newOutputs, test);
     }
 
     public Lesson withTopics(Set<CTopic> newTopics) {
         return new Lesson(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt, program,
-                newTopics.isEmpty() ? null : ScopeCheck.formatTopics(newTopics), outputs);
+                newTopics.isEmpty() ? null : ScopeCheck.formatTopics(newTopics), outputs, test);
     }
 
     public Lesson withDetails(String newTitle, String difficulty, boolean isAdaptive, String newPrompt) {
         return new Lesson(stageId, campaignId, number, newTitle, difficulty, isAdaptive,
-                newPrompt == null || newPrompt.isBlank() ? null : newPrompt, program, topics, outputs);
+                newPrompt == null || newPrompt.isBlank() ? null : newPrompt, program, topics, outputs, test);
     }
 
     public Difficulty difficulty() {

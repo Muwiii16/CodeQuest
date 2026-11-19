@@ -83,20 +83,36 @@ public class CampaignData {
 
     /** Lessons of a class's campaign in order; a null classId means the built-in default campaign. */
     public List<Lesson> lessons(Long classId) {
+        return stagesOf(classId, "lesson");
+    }
+
+    /** The stages a professor made only for class tests (students never see them in the campaign), in order. */
+    public List<Lesson> tests(long classId) {
+        return stagesOf(classId, "test");
+    }
+
+    private List<Lesson> stagesOf(Long classId, String kind) {
         List<Lesson> out = new ArrayList<>();
         String filter = classId == null ? "campaign.class_id=is.null" : "campaign.class_id=eq." + classId;
         JsonValue rows = SupabaseClient.get("stages?select=id,campaign_id,order_index,title,base_difficulty,"
-                + "adaptive_enabled,prompt,program,topics,outputs,campaign:campaigns!inner(class_id)&" + filter + "&order=order_index");
+                + "adaptive_enabled,prompt,program,topics,outputs,campaign:campaigns!inner(class_id,kind)&" + filter
+                + "&campaign.kind=eq." + kind + "&order=order_index");
         if (rows == null) {
             return out;
         }
         for (JsonValue r : rows) {
-            out.add(new Lesson(r.getLong("id"), r.getLong("campaign_id"), r.getInt("order_index", out.size() + 1),
-                    r.getString("title", "Lesson"), r.getString("base_difficulty", "normal"),
-                    r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
-                    r.getString("topics", null), r.getString("outputs", null)));
+            out.add(stageFrom(r, out.size() + 1));
         }
         return out;
+    }
+
+    private static Lesson stageFrom(JsonValue r, int fallbackNumber) {
+        JsonValue campaign = r.get("campaign");
+        boolean test = campaign != null && "test".equals(campaign.getString("kind", "lesson"));
+        return new Lesson(r.getLong("id"), r.getLong("campaign_id"), r.getInt("order_index", fallbackNumber),
+                r.getString("title", test ? "Class test" : "Lesson"), r.getString("base_difficulty", "normal"),
+                r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
+                r.getString("topics", null), r.getString("outputs", null), test);
     }
 
     /** The student's progress rows keyed by stage id. */
@@ -124,15 +140,12 @@ public class CampaignData {
 
     public Optional<Lesson> lesson(long stageId) {
         JsonValue rows = SupabaseClient.get("stages?id=eq." + stageId
-                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs&limit=1");
+                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,"
+                + "campaign:campaigns(kind)&limit=1");
         if (rows == null || rows.size == 0) {
             return Optional.empty();
         }
-        JsonValue r = rows.get(0);
-        return Optional.of(new Lesson(r.getLong("id"), r.getLong("campaign_id"), r.getInt("order_index", 1),
-                r.getString("title", "Lesson"), r.getString("base_difficulty", "normal"),
-                r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
-                r.getString("topics", null), r.getString("outputs", null)));
+        return Optional.of(stageFrom(rows.get(0), 1));
     }
 
     /** Adds a lesson at the end of the class's campaign, creating the campaign if the class has none yet. */
@@ -144,7 +157,16 @@ public class CampaignData {
     /** Same, with the topics the lesson teaches (it may only use these and the topics of the lessons before it). */
     public Optional<Lesson> createLesson(long classId, String sectionName, String title, String difficulty,
             boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics) {
-        Long campaignId = campaignIdFor(classId, sectionName);
+        return createStage(classId, sectionName, title, difficulty, adaptive, prompt, topics, false);
+    }
+
+    /**
+     * Same, and the stage is either a lesson of the campaign or (test = true) a stage made only for class tests, kept in
+     * the class's separate test campaign so that it never shows to students in the campaign.
+     */
+    public Optional<Lesson> createStage(long classId, String sectionName, String title, String difficulty,
+            boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics, boolean test) {
+        Long campaignId = campaignIdFor(classId, sectionName, test ? "test" : "lesson");
         if (campaignId == null) {
             return Optional.empty();
         }
@@ -163,7 +185,8 @@ public class CampaignData {
             return Optional.empty();
         }
         JsonValue r = inserted.get(0);
-        return Optional.of(new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt).withTopics(topics));
+        Lesson created = new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt, null, null, null, test);
+        return Optional.of(created.withTopics(topics));
     }
 
     /** Changes a lesson's title, starting difficulty, adaptive flag and prompt. */
@@ -212,7 +235,12 @@ public class CampaignData {
 
     /** The class's campaign id, creating the campaign on first use. */
     Long campaignIdFor(long classId, String sectionName) {
-        JsonValue existing = SupabaseClient.get("campaigns?class_id=eq." + classId + "&select=id&limit=1");
+        return campaignIdFor(classId, sectionName, "lesson");
+    }
+
+    /** The class's campaign of this kind ("lesson" or "test"), creating it on first use. */
+    Long campaignIdFor(long classId, String sectionName, String kind) {
+        JsonValue existing = SupabaseClient.get("campaigns?class_id=eq." + classId + "&kind=eq." + kind + "&select=id&limit=1");
         if (existing == null) {
             return null;
         }
@@ -220,7 +248,8 @@ public class CampaignData {
             return existing.get(0).getLong("id");
         }
         JsonValue created = SupabaseClient.post("campaigns",
-                "{\"class_id\":" + classId + ",\"title\":\"" + escape(sectionName + " lessons") + "\"}");
+                "{\"class_id\":" + classId + ",\"kind\":\"" + kind + "\",\"title\":\""
+                        + escape(sectionName + ("test".equals(kind) ? " class tests" : " lessons")) + "\"}");
         return created != null && created.size > 0 ? created.get(0).getLong("id") : null;
     }
 

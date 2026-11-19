@@ -286,3 +286,17 @@ Requested: put hover effects back on buttons, but not the old kind that changed 
 ## Round 21b: a more noticeable lift, and the same lift in the play screen and on the login tabs (Nov 19 2026)
 - The lift of every `solidButton` is now 8 px (was 4) over a stronger shadow. The play screen's own buttons use the same lift (`PlayScreen.buttonFill` / `lift`, 8 px; 5 px for the find-the-bug rows and the arrange tokens): answer choices, Hint, Check, Answer, Clear, Continue, Quit and the result buttons. Their old hover (a lighter background) is gone. A button that cannot be pressed yet (Pick a line, the explanation's Continue before it is ready, Saving...) does not lift. The Log in / Register tabs lift their label by 6 px and show the hand cursor.
 - Verified with the real cursor moved over the buttons: Log in, the Register tab and the Answer button in a lesson (fill color unchanged).
+
+## Round 22: a clearer lesson screen (Nov 20 2026)
+Requested: the lesson/question list was hard to look at and the questions hard to reach.
+- `ProfessorLessonScreen`: "Edit the program" and "+ Add a question" moved to the top of the Questions card; a topic summary shows only the topics that have questions; the program status line stays (green when complete). 9 questions fit on one page (page buttons appear in the header only above 9). Each row has a stripe colored by kind (choice blue, fill green, true/false purple, arrange orange, find-the-bug red), the question text on one line, then kind, topic, difficulty (green/amber/red) and the answer; the whole row opens the question (hand cursor) and Edit / "+ easy" / Delete sit at its right. A one-line hint explains "+ easy". The "What you asked for" box is taller and uses the readable font.
+- Verified on screen with the real lesson "Printing an output" (view only). Not done: searching or filtering the list, and showing the full question text (it is cut to about 40 characters; the editor has the whole text).
+
+## Round 23: lesson or class test (Nov 20 2026)
+Migration `20261120120000_campaign_kind.sql` (applied): `campaigns.kind` ('lesson' default, or 'test').
+- Requested: stage generation went straight to the lessons; a professor may want a stage only as a class test.
+- **Stage creation** has "Use it as: Lesson | Class test". A class test is saved in the class's separate test campaign (`CampaignData.createStage(..., test)`), so it never appears in the students' campaign, takes no lesson number and never blocks unlocking; it has no adaptive difficulty (one fixed difficulty). Stage names read "Lesson N" or "Class test N" (`Lesson.label()`, `Session.label()`) everywhere: section, editor, program, analysis, class-test lobby, results, history, student class-test screen.
+- **Section screen**: tabs "Lessons (n)" and "Class tests (m)"; a test row has Edit, Analysis and "Start test". Any lesson can still be run as a class test with its "Class test" button.
+- The topics earlier *lessons* taught are what a new stage may reuse (class tests do not count as teaching).
+- Verified against the live database with throwaway `zz_` data (removed afterwards): lessons and tests numbered separately, listed only in their own lists, the default campaign untouched, and a class-test session on a test stage labelled "Class test 1". Screens checked: stage creation (both choices) and the section tabs.
+- Open: the ERD needs `campaigns.kind`; certificates are only for campaign lessons (a class-test stage gives none); the Overall performance screen and the student side show lessons only.

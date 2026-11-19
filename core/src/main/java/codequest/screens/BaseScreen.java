@@ -388,18 +388,19 @@ public abstract class BaseScreen implements Screen {
         // the part that takes the mouse stays where the button was, so a raised button never flickers at its lower edge
         Image hit = rect(x, yFromTop, w, h, new Color(0f, 0f, 0f, 0f));
         Image shade = shadow;
-        float frameY = frame.getY();
-        float bodyY = body.getY();
-        float labelY = label.getY();
+        // everything that rises with the button, with the y it rests at; rideAlong adds a screen's own icons and text
+        java.util.Map<Actor, Float> movers = new java.util.LinkedHashMap<>();
+        movers.put(frame, frame.getY());
+        movers.put(body, body.getY());
+        movers.put(label, label.getY());
+        hit.setUserObject(movers);
         hit.addListener(new ClickListener() {
             @Override
             public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
                 if (!live || pointer != -1) {
                     return;
                 }
-                rise(frame, frameY + HOVER_LIFT);
-                rise(body, bodyY + HOVER_LIFT);
-                rise(label, labelY + HOVER_LIFT);
+                movers.forEach((a, restY) -> rise(a, restY + HOVER_LIFT));
                 shade.clearActions();
                 shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0.55f, HOVER_SECONDS));
                 Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
@@ -410,9 +411,7 @@ public abstract class BaseScreen implements Screen {
                 if (!live || pointer != -1) {
                     return;
                 }
-                rise(frame, frameY);
-                rise(body, bodyY);
-                rise(label, labelY);
+                movers.forEach((a, restY) -> rise(a, restY));
                 shade.clearActions();
                 shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0f, HOVER_SECONDS));
                 Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
@@ -424,6 +423,20 @@ public abstract class BaseScreen implements Screen {
             }
         });
         return hit;
+    }
+
+    /**
+     * Makes actors drawn on top of a {@link #solidButton} (an icon, extra text, a stripe) rise and fall with it.
+     * Pass the Image that solidButton returned; the actors must already be placed where they rest.
+     */
+    @SuppressWarnings("unchecked")
+    protected void rideAlong(Image button, Actor... actors) {
+        if (!(button.getUserObject() instanceof java.util.Map<?, ?> movers)) {
+            return;
+        }
+        for (Actor a : actors) {
+            ((java.util.Map<Actor, Float>) movers).put(a, a.getY());
+        }
     }
 
     private static void rise(com.badlogic.gdx.scenes.scene2d.Actor actor, float toY) {

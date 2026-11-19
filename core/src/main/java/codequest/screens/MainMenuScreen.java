@@ -4,6 +4,7 @@ import codequest.Main;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 
@@ -43,13 +44,15 @@ public class MainMenuScreen extends BaseScreen {
 
     /** A flat navy button with the icon on the left and a readable label (the old buttons were pictures with pixel text). */
     private void menuButton(String name, String label, float x, float y, float w, float h, Runnable action) {
-        solidButton("", x, y, w, h, new Color(0.16f, 0.22f, 0.46f, 1f), action);
+        Image button = solidButton("", x, y, w, h, new Color(0.16f, 0.22f, 0.46f, 1f), action);
         Image icon = new Image(new TextureRegionDrawable(new TextureRegion(texture("ui/buttons/icon_" + name + ".png"))));
         float size = h - 56f;
         placeTopLeft(icon, x + 34f, y + (h - size) / 2f, size, size);
         icon.setScaling(com.badlogic.gdx.utils.Scaling.fit);
         icon.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
         stage.addActor(icon);
-        text(label, x + 60f, y, w - 60f, h, 2.7f, Color.WHITE, Align.center).setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+        Label text = text(label, x + 60f, y, w - 60f, h, 2.7f, Color.WHITE, Align.center);
+        text.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+        rideAlong(button, icon, text);
     }
 }

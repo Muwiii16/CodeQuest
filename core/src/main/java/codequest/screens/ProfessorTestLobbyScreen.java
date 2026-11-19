@@ -34,7 +34,7 @@ public class ProfessorTestLobbyScreen extends ProfessorScreen {
     private boolean leaving;
 
     public ProfessorTestLobbyScreen(Main game, String username, ClassInfo cls, Lesson lesson) {
-        super(game, username, "Class test  -  " + cls.sectionName() + "  -  Lesson " + lesson.number(),
+        super(game, username, "Class test  -  " + cls.sectionName() + "  -  " + lesson.label(),
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         this.cls = cls;
         this.lesson = lesson;
@@ -68,7 +68,7 @@ public class ProfessorTestLobbyScreen extends ProfessorScreen {
             if (live != null && "completed".equals(live.status())) {
                 if (!leaving) {
                     leaving = true;
-                    game.setScreen(new ProfessorTestResultsScreen(game, username, cls, lesson.title(), lesson.number(),
+                    game.setScreen(new ProfessorTestResultsScreen(game, username, cls, lesson.title(), lesson.label(),
                             live.participants()));
                 }
                 return; // the results screen has taken over and this one is disposed: do not draw it

@@ -1,17 +1,25 @@
 package codequest.screens;
 
 import codequest.Main;
+import codequest.content.AnswerKind;
 import codequest.content.CTopic;
+import codequest.content.Difficulty;
 import codequest.content.ProgramCoverage;
+import codequest.content.QuestionDraft;
 import codequest.data.CampaignData;
 import codequest.data.CampaignData.ClassInfo;
 import codequest.data.Lesson;
 import codequest.data.QuestionData;
 import codequest.data.QuestionData.Question;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.scenes.scene2d.Group;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.TextArea;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.Align;
 
 import java.util.EnumMap;
@@ -26,7 +34,7 @@ import java.util.Map;
 public class ProfessorLessonScreen extends ProfessorScreen {
 
     private static final String[] DIFFICULTIES = { "easy", "normal", "hard" };
-    private static final int PAGE_SIZE = 6;
+    private static final int PAGE_SIZE = 9;
 
     private final CampaignData campaigns = new CampaignData();
     private final QuestionData questionData = new QuestionData();
@@ -44,7 +52,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
     private int page;
 
     public ProfessorLessonScreen(Main game, String username, ClassInfo cls, Lesson lesson) {
-        super(game, username, "Lesson " + lesson.number() + "  -  " + lesson.title(),
+        super(game, username, lesson.label() + "  -  " + lesson.title(),
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         this.cls = cls;
         this.lesson = lesson;
@@ -53,12 +61,12 @@ public class ProfessorLessonScreen extends ProfessorScreen {
 
         // ── lesson details ──
         card(60, 140, 700, 880);
-        text("Lesson details", 90, 155, 500, 40, 2f, AMBER, Align.left);
+        text(lesson.test() ? "Class test details" : "Lesson details", 90, 155, 600, 40, 2f, AMBER, Align.left);
         text("Title", 90, 215, 300, 30, 1.4f, MUTED, Align.left);
         titleField = textField("Lesson title", false, 90, 248, 640, 64);
         titleField.setText(lesson.title());
         text("What you asked for (kept for the AI step)", 90, 560, 640, 30, 1.4f, MUTED, Align.left);
-        promptBox = textArea("(nothing written)", 90, 595, 640, 170);
+        promptBox = textArea("(nothing written)", 90, 595, 640, 200, PixelFonts.Face.SANS);
         promptBox.setText(lesson.prompt() == null ? "" : lesson.prompt());
         formRegion = region();
         rebuildForm();
@@ -79,7 +87,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
 
     private void rebuildForm() {
         fill(formRegion, () -> {
-            text("Starting difficulty", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
+            text(lesson.test() ? "Difficulty of the test" : "Starting difficulty", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
             for (int i = 0; i < DIFFICULTIES.length; i++) {
                 int idx = i;
                 solidButton(DIFFICULTIES[i].toUpperCase(), 90 + i * 215, 368, 205, 60,
@@ -89,13 +97,18 @@ public class ProfessorLessonScreen extends ProfessorScreen {
                         });
             }
             text("Adaptive difficulty", 90, 445, 400, 30, 1.4f, MUTED, Align.left);
-            solidButton(adaptive ? "ON  -  adjusts after each section" : "OFF  -  stays fixed", 90, 478, 640, 60,
-                    adaptive ? GOOD : BUTTON, () -> {
-                        adaptive = !adaptive;
-                        rebuildForm();
-                    });
-            solidButton("Save details", 90, 800, 640, 70, GOOD, this::saveDetails);
-            solidButton(deleteArmed ? "Click again: delete this lesson" : "Delete lesson", 90, 890, 640, 70,
+            if (lesson.test()) {
+                // a class test is played at one fixed difficulty by everybody, so there is nothing to adapt
+                solidButton("OFF  -  a class test has one fixed difficulty", 90, 478, 640, 60, BUTTON, INERT);
+            } else {
+                solidButton(adaptive ? "ON  -  adjusts after each section" : "OFF  -  stays fixed", 90, 478, 640, 60,
+                        adaptive ? GOOD : BUTTON, () -> {
+                            adaptive = !adaptive;
+                            rebuildForm();
+                        });
+            }
+            solidButton("Save details", 90, 830, 640, 62, GOOD, this::saveDetails);
+            solidButton(deleteArmed ? "Click again: delete this lesson" : "Delete lesson", 90, 905, 640, 62,
                     deleteArmed ? new Color(0.7f, 0.15f, 0.15f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), this::deleteLesson);
         });
     }
@@ -125,17 +138,31 @@ public class ProfessorLessonScreen extends ProfessorScreen {
             coverage.append(coverage.length() == 0 ? "" : "     ").append(CosmeticTopic.label(t)).append(" ")
                     .append(counts.get(t));
         }
-        text(questions.size() + (questions.size() == 1 ? " question" : " questions"), 1500, 160, 330, 36, 1.7f, MUTED,
-                Align.right);
-        text(coverage.toString(), 820, 205, 1010, 30, 1.25f, MUTED, Align.left);
+        // top: what the professor does most (the program and a new question) sits where it is easy to find
+        solidButton(lesson.hasProgram() ? "Edit the program" : "Write the program", 1170, 148, 310, 56, BUTTON,
+                () -> game.setScreen(new ProfessorProgramScreen(game, username, cls, lesson)));
+        solidButton("+  Add a question", 1500, 148, 330, 56, GOOD,
+                () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, null)));
+        text(questions.size() + (questions.size() == 1 ? " question" : " questions"), 820, 214, 190, 34, 1.5f, Color.WHITE,
+                Align.left);
+        float chipX = 1020;
+        for (CTopic t : CTopic.values()) {
+            if (counts.get(t) > 0) {
+                String chip = CosmeticTopic.label(t) + "  " + counts.get(t);
+                float chipW = 36f + chip.length() * 11f;
+                rect(chipX, 212, chipW, 36, new Color(0.2f, 0.24f, 0.33f, 1f));
+                text(chip, chipX, 212, chipW, 36, 1.15f, Color.WHITE, Align.center, PixelFonts.Face.SANS);
+                chipX += chipW + 10f;
+            }
+        }
         if (lesson.hasProgram()) {
             ProgramCoverage.Report report = QuestionData.coverage(lesson.program(), questions);
-            text("Program: " + ProgramCoverage.describe(report), 820, 238, 1010, 30, 1.15f,
+            text("Program: " + ProgramCoverage.describe(report), 820, 258, 1010, 30, 1.2f,
                     report.complete() ? new Color(0.6f, 0.95f, 0.6f, 1f) : report.problem() != null
                             ? new Color(1f, 0.5f, 0.45f, 1f) : AMBER, Align.left, PixelFonts.Face.SANS);
         } else {
             text("Students get a random question for each tower's topic. A topic with 0 uses the built-in questions.", 820,
-                    238, 1010, 30, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
+                    258, 1010, 30, 1.2f, MUTED, Align.left, PixelFonts.Face.SANS);
         }
 
         if (questions.isEmpty()) {
@@ -150,58 +177,108 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         // a chunk's difficulty levels sit together, easiest first
         List<Question> shown = new java.util.ArrayList<>();
         QuestionData.bySlot(questions).forEach(shown::addAll);
-        float y = 280;
-        for (int i = from; i < to; i++) {
-            Question q = shown.get(i);
-            rect(820, y, 1010, 92, ROW);
-            text((q.slot() > 0 ? "#" + q.slot() + "  " : "") + CosmeticTopic.label(q.draft().topic()) + " - "
-                    + q.draft().difficulty().name().toLowerCase() + " - " + q.draft().kind().label(), 840, y + 8, 440, 30,
-                    1.15f, AMBER, Align.left);
-            text(ellipsize(q.draft().prompt().replace('\n', ' '), 50), 840, y + 40, 600, 40, 1.4f, Color.WHITE, Align.left,
-                    PixelFonts.faceForPrompt(q.draft().kind(), q.draft().prompt()));
-            String answer = q.draft().kind() == codequest.content.AnswerKind.FIND_BUG ? "line " + q.draft().correct()
-                    : q.draft().correct();
-            text("answer: " + ellipsize(answer, 12), 1290, y + 8, 150, 30, 1.0f, MUTED, Align.left, PixelFonts.Face.MONO);
-            solidButton("Edit", 1450, y + 22, 100, 48, BUTTON,
-                    () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q)));
-            codequest.content.Difficulty missing = missingLevel(q);
-            if (lesson.hasProgram() && missing != null) {
-                solidButton("+ " + missing.name().toLowerCase(), 1560, y + 22, 130, 48, BUTTON,
-                        () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q, missing)));
-            }
-            boolean armed = questionDeleteArmed == q.id();
-            solidButton(armed ? "Sure?" : "Delete", 1700, y + 22, 120, 48,
-                    armed ? new Color(0.7f, 0.15f, 0.15f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), () -> deleteQuestion(q));
-            y += 100;
-        }
         if (questions.size() > PAGE_SIZE) {
             int pages = (questions.size() + PAGE_SIZE - 1) / PAGE_SIZE;
-            if (page > 0) {
-                solidButton("< Prev", 820, 905, 160, 48, BUTTON, () -> {
+            solidButton("<", 1640, 252, 52, 40, page > 0 ? BUTTON : ROW, () -> {
+                if (page > 0) {
                     page--;
                     rebuildList();
-                });
-            }
-            text("Page " + (page + 1) + " / " + pages, 1000, 905, 160, 48, 1.4f, MUTED, Align.center);
-            if (page < pages - 1) {
-                solidButton("Next >", 1180, 905, 160, 48, BUTTON, () -> {
+                }
+            });
+            text("Page " + (page + 1) + " / " + pages, 1692, 252, 90, 40, 1.1f, MUTED, Align.center, PixelFonts.Face.SANS);
+            solidButton(">", 1782, 252, 52, 40, page < pages - 1 ? BUTTON : ROW, () -> {
+                if (page < pages - 1) {
                     page++;
                     rebuildList();
-                });
-            }
+                }
+            });
         }
-        solidButton(lesson.hasProgram() ? "Edit the program" : "Write the program", 820, 960, 400, 50, BUTTON,
-                () -> game.setScreen(new ProfessorProgramScreen(game, username, cls, lesson)));
-        solidButton("+  Add a question", 1400, 960, 430, 50, GOOD,
-                () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, null)));
+        float y = 296;
+        for (int i = from; i < to; i++) {
+            Question q = shown.get(i);
+            drawRow(q, y);
+            y += 78;
+        }
+        if (!questions.isEmpty()) {
+            text("Click a question to edit it.     \"+ easy\" or \"+ normal\" adds another difficulty of the same lines.", 820, 1000,
+                    1010, 20, 1.0f, MUTED, Align.center, PixelFonts.Face.SANS);
+        }
+    }
+
+    /** One question: a colored stripe for its kind, its text, what kind it is, and the buttons. The whole row opens the editor. */
+    private void drawRow(Question q, float y) {
+        QuestionDraft d = q.draft();
+        Color accent = kindColor(d.kind());
+        rect(820, y, 1010, 72, ROW);
+        rect(820, y, 8, 72, accent);
+        // the row itself is a button: a click anywhere on it (outside the small buttons) opens the question
+        Image open = rect(820, y, 1010, 72, new Color(0f, 0f, 0f, 0f));
+        open.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float cx, float cy) {
+                game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q));
+            }
+
+            @Override
+            public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
+                if (pointer == -1) {
+                    Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
+                }
+            }
+
+            @Override
+            public void exit(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor to) {
+                if (pointer == -1) {
+                    Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
+                }
+            }
+        });
+        text(q.slot() > 0 ? "#" + q.slot() : "-", 836, y, 64, 72, 1.5f, Color.WHITE, Align.center);
+        text(ellipsize(d.prompt(), 40), 912, y + 6, 590, 32, 1.45f, Color.WHITE, Align.left,
+                PixelFonts.faceForPrompt(d.kind(), d.prompt())).setTouchable(Touchable.disabled);
+        String answer = d.kind() == AnswerKind.FIND_BUG ? "line " + d.correct() : d.correct();
+        text(d.kind().label(), 912, y + 40, 190, 26, 1.1f, accent, Align.left, PixelFonts.Face.SANS);
+        text(CosmeticTopic.label(d.topic()), 1100, y + 40, 100, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.SANS);
+        text(d.difficulty().name().charAt(0) + d.difficulty().name().substring(1).toLowerCase(), 1200, y + 40, 90, 26, 1.1f,
+                difficultyColor(d.difficulty()), Align.left, PixelFonts.Face.SANS);
+        text("answer:  " + ellipsize(answer, 11), 1285, y + 40, 220, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.MONO);
+
+        solidButton("Edit", 1514, y + 12, 96, 48, new Color(0.2f, 0.42f, 0.78f, 1f),
+                () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q)));
+        Difficulty missing = missingLevel(q);
+        if (lesson.hasProgram() && missing != null) {
+            solidButton("+ " + missing.name().toLowerCase(), 1620, y + 12, 104, 48, BUTTON,
+                    () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q, missing)));
+        }
+        boolean armed = questionDeleteArmed == q.id();
+        solidButton(armed ? "Sure?" : "Delete", 1734, y + 12, 84, 48,
+                armed ? new Color(0.7f, 0.15f, 0.15f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), () -> deleteQuestion(q));
+    }
+
+    private static Color kindColor(AnswerKind kind) {
+        return switch (kind) {
+            case CHOICE -> new Color(0.35f, 0.62f, 1f, 1f);
+            case FILL_BLANK -> new Color(0.35f, 0.8f, 0.55f, 1f);
+            case TRUE_FALSE -> new Color(0.72f, 0.55f, 0.95f, 1f);
+            case ARRANGE -> new Color(0.95f, 0.7f, 0.25f, 1f);
+            case FIND_BUG -> new Color(0.95f, 0.45f, 0.45f, 1f);
+        };
+    }
+
+    private static Color difficultyColor(Difficulty d) {
+        return switch (d) {
+            case EASY -> new Color(0.55f, 0.9f, 0.65f, 1f);
+            case NORMAL -> new Color(0.95f, 0.8f, 0.4f, 1f);
+            case HARD -> new Color(1f, 0.55f, 0.5f, 1f);
+        };
     }
 
     /** The first difficulty this question's chunk has no question for yet, or null (none to add, or no slot). */
-    private codequest.content.Difficulty missingLevel(Question q) {
+    private Difficulty missingLevel(Question q) {
         if (q.slot() <= 0) {
             return null;
         }
-        for (codequest.content.Difficulty d : codequest.content.Difficulty.values()) {
+        for (Difficulty d : Difficulty.values()) {
             boolean taken = false;
             for (Question other : questions) {
                 taken |= other.slot() == q.slot() && other.draft().difficulty() == d;
@@ -245,7 +322,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
             return;
         }
         String difficulty = DIFFICULTIES[difficultyIdx];
-        boolean adapt = adaptive;
+        boolean adapt = adaptive && !lesson.test();
         String prompt = promptBox.getText();
         load("Saving...", () -> campaigns.updateLesson(lesson.stageId(), title, difficulty, adapt, prompt), ok -> {
             if (ok) {

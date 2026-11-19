@@ -11,9 +11,9 @@ import java.util.List;
 /** The final results of a class test: the podium for the top three and the whole ranking beside it. */
 public class ProfessorTestResultsScreen extends ProfessorScreen {
 
-    public ProfessorTestResultsScreen(Main game, String username, ClassInfo cls, String lessonTitle, int lessonNumber,
+    public ProfessorTestResultsScreen(Main game, String username, ClassInfo cls, String lessonTitle, String stageLabel,
             List<Participant> ranked) {
-        super(game, username, "Class test results  -  " + cls.sectionName() + "  -  Lesson " + lessonNumber,
+        super(game, username, "Class test results  -  " + cls.sectionName() + "  -  " + stageLabel,
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         card(60, 140, 1800, 880);
         text(lessonTitle + "   -   TEST ENDED", 90, 158, 1500, 44, 2.2f, MUTED, Align.left);

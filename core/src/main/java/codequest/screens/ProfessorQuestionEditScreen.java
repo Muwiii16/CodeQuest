@@ -85,7 +85,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
     private ProfessorQuestionEditScreen(Main game, String username, ClassInfo cls, Lesson lesson, Question existing,
             Question variantOf, Difficulty newLevel) {
         super(game, username, (existing != null ? "Edit question" : variantOf != null ? "New difficulty level" : "New question")
-                + "  -  Lesson " + lesson.number(), () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, lesson)));
+                + "  -  " + lesson.label(), () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, lesson)));
         this.cls = cls;
         this.lesson = lesson;
         this.existing = existing;

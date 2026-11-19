@@ -17,7 +17,13 @@ import java.util.Optional;
 public class ClassTestData {
 
     public record Session(long id, long classId, long stageId, String sectionName, String lessonTitle,
-            int lessonNumber, String mode, String status, String startedAt, String endedAt) {
+            int lessonNumber, String mode, String status, String startedAt, String endedAt, boolean testOnly) {
+
+        /** "Lesson 3" or, for a stage made only for class tests, "Class test 2". */
+        public String label() {
+            return Lesson.label(testOnly, lessonNumber);
+        }
+
         public boolean isLobby() {
             return "scheduled".equals(status);
         }
@@ -35,7 +41,7 @@ public class ClassTestData {
     }
 
     private static final String SESSION_SELECT = "id,class_id,stage_id,session_mode,status,started_at,ended_at,"
-            + "class:classes(section_name),stage:stages(order_index,title)";
+            + "class:classes(section_name),stage:stages(order_index,title,campaign:campaigns(kind))";
 
     /** The class's lobby or running test, if there is one. */
     public Optional<Session> openSession(long classId) {
@@ -200,6 +206,7 @@ public class ClassTestData {
                 stage != null ? stage.getString("title", "Lesson") : "Lesson",
                 stage != null ? stage.getInt("order_index", 0) : 0,
                 r.getString("session_mode", "competitive"), r.getString("status", "scheduled"),
-                r.getString("started_at", null), r.getString("ended_at", null));
+                r.getString("started_at", null), r.getString("ended_at", null),
+                stage != null && stage.get("campaign") != null && "test".equals(stage.get("campaign").getString("kind", "lesson")));
     }
 }
