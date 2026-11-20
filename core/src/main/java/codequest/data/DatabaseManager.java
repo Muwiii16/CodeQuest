@@ -50,6 +50,36 @@ public class DatabaseManager {
         OK, TAKEN, INVALID, BAD_INVITE, PROFESSOR_DISABLED, ERROR
     }
 
+    public enum JoinStatus {
+        JOINED, ALREADY_IN, ENDED, INVALID_CODE, NOT_A_STUDENT, ERROR
+    }
+
+    /** What happened when a student used a class's join code. */
+    public record JoinResult(JoinStatus status, long classId, String sectionName, String subject) {
+    }
+
+    /**
+     * A student enrolls in the class that has this code. The server checks everything: a code that matches no class, a class
+     * that has ended, an account that is not a student, and a student who is already in the class.
+     */
+    public JoinResult joinClass(String username, String typedCode) {
+        JsonValue result = SupabaseClient.post("rpc/join_class", "{\"p_username\":\"" + escape(username)
+                + "\",\"p_code\":\"" + escape(JoinCode.normalize(typedCode)) + "\"}");
+        if (result == null || result.isNull() || !result.isObject()) {
+            return new JoinResult(JoinStatus.ERROR, -1L, "", null);
+        }
+        JoinStatus status = switch (result.getString("status", "")) {
+            case "ok" -> JoinStatus.JOINED;
+            case "already" -> JoinStatus.ALREADY_IN;
+            case "ended" -> JoinStatus.ENDED;
+            case "invalid" -> JoinStatus.INVALID_CODE;
+            case "not_student" -> JoinStatus.NOT_A_STUDENT;
+            default -> JoinStatus.ERROR;
+        };
+        return new JoinResult(status, result.getLong("class_id", -1L), result.getString("section_name", ""),
+                result.getString("subject", null));
+    }
+
     /**
      * Checks the username and password on the server (passwords are stored hashed and compared there,
      * so nothing readable is ever fetched). Empty means wrong credentials or the server could not be reached.

@@ -5,6 +5,7 @@ import codequest.data.CampaignData;
 import codequest.data.CampaignData.ClassInfo;
 import codequest.data.CampaignData.Progress;
 import codequest.data.ClassTestData;
+import codequest.data.JoinCode;
 import codequest.data.Lesson;
 import codequest.data.ProfessorData;
 import com.badlogic.gdx.graphics.Color;
@@ -84,6 +85,15 @@ public class ProfessorSectionScreen extends ProfessorScreen {
             ClassTestData.Session s = openTest.get();
             text("Class test " + (s.isActive() ? "running" : "lobby open") + " on " + s.label().toLowerCase(), x, 670, w,
                     60, 1.5f, new Color(0.55f, 0.9f, 0.65f, 1f), Align.topLeft).setWrap(true);
+        }
+        String code = cls.joinCode();
+        if (code != null && !code.isBlank()) {
+            text("Join code for students", x, 735, w, 26, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
+            text(JoinCode.display(code), x, 764, 300, 60, 3.2f, new Color(1f, 0.82f, 0.3f, 1f), Align.left, PixelFonts.Face.MONO);
+            solidButton("Copy", x + 320, 768, 170, 54, new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
+                com.badlogic.gdx.Gdx.app.getClipboard().setContents(JoinCode.display(code));
+                toast("Join code copied: " + JoinCode.display(code), true);
+            });
         }
         text("Each lesson has Edit (details and questions), Analysis (grades) and Class test. A stage made only for class "
                 + "tests is on the Class tests tab.", x, 860, w, 130, 1.25f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);

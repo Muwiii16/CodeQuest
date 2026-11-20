@@ -108,7 +108,10 @@ public class CampaignScreen extends StudentScreen {
                 : classes.get(classIdx).subjectName() + "  -  " + classes.get(classIdx).sectionName()
                         + (classes.get(classIdx).termLabel().isEmpty() ? "" : "  -  " + classes.get(classIdx).termLabel())
                         + (classes.get(classIdx).ended() ? "   (ended)" : "");
-        text(context, 160, 128, 1300, 40, 1.8f, classes.isEmpty() || !classes.get(classIdx).ended() ? MUTED : GOLD, Align.left);
+        text(context, 160, 128, 1010, 40, 1.8f, classes.isEmpty() || !classes.get(classIdx).ended() ? MUTED : GOLD, Align.left);
+        // a student enrolls themselves with the code the professor gives
+        solidButton("Join a class", 1190, 122, 290, 52, GOOD,
+                () -> game.setScreen(new JoinClassScreen(game, username, () -> game.setScreen(new CampaignScreen(game, username)))));
         if (classes.size() > 1) {
             solidButton("Subjects", 1500, 122, 260, 52, BUTTON, this::openSubjects);
         }
