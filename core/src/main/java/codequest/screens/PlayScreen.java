@@ -1131,6 +1131,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         sr.setProjectionMatrix(camera.combined);
 
         batch.begin();
+        batch.setColor(Color.WHITE); // the last frame's weapon glow or spark must not tint the map
         map.draw(batch);
         drawWorldSprites();
         batch.end();
@@ -1261,6 +1262,8 @@ public class PlayScreen extends InputAdapter implements Screen {
                 batch.draw(sprite("game/glow.png"), back.x - size / 2, H - back.y - size / 2, size * 1.4f, size * 1.4f);
             }
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            // the batch keeps the color of the last trail dot (about 10 % opaque): without this the hero is drawn as a ghost
+            batch.setColor(Color.WHITE);
         }
 
         if (avatarFlash > 0f) {

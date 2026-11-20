@@ -308,7 +308,11 @@ Requested: when the answer to a follow-up question is far from what was asked, o
 - Verified live and on screen: empty description; "Teach loops" (questions, no error); answer "my favorite food is pizza and i like the beach" (explained). Also checked against the AI: another-language answer, nonsense request, a cooking request, a good answer (passes). Tests: `ClarificationTest`.
 - Not checked on screen: the pop-up on each of the other professor screens (they use the same code); the student-side screens and the login screen keep their own messages.
 
-## Round 25: School Assets in stage creation (Nov 20 2026, branch `asset-update`)
+## Round 25: a trail made the character see-through (Nov 20 2026)
+- Bug (not intended): with any trail equipped the hero was drawn as a ghost. The trail is a row of fading dots; each dot sets the SpriteBatch color to a very transparent tint of the trail color, and nothing reset it before the hero was drawn, so the hero got the last dot's color (about 5-12 % opaque). Fixed in `PlayScreen.drawWorldSprites` (`batch.setColor(Color.WHITE)` after the trail), and the batch color is also reset at the start of every frame (the weapon glow and sparks leave it changed, which could tint the map).
+- Reproduced with a test trail of each rarity (no trail / common / legendary) before and after; the hero is solid in all three. The cosmetics screen's own preview was not affected (it draws the hero as a separate picture on top of the trail dots).
+
+## Round 26: School Assets in stage creation (Nov 20 2026, branch `asset-update`)
 Requested: add the School Assets pack (classroom tiles and furniture) to professor stage creation. No migration: the stage's look is saved in the existing `stages.campus_background` column.
 - **Files**: `assets/game/school/16|32|64/{doors,floors,objects,wall,windows}.png` (names lower-cased, "-sheet" dropped) and the Aseprite sources in `tools/art/school/` (`turrets.aseprite` has no PNG yet: "yung turrets lang wala design", the turrets have no design yet). In the 64 folder doors and objects are 8x while the rest are 4x, so the game builds rooms from the 16 px sheets (`Art.school(sheet)`).
 - **Stage creation** has "Map: Campus | Classroom | Library | Hallway" under the stage preview, and the preview shows the chosen map. Saved with the stage (`CampaignData.createStage(..., theme)`); `Lesson.theme()` reads it back, and stages without a theme are Campus.
