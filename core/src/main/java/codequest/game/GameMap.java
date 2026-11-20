@@ -17,12 +17,7 @@ import java.util.List;
  */
 public class GameMap {
 
-    private static final int COLS = 20;
-
-    private static final int[][][] CORNERS = {
-            { { 0, 8 }, { 11, 8 }, { 11, 6 }, { 8, 6 }, { 8, 3 }, { 13, 3 }, { 13, 0 } },
-            { { 0, 6 }, { 7, 6 }, { 7, 2 }, { 12, 2 }, { 12, 6 }, { 16, 6 }, { 16, 9 } },
-            { { 0, 3 }, { 6, 3 }, { 6, 8 }, { 10, 8 }, { 10, 2 }, { 14, 2 }, { 14, 6 }, { 19, 6 } } };
+    private static final int COLS = MapPaths.COLS;
 
     private Texture mapImage;
     private final int cellSize;
@@ -34,13 +29,22 @@ public class GameMap {
     private List<TowerSlots.Slot> towerSlots = List.of();
 
     public GameMap(int stageNumber, int mapWidth) {
+        this(stageNumber, mapWidth, MapTheme.CAMPUS);
+    }
+
+    /** The map in a theme: the campus picture, or a school room built from the School Assets on the same path. */
+    public GameMap(int stageNumber, int mapWidth, MapTheme theme) {
         this.stageNumber = stageNumber;
         this.mapWidth = mapWidth;
         this.mapHeight = (int) (mapWidth * (902.0 / 1640.0)); // the map pictures are 1640 x 902 (20 x 11 cells)
         this.offsetY = ((int) BaseScreen.VIRTUAL_HEIGHT - mapHeight) / 2;
         this.cellSize = mapWidth / COLS;
 
-        mapImage = load(Art.map(stageNumber)); // the picture already shows the campus gate and the building at the path's end
+        if (theme.isSchool()) {
+            mapImage = room(theme, stageNumber);
+        } else {
+            mapImage = load(Art.map(stageNumber)); // the picture already shows the campus gate and the building at the path's end
+        }
         buildPath();
         loadSlots();
     }
@@ -70,19 +74,18 @@ public class GameMap {
         }
     }
 
+    private Texture room(MapTheme theme, int layout) {
+        try {
+            return SchoolRoomPainter.texture(theme, layout); // shared, like the campus pictures
+        } catch (Exception e) {
+            Gdx.app.error("GameMap", "Could not build the " + theme.key() + " room, using the campus map", e);
+            return load(Art.map(layout));
+        }
+    }
+
     private void buildPath() {
-        int[][] corners = CORNERS[(stageNumber - 1) % CORNERS.length];
-        waypoints.add(cellToPixel(corners[0][0], corners[0][1]));
-        for (int i = 1; i < corners.length; i++) {
-            int c = corners[i - 1][0];
-            int r = corners[i - 1][1];
-            int dc = Integer.signum(corners[i][0] - c);
-            int dr = Integer.signum(corners[i][1] - r);
-            while (c != corners[i][0] || r != corners[i][1]) {
-                c += dc;
-                r += dr;
-                waypoints.add(cellToPixel(c, r));
-            }
+        for (int[] cell : MapPaths.cells(stageNumber)) {
+            waypoints.add(cellToPixel(cell[0], cell[1]));
         }
     }
 
@@ -118,6 +121,6 @@ public class GameMap {
     }
 
     public void dispose() {
-        // the map picture belongs to the shared cache (Assets) and stays loaded
+        // the map picture belongs to a shared cache (Assets or SchoolRoomPainter) and stays loaded
     }
 }

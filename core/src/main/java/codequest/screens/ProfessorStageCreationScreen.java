@@ -13,7 +13,10 @@ import codequest.data.CampaignData.ClassInfo;
 import codequest.data.Lesson;
 import codequest.data.LessonGenerator;
 import codequest.data.QuestionData;
+import codequest.game.MapTheme;
+import codequest.game.SchoolRoomPainter;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
@@ -62,6 +65,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private Set<CTopic> taught = EnumSet.noneOf(CTopic.class);
     private String taughtNotes = "";
     private int difficultyIdx = 1;
+    /** How the stage looks: the campus map or one of the school rooms. */
+    private MapTheme theme = MapTheme.CAMPUS;
     private boolean adaptive = true;
     private GeneratedLesson generated;
 
@@ -161,21 +166,33 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             drawGenerated();
             return;
         }
-        Stage layout = DefaultStages.forNumber(DefaultStages.layoutFor(nextNumber));
-        Image map = new Image(new TextureRegionDrawable(new TextureRegion(texture(Art.map(DefaultStages.layoutFor(nextNumber))))));
-        placeTopLeft(map, 880, 215, 520, 293);
+        int layoutNumber = DefaultStages.layoutFor(asTest ? nextTestNumber : nextNumber);
+        Texture mapPicture = theme.isSchool() ? SchoolRoomPainter.texture(theme, layoutNumber) : texture(Art.map(layoutNumber));
+        Image map = new Image(new TextureRegionDrawable(new TextureRegion(mapPicture)));
+        placeTopLeft(map, 880, 215, 520, 286);
         map.setTouchable(Touchable.disabled);
         stage.addActor(map);
         text("The map is only the setting. What the lesson teaches comes from your description, and the questions are "
                 + "built from it (a different number of questions is fine).", 1430, 215, 410, 200, 1.3f, MUTED, Align.topLeft,
                 PixelFonts.Face.SANS).setWrap(true);
+
+        // how the stage looks: the campus, or a school room built from the School Assets (same path and tower spots)
+        text("Map", 1430, 430, 410, 28, 1.25f, MUTED, Align.left);
+        MapTheme[] themes = MapTheme.values();
+        for (int i = 0; i < themes.length; i++) {
+            MapTheme t = themes[i];
+            solidButton(t.label(), 880 + i * 242, 513, 230, 52, t == theme ? new Color(0.2f, 0.42f, 0.78f, 1f) : BUTTON, () -> {
+                theme = t;
+                rebuild();
+            });
+        }
+
         String what = asTest ? "class test" : "lesson";
-        text("Describe the " + what + " below, then press \"Generate preview with AI\". Or save it and write the questions "
-                + "yourself in the editor.\n\nThe AI uses only what you describe. Nothing is added that you did not "
-                + "ask for."
-                + (taught.isEmpty() ? "" : "\n\nEarlier lessons taught "
+        text("Describe the " + what + " below, then press \"Generate preview with AI\", or save it and write the questions "
+                + "yourself in the editor. The AI uses only what you describe."
+                + (taught.isEmpty() ? "" : " Earlier lessons taught "
                         + ScopeCheck.formatTopics(taught).toLowerCase().replace('_', ' ') + "; this " + what + " may reuse them."),
-                880, 525, 960, 170, 1.3f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+                880, 580, 960, 115, 1.2f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
     }
 
     /** The AI's draft: its program on the left, its questions (in the order the student meets them) on the right. */
@@ -350,10 +367,11 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         String prompt = fullPrompt != null && generated != null ? fullPrompt : promptBox.getText();
         GeneratedLesson draft = generated;
         boolean test = asTest;
+        MapTheme look = theme;
         Set<CTopic> savedTopics = draft != null ? usedTopics : scopeFor(prompt);
         load("Saving the lesson...", () -> {
             Optional<Lesson> saved = campaigns.createStage(cls.id(), cls.sectionName(), title, difficulty, adaptive && !test, prompt,
-                    savedTopics, test);
+                    savedTopics, test, look);
             if (saved.isEmpty() || draft == null) {
                 return saved.map(l -> Map.entry(l, 0)).orElse(null);
             }
