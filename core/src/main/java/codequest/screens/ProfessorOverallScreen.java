@@ -118,7 +118,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
         int visible = to - from;
         float colW = Math.min(190f, (1740 - nameW - 190) / Math.max(1, visible));
 
-        text("Rank per lesson   (- = not completed)", 90, 155, 800, 36, 1.5f, MUTED, Align.left);
+        text("Rank per lesson, from accuracy   (- = not completed)", 90, 155, 1000, 36, 1.5f, MUTED, Align.left);
         if (lessons.size() > LESSONS_PER_PAGE) {
             int pages = (lessons.size() + LESSONS_PER_PAGE - 1) / LESSONS_PER_PAGE;
             if (page > 0) {
@@ -135,12 +135,14 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             }
         }
 
+        text("Rank counts wrong answers; score is points earned (wrong answers take none away), so A can show 100%.",
+                90, 187, 1740, 26, 1.0f, MUTED, Align.left);
         rect(90, 215, 1740, 50, new Color(0.2f, 0.16f, 0.06f, 1f));
         text("STUDENT", 110, 215, nameW, 50, 1.3f, AMBER, Align.left);
         for (int i = from; i < to; i++) {
             text("L" + lessons.get(i).number(), 90 + nameW + (i - from) * colW, 215, colW, 50, 1.3f, AMBER, Align.center);
         }
-        text("AVG GRADE", 90 + nameW + visible * colW, 215, 190, 50, 1.3f, AMBER, Align.center);
+        text("AVG SCORE", 90 + nameW + visible * colW, 215, 190, 50, 1.3f, AMBER, Align.center);
 
         for (int r = 0; r < Math.min(students.size(), 9); r++) {
             ProfessorData.Student s = students.get(r);
