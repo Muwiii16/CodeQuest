@@ -47,11 +47,15 @@ public class DatabaseManager {
     }
 
     public enum SignUpResult {
-        OK, TAKEN, INVALID, BAD_INVITE, PROFESSOR_DISABLED, ERROR
+        OK, TAKEN, INVALID, BAD_INVITE, PROFESSOR_DISABLED, TOO_MANY, ERROR
     }
 
     public enum JoinStatus {
-        JOINED, ALREADY_IN, ENDED, INVALID_CODE, NOT_A_STUDENT, ERROR
+        JOINED, ALREADY_IN, ENDED, INVALID_CODE, NOT_A_STUDENT, TOO_MANY, NOT_SIGNED_IN, ERROR
+    }
+
+    /** The answer to a sign-in: the account when the password was right, or {@code locked} after too many wrong tries. */
+    public record LoginResult(Optional<Account> account, boolean locked) {
     }
 
     /** What happened when a student used a class's join code. */
@@ -62,9 +66,9 @@ public class DatabaseManager {
      * A student enrolls in the class that has this code. The server checks everything: a code that matches no class, a class
      * that has ended, an account that is not a student, and a student who is already in the class.
      */
-    public JoinResult joinClass(String username, String typedCode) {
-        JsonValue result = SupabaseClient.post("rpc/join_class", "{\"p_username\":\"" + escape(username)
-                + "\",\"p_code\":\"" + escape(JoinCode.normalize(typedCode)) + "\"}");
+    public JoinResult joinClass(String typedCode) {
+        // the student is whoever is signed in: the server reads it from the session token, not from anything typed here
+        JsonValue result = SupabaseClient.post("rpc/join_class", "{\"p_code\":\"" + escape(JoinCode.normalize(typedCode)) + "\"}");
         if (result == null || result.isNull() || !result.isObject()) {
             return new JoinResult(JoinStatus.ERROR, -1L, "", null);
         }
@@ -74,6 +78,8 @@ public class DatabaseManager {
             case "ended" -> JoinStatus.ENDED;
             case "invalid" -> JoinStatus.INVALID_CODE;
             case "not_student" -> JoinStatus.NOT_A_STUDENT;
+            case "too_many" -> JoinStatus.TOO_MANY;
+            case "not_signed_in" -> JoinStatus.NOT_SIGNED_IN;
             default -> JoinStatus.ERROR;
         };
         return new JoinResult(status, result.getLong("class_id", -1L), result.getString("section_name", ""),
@@ -82,17 +88,34 @@ public class DatabaseManager {
 
     /**
      * Checks the username and password on the server (passwords are stored hashed and compared there,
-     * so nothing readable is ever fetched). Empty means wrong credentials or the server could not be reached.
+     * so nothing readable is ever fetched). No account means wrong credentials or the server could not be reached;
+     * {@code locked} means too many wrong tries for now. On success the server also hands over a session token, which is
+     * kept in memory and sent with every later request (see {@link #logout()}).
      */
-    public Optional<Account> login(String username, String password) {
+    public LoginResult login(String username, String password) {
+        SupabaseClient.setSession(null); // a failed attempt must not leave an earlier person's session behind
         JsonValue result = SupabaseClient.post("rpc/login_user",
                 "{\"p_username\":\"" + escape(username) + "\",\"p_password\":\"" + escape(password) + "\"}");
         if (result == null || result.isNull() || !result.isObject()) {
-            return Optional.empty();
+            return new LoginResult(Optional.empty(), false);
         }
+        if (result.getBoolean("locked", false)) {
+            return new LoginResult(Optional.empty(), true);
+        }
+        String token = result.getString("token", null);
+        if (token == null) {
+            return new LoginResult(Optional.empty(), false);
+        }
+        SupabaseClient.setSession(token);
         long id = result.getLong("id");
         profileIdCache.put(username, id);
-        return Optional.of(new Account(id, result.getString("role", "student")));
+        return new LoginResult(Optional.of(new Account(id, result.getString("role", "student"))), false);
+    }
+
+    /** Signs out: the session token is dropped here and ended on the server. */
+    public void logout() {
+        profileIdCache.clear();
+        SupabaseClient.endSession();
     }
 
     /**
@@ -112,6 +135,7 @@ public class DatabaseManager {
             case "invalid" -> SignUpResult.INVALID;
             case "bad_invite" -> SignUpResult.BAD_INVITE;
             case "professor_disabled" -> SignUpResult.PROFESSOR_DISABLED;
+            case "too_many" -> SignUpResult.TOO_MANY;
             default -> SignUpResult.ERROR;
         };
     }

@@ -40,7 +40,10 @@ public abstract class ProfessorScreen extends BaseScreen {
             solidButton("Back", VIRTUAL_WIDTH - 330, 22, 280, 66, BUTTON, backTarget);
         } else {
             solidButton("Log out", VIRTUAL_WIDTH - 330, 22, 280, 66, new Color(0.45f, 0.18f, 0.18f, 1f),
-                    () -> game.setScreen(new LoginScreen(game)));
+                    () -> {
+                        new codequest.data.DatabaseManager().logout();
+                        game.setScreen(new LoginScreen(game));
+                    });
         }
     }
 

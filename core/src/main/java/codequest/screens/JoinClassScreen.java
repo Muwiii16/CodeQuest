@@ -48,7 +48,7 @@ public class JoinClassScreen extends StudentScreen {
                     : "A class code has 6 letters and numbers, and you typed " + count + ". Check it with your professor.");
             return;
         }
-        load("Joining the class...", () -> db.joinClass(username, typed), this::show);
+        load("Joining the class...", () -> db.joinClass(typed), this::show);
     }
 
     private void show(JoinResult r) {
@@ -64,6 +64,9 @@ public class JoinClassScreen extends StudentScreen {
             case ENDED -> showError("This class has ended", "Its professor has closed it, so nobody can join it any more. "
                     + "Ask your professor if you need to be added another way.");
             case NOT_A_STUDENT -> showError("Only students can join a class", "This account is not a student account.");
+            case TOO_MANY -> showError("Too many wrong codes", "You typed several codes that do not match a class. Wait 15 minutes "
+                    + "and ask your professor to check the code.");
+            case NOT_SIGNED_IN -> showError("Please sign in again", "Your session has ended. Log out and log in again.");
             default -> showError("Could not reach the server", "Check your internet connection and try again.");
         }
     }

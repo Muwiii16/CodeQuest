@@ -24,7 +24,61 @@ final class SupabaseClient {
             .connectTimeout(Duration.ofSeconds(8))
             .build();
 
+    /**
+     * The session token the server gave at sign-in. It is sent with every request (header x-session); the database and the
+     * Edge Functions use it to know who is asking, so nobody can read or change what is not theirs. Only its hash is stored
+     * on the server, and it is never written to disk here.
+     */
+    private static volatile String sessionToken;
+
     private SupabaseClient() {
+    }
+
+    static void setSession(String token) {
+        sessionToken = token == null || token.isBlank() ? null : token;
+    }
+
+    static boolean hasSession() {
+        return sessionToken != null;
+    }
+
+    /** Adds the session header when someone is signed in. */
+    private static HttpRequest.Builder withSession(HttpRequest.Builder builder, String token) {
+        return token == null ? builder : builder.header("x-session", token);
+    }
+
+    /**
+     * Signs out: forgets the token at once and tells the server to end the session (in the background, so the screen does
+     * not wait). A server that cannot be reached just lets the session expire by itself.
+     */
+    static void endSession() {
+        final String token = sessionToken;
+        sessionToken = null;
+        if (token == null) {
+            return;
+        }
+        Thread t = new Thread(() -> {
+            String base = SupabaseConfig.getUrl();
+            String anonKey = SupabaseConfig.getAnonKey();
+            if (base == null || anonKey == null) {
+                return;
+            }
+            try {
+                HttpRequest request = withSession(HttpRequest.newBuilder(URI.create(base + "rpc/logout_user"))
+                        .timeout(Duration.ofSeconds(8))
+                        .header("apikey", anonKey)
+                        .header("Authorization", "Bearer " + anonKey)
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{}")), token).build();
+                HTTP.send(request, HttpResponse.BodyHandlers.discarding());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception ignored) {
+                // the session expires by itself
+            }
+        }, "codequest-logout");
+        t.setDaemon(true);
+        t.start();
     }
 
     static JsonValue get(String pathAndQuery) {
@@ -47,11 +101,11 @@ final class SupabaseClient {
             return false;
         }
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(base + pathAndQuery))
+            HttpRequest request = withSession(HttpRequest.newBuilder(URI.create(base + pathAndQuery))
                     .timeout(Duration.ofSeconds(8))
                     .header("apikey", anonKey)
                     .header("Authorization", "Bearer " + anonKey)
-                    .DELETE()
+                    .DELETE(), sessionToken)
                     .build();
             HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -85,12 +139,12 @@ final class SupabaseClient {
         }
         String url = base.replace("/rest/v1/", "/functions/v1/") + name;
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            HttpRequest request = withSession(HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .header("apikey", anonKey)
                     .header("Authorization", "Bearer " + anonKey)
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody)), sessionToken)
                     .build();
             HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             return new FunctionResult(response.statusCode(), response.body());
@@ -140,11 +194,11 @@ final class SupabaseClient {
         }
 
         try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(base + pathAndQuery))
+            HttpRequest.Builder builder = withSession(HttpRequest.newBuilder(URI.create(base + pathAndQuery))
                     .timeout(Duration.ofSeconds(8))
                     .header("apikey", anonKey)
                     .header("Authorization", "Bearer " + anonKey)
-                    .header("Accept", "application/json");
+                    .header("Accept", "application/json"), sessionToken);
             if (jsonBody != null) {
                 builder.header("Content-Type", "application/json")
                         .header("Prefer", "return=representation")

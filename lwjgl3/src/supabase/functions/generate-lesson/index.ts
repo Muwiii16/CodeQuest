@@ -13,7 +13,7 @@ const DAILY_CAP = 60;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-session",
 };
 
 const json = (body: unknown, status = 200) =>
@@ -243,6 +243,26 @@ async function askGemini(apiKey: string, user: string, system = RULES, schema: u
   }
 }
 
+// Who is calling? The game sends the session token it got at sign-in (header x-session); only its hash is stored in `sessions`.
+// Until the lockdown is switched on (app_secrets enforce_sessions = on) a call without a token is still accepted, so the
+// game released before this change keeps working. Returns a response to send back when the call must be refused.
+async function sha256Hex(text: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function checkSession(sb: ReturnType<typeof createClient>, req: Request, role?: string): Promise<Response | null> {
+  const { data: flag } = await sb.from("app_secrets").select("value").eq("key", "enforce_sessions").maybeSingle();
+  if (flag?.value !== "on") return null;
+  const token = req.headers.get("x-session") ?? "";
+  if (!/^[0-9a-f]{64}$/.test(token)) return json({ error: "Please log in again." }, 401);
+  const { data } = await sb.from("sessions").select("role").eq("token_hash", await sha256Hex(token))
+    .gt("expires_at", new Date().toISOString()).maybeSingle();
+  if (!data) return json({ error: "Your session has ended. Log out and log in again." }, 401);
+  if (role && data.role !== role) return json({ error: "Only a professor can do that." }, 403);
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
@@ -265,8 +285,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: "AI is not set up yet: the ANTHROPIC_API_KEY or GEMINI_API_KEY secret is missing." }, 503);
   }
 
-  // daily cap
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const refused = await checkSession(sb, req, "professor");
+  if (refused) return refused;
+
+  // daily cap
   const { data: allowed, error: capError } = await sb.rpc("ai_take_call", { p_cap: DAILY_CAP });
   if (capError) return json({ error: "Could not check the daily AI limit." }, 500);
   if (!allowed) return json({ error: "The daily AI limit has been reached. Try again tomorrow." }, 429);

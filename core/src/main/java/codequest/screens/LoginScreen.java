@@ -226,7 +226,12 @@ public class LoginScreen extends BaseScreen {
     }
 
     private void handleLogin(String user, String pass) {
-        load("Signing in...", () -> dbManager.login(user, pass), account -> {
+        load("Signing in...", () -> dbManager.login(user, pass), attempt -> {
+            if (attempt.locked()) {
+                setStatus("Too many wrong tries. Wait 15 minutes, then try again.", false);
+                return;
+            }
+            var account = attempt.account();
             if (account.isEmpty()) {
                 setStatus("Invalid username or password.", false);
                 return;
@@ -261,6 +266,7 @@ public class LoginScreen extends BaseScreen {
                 case INVALID -> setStatus("Use a username of at least 3 characters and a password of at least 4.", false);
                 case BAD_INVITE -> setStatus("Wrong professor access code.", false);
                 case PROFESSOR_DISABLED -> setStatus("Professor sign-up is turned off.", false);
+                case TOO_MANY -> setStatus("Too many wrong access codes. Wait 15 minutes, then try again.", false);
                 default -> setStatus("Could not reach the server. Check your connection.", false);
             }
         });
