@@ -2,6 +2,7 @@ package codequest.screens;
 
 import codequest.Main;
 import codequest.data.CampaignData.ClassInfo;
+import codequest.data.JoinCode;
 import codequest.data.ProfessorData;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
@@ -27,6 +28,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     private boolean ended;
     private final int base;
     private long dropArmed = -1;
+    private boolean codeArmed;
     private boolean deleteArmed;
 
     public ProfessorClassManagementScreen(Main game, String username, ClassInfo cls) {
@@ -37,8 +39,6 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         card(60, 140, 1800, 880);
         addField = textField("Student username to add", false, 90, 165, 700, 64);
         solidButton("Add student", 810, 165, 280, 64, GOOD, this::add);
-        text("Dropping a student removes them from this class only; their progress and certificates are kept.", 1110,
-                160, 720, 80, 1.3f, MUTED, Align.topLeft).setWrap(true);
 
         // class details and the danger zone sit at the bottom
         rect(90, 800, 1740, 3, new Color(1f, 1f, 1f, 0.12f));
@@ -55,6 +55,53 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         solidButton("Save", 1180, 860, 100, 64, GOOD, this::saveDetails);
         base = mark();
         load("Loading the class...", () -> data.roster(cls.id()), students -> rebuild(students));
+        if (cls.joinCode() == null || cls.joinCode().isBlank()) {
+            // a class opened from somewhere that did not load the code: ask for it
+            long classId = cls.id();
+            load("Loading the join code...", () -> data.joinCode(classId), code -> {
+                this.cls = this.cls.withJoinCode(code);
+                refresh();
+            });
+        }
+    }
+
+    /** The join code: what students type to enroll themselves, with Copy and a new code if it was shared too widely. */
+    private void drawJoinCode() {
+        text("Join code  -  students type it in the game to enroll themselves", 1110, 148, 720, 26, 1.1f, MUTED, Align.left,
+                PixelFonts.Face.SANS);
+        boolean has = cls.joinCode() != null && !cls.joinCode().isBlank();
+        text(has ? JoinCode.display(cls.joinCode()) : "...", 1110, 176, 330, 60, 3.2f, new Color(1f, 0.82f, 0.3f, 1f), Align.left,
+                PixelFonts.Face.MONO);
+        if (!has) {
+            return;
+        }
+        solidButton("Copy", 1450, 172, 150, 56, new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
+            com.badlogic.gdx.Gdx.app.getClipboard().setContents(JoinCode.display(cls.joinCode()));
+            toast("Join code copied: " + JoinCode.display(cls.joinCode()), true);
+        });
+        solidButton(codeArmed ? "Sure?" : "New code", 1610, 172, 220, 56,
+                codeArmed ? new Color(0.7f, 0.15f, 0.15f, 1f) : BUTTON, this::newCode);
+    }
+
+    private void newCode() {
+        if (!codeArmed) {
+            codeArmed = true;
+            toast("Press the button again to replace the code. The old code stops working; enrolled students stay enrolled.",
+                    true);
+            refresh();
+            return;
+        }
+        codeArmed = false;
+        load("Making a new code...", () -> data.regenerateJoinCode(cls.id()), code -> {
+            if (code == null) {
+                showError("Could not make a new code", "Check your internet connection and try again. The old code still works.");
+                refresh();
+                return;
+            }
+            cls = cls.withJoinCode(code);
+            refresh();
+            toast("New join code: " + JoinCode.display(code), true);
+        });
     }
 
     private void refresh() {
@@ -63,8 +110,11 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
 
     private void rebuild(List<ProfessorData.Student> students) {
         clearFrom(base);
-        text(students.size() + (students.size() == 1 ? " student" : " students") + " in this class", 90, 250, 800, 40, 1.8f,
+        drawJoinCode();
+        text(students.size() + (students.size() == 1 ? " student" : " students") + " in this class", 90, 250, 400, 40, 1.8f,
                 AMBER, Align.left);
+        text("Dropping a student removes them from this class only; progress and certificates are kept.", 520, 240, 500, 50,
+                1.05f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
         solidButton(ended ? "ENDED  -  students see it under past subjects (tap to reopen)"
                 : "Running  -  tap when the subject is finished", 1030, 245, 800, 46, ended ? new Color(0.5f, 0.33f, 0.1f, 1f) : GOOD,
                 () -> {
@@ -145,7 +195,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         load("Saving...", () -> data.updateClass(cls.id(), section, finalCourse, subject, term, nowEnded), ok -> {
             if (ok) {
                 cls = new ClassInfo(cls.id(), finalCourse, section, cls.language(), cls.studentCount(), cls.lessonCount(),
-                        subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, nowEnded);
+                        subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, nowEnded, cls.joinCode());
                 toast("Class details saved.", true);
             } else {
                 toast("Could not save. Check your connection.", false);

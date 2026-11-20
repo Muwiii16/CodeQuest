@@ -2,6 +2,7 @@ package codequest.screens;
 
 import codequest.Main;
 import codequest.data.CampaignData.ClassInfo;
+import codequest.data.JoinCode;
 import codequest.data.ProfessorData;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
@@ -76,8 +77,9 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
     private void rebuild() {
         clearFrom(base);
         if (students.isEmpty()) {
-            text("No students added yet. You can also add them later under Class management.", 1010, 310, 820, 80, 1.5f,
-                    MUTED, Align.topLeft).setWrap(true);
+            text("No names needed: when you create the class you get a join code. Students enter it in the game to enroll "
+                    + "themselves.\n\nOr add students by username here (or later under Class management).", 1010, 310, 820, 160,
+                    1.5f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
             return;
         }
         for (int i = 0; i < Math.min(students.size(), 11); i++) {
@@ -140,8 +142,13 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
                 return;
             }
             ClassInfo info = new ClassInfo(created.get().classId(), finalCourse, section, "C",
-                    created.get().enrolled().size(), 0, subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, false);
-            game.setScreen(new ProfessorSectionScreen(game, username, info));
+                    created.get().enrolled().size(), 0, subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, false,
+                    created.get().joinCode());
+            String code = JoinCode.display(created.get().joinCode());
+            showNotice("Class created", "Join code:   " + code + "\n\nGive this code to your students. In the game they open "
+                    + "Campaign, press Join a class and type it, and they are enrolled. You can find the code again at any "
+                    + "time under Class management, and replace it with a new one.",
+                    () -> game.setScreen(new ProfessorSectionScreen(game, username, info)));
         });
     }
 }

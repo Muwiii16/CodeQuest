@@ -17,11 +17,22 @@ public class CampaignData {
 
     /** A class (section) a professor handles and students belong to. */
     public record ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount,
-            int lessonCount, String subject, String term, boolean ended) {
+            int lessonCount, String subject, String term, boolean ended, String joinCode) {
 
         /** A class with no subject name or term yet. */
         public ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount, int lessonCount) {
-            this(id, courseCode, sectionName, language, studentCount, lessonCount, null, null, false);
+            this(id, courseCode, sectionName, language, studentCount, lessonCount, null, null, false, "");
+        }
+
+        /** A class without its join code (the code is only loaded for a professor). */
+        public ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount, int lessonCount,
+                String subject, String term, boolean ended) {
+            this(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, "");
+        }
+
+        /** The same class with another join code. */
+        public ClassInfo withJoinCode(String code) {
+            return new ClassInfo(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, code);
         }
 
         /** The subject's name, or the course code when none was given. */

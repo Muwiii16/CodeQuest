@@ -336,13 +336,24 @@ public abstract class BaseScreen implements Screen {
 
     private Label toastLabel;
     private Group errorPopup;
+    private Runnable popupOnClose;
 
     /**
      * A message the user has to acknowledge: the screen is dimmed and a box says what is wrong until OK is pressed (or Enter,
      * Space or Esc). Used for every error and every "something is missing" in the professor screens.
      */
     protected void showError(String title, String message) {
+        showPopup(title, message, new Color(0.9f, 0.3f, 0.27f, 1f), null);
+    }
+
+    /** The same pop-up for good news or an instruction (a green accent); {@code onClose} runs when it is dismissed. */
+    protected void showNotice(String title, String message, Runnable onClose) {
+        showPopup(title, message, new Color(0.25f, 0.72f, 0.5f, 1f), onClose);
+    }
+
+    private void showPopup(String title, String message, Color accent, Runnable onClose) {
         closeErrorPopup();
+        popupOnClose = onClose;
         if (toastLabel != null) {
             toastLabel.remove();
             toastLabel = null;
@@ -360,9 +371,9 @@ public abstract class BaseScreen implements Screen {
             float x = (VIRTUAL_WIDTH - w) / 2f;
             float y = (VIRTUAL_HEIGHT - h) / 2f;
             Image dim = rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, new Color(0f, 0f, 0f, 0.65f)); // takes every click meanwhile
-            rect(x - 4, y - 4, w + 8, h + 8, new Color(0.55f, 0.16f, 0.16f, 1f));
+            rect(x - 4, y - 4, w + 8, h + 8, new Color(accent.r * 0.6f, accent.g * 0.6f, accent.b * 0.6f, 1f));
             rect(x, y, w, h, new Color(0.1f, 0.12f, 0.2f, 1f));
-            rect(x, y, w, 10, new Color(0.9f, 0.3f, 0.27f, 1f));
+            rect(x, y, w, 10, accent);
             text(title, x + 44, y + 36, w - 88, 52, 2.1f, Color.WHITE, Align.left).setTouchable(Touchable.disabled);
             text(body, x + 44, y + 112, w - 88, 210, 1.55f, new Color(0.88f, 0.9f, 0.97f, 1f), Align.topLeft,
                     PixelFonts.Face.SANS).setWrap(true);
@@ -387,6 +398,11 @@ public abstract class BaseScreen implements Screen {
             errorPopup.remove();
             errorPopup = null;
             stage.setKeyboardFocus(null);
+            Runnable after = popupOnClose;
+            popupOnClose = null;
+            if (after != null) {
+                after.run();
+            }
         }
     }
 

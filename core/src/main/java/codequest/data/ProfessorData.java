@@ -28,7 +28,7 @@ public class ProfessorData {
         ENROLLED, NO_SUCH_STUDENT, NOT_A_STUDENT, ALREADY_ENROLLED, ERROR
     }
 
-    public record CreatedClass(long classId, List<String> enrolled, List<String> skipped) {
+    public record CreatedClass(long classId, List<String> enrolled, List<String> skipped, String joinCode) {
     }
 
     private final DatabaseManager db = new DatabaseManager();
@@ -53,7 +53,8 @@ public class ProfessorData {
     public List<ClassInfo> listClasses(long professorId) {
         List<ClassInfo> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("classes?professor_id=eq." + professorId
-                + "&select=id,course_code,section_name,language,subject,term,ended,class_enrollments(count),campaigns(stages(count))"
+                + "&select=id,course_code,section_name,language,subject,term,ended,join_code,class_enrollments(count),"
+                + "campaigns(stages(count))"
                 + "&order=created_at");
         if (rows == null) {
             return out;
@@ -69,9 +70,25 @@ public class ProfessorData {
             out.add(new ClassInfo(r.getLong("id"), r.getString("course_code", "CC102"),
                     r.getString("section_name", "?"), r.getString("language", "C"),
                     enrolled != null && enrolled.size > 0 ? enrolled.get(0).getInt("count", 0) : 0, lessons,
-                    r.getString("subject", null), r.getString("term", null), r.getBoolean("ended", false)));
+                    r.getString("subject", null), r.getString("term", null), r.getBoolean("ended", false),
+                    r.getString("join_code", "")));
         }
         return out;
+    }
+
+    /** A class's join code, or an empty text when it cannot be read. */
+    public String joinCode(long classId) {
+        JsonValue rows = SupabaseClient.get("classes?id=eq." + classId + "&select=join_code&limit=1");
+        return rows == null || rows.size == 0 ? "" : rows.get(0).getString("join_code", "");
+    }
+
+    /**
+     * Replaces a class's join code (the old one stops working at once) and returns the new one, or null when it could not
+     * be done. The code itself is made by the database.
+     */
+    public String regenerateJoinCode(long classId) {
+        JsonValue result = SupabaseClient.post("rpc/regenerate_join_code", "{\"p_class_id\":" + classId + "}");
+        return result == null || result.isNull() ? null : result.asString();
     }
 
     /**
@@ -103,7 +120,7 @@ public class ProfessorData {
             EnrollResult r = enrollStudent(classId, name);
             (r == EnrollResult.ENROLLED || r == EnrollResult.ALREADY_ENROLLED ? enrolled : skipped).add(name);
         }
-        return Optional.of(new CreatedClass(classId, enrolled, skipped));
+        return Optional.of(new CreatedClass(classId, enrolled, skipped, inserted.get(0).getString("join_code", "")));
     }
 
     private static String jsonOrNull(String s) {

@@ -140,8 +140,12 @@ public class ClassTestScreen extends StudentScreen {
         }
         if (st.sessions().isEmpty()) {
             text(inAClass ? "No class test is open right now.\nYour professor will open a lobby when it is time."
-                    : "You are not in a class yet.\nAsk your professor to add you to their class.", 200, 150, 1520, 840, 2f,
+                    : "You are not in a class yet.\nJoin one with the code your professor gave you.", 200, 150, 1520, 700, 2f,
                     MUTED, Align.center);
+            if (!inAClass) {
+                solidButton("Join a class", 760, 600, 400, 76, GOOD,
+                        () -> game.setScreen(new JoinClassScreen(game, username, () -> game.setScreen(new ClassTestScreen(game, username)))));
+            }
             return;
         }
 
