@@ -75,9 +75,15 @@ public class LessonGenerator {
      * ask when it is not, the topics the request names and one sentence saying what the lesson would cover. Exactly one of
      * error and the rest is meaningful.
      */
-    public record Clarification(boolean clear, List<String> questions, Set<CTopic> topics, String summary, String error) {
+    public record Clarification(boolean clear, List<String> questions, Set<CTopic> topics, String summary, String problem,
+            String error) {
         public boolean ok() {
             return error == null;
+        }
+
+        /** True when the AI says what is wrong with the request or with the professor's answers. */
+        public boolean hasProblem() {
+            return problem != null && !problem.isBlank();
         }
     }
 
@@ -87,7 +93,7 @@ public class LessonGenerator {
                 + SupabaseClient.jsonEscape(taughtNotes) + "\"}";
         SupabaseClient.FunctionResult r = SupabaseClient.callFunction("generate-lesson", body, 60);
         if (!r.ok()) {
-            return new Clarification(false, List.of(), Set.of(), "", errorMessage(r));
+            return new Clarification(false, List.of(), Set.of(), "", "", errorMessage(r));
         }
         return parseClarification(r.body());
     }
@@ -97,10 +103,10 @@ public class LessonGenerator {
         try {
             JsonValue root = new JsonReader().parse(json);
             if (root.has("error")) {
-                return new Clarification(false, List.of(), Set.of(), "", root.getString("error"));
+                return new Clarification(false, List.of(), Set.of(), "", "", root.getString("error"));
             }
             if (!root.isObject() || !root.has("clear")) {
-                return new Clarification(false, List.of(), Set.of(), "", "The AI's answer could not be read. Try again.");
+                return new Clarification(false, List.of(), Set.of(), "", "", "The AI's answer could not be read. Try again.");
             }
             Set<CTopic> topics = java.util.EnumSet.noneOf(CTopic.class);
             for (String t : strings(root.get("topics"))) {
@@ -116,10 +122,12 @@ public class LessonGenerator {
                     questions.add(q.trim());
                 }
             }
-            boolean clear = root.getBoolean("clear", false) && questions.isEmpty();
-            return new Clarification(clear, questions, topics, root.getString("summary", ""), null);
+            String problem = root.getString("problem", "").trim();
+            // an answer with a problem is never clear, whatever else the AI said
+            boolean clear = root.getBoolean("clear", false) && questions.isEmpty() && problem.isEmpty();
+            return new Clarification(clear, questions, topics, root.getString("summary", ""), problem, null);
         } catch (RuntimeException e) {
-            return new Clarification(false, List.of(), Set.of(), "", "The AI's answer could not be read. Try again.");
+            return new Clarification(false, List.of(), Set.of(), "", "", "The AI's answer could not be read. Try again.");
         }
     }
 

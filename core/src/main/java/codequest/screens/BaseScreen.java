@@ -267,7 +267,7 @@ public abstract class BaseScreen implements Screen {
                 }
                 if (finalError != null) {
                     Gdx.app.error("CodeQuest", "Background load failed", finalError);
-                    toast("Could not reach the server. Check your connection.", false);
+                    showError("Could not reach the server", "Check your internet connection and try again. Nothing was lost.");
                     return;
                 }
                 done.accept(finalResult);
@@ -335,9 +335,68 @@ public abstract class BaseScreen implements Screen {
     }
 
     private Label toastLabel;
+    private Group errorPopup;
+
+    /**
+     * A message the user has to acknowledge: the screen is dimmed and a box says what is wrong until OK is pressed (or Enter,
+     * Space or Esc). Used for every error and every "something is missing" in the professor screens.
+     */
+    protected void showError(String title, String message) {
+        closeErrorPopup();
+        if (toastLabel != null) {
+            toastLabel.remove();
+            toastLabel = null;
+        }
+        String shown = message == null || message.isBlank() ? "Something went wrong." : message.trim();
+        if (shown.length() > 480) {
+            shown = shown.substring(0, 477) + "...";
+        }
+        Group popup = region();
+        errorPopup = popup;
+        String body = shown;
+        fill(popup, () -> {
+            float w = 960f;
+            float h = 440f;
+            float x = (VIRTUAL_WIDTH - w) / 2f;
+            float y = (VIRTUAL_HEIGHT - h) / 2f;
+            Image dim = rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, new Color(0f, 0f, 0f, 0.65f)); // takes every click meanwhile
+            rect(x - 4, y - 4, w + 8, h + 8, new Color(0.55f, 0.16f, 0.16f, 1f));
+            rect(x, y, w, h, new Color(0.1f, 0.12f, 0.2f, 1f));
+            rect(x, y, w, 10, new Color(0.9f, 0.3f, 0.27f, 1f));
+            text(title, x + 44, y + 36, w - 88, 52, 2.1f, Color.WHITE, Align.left).setTouchable(Touchable.disabled);
+            text(body, x + 44, y + 112, w - 88, 210, 1.55f, new Color(0.88f, 0.9f, 0.97f, 1f), Align.topLeft,
+                    PixelFonts.Face.SANS).setWrap(true);
+            solidButton("OK", x + w / 2f - 150f, y + h - 92f, 300, 62, new Color(0.2f, 0.42f, 0.78f, 1f), this::closeErrorPopup);
+            dim.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+                @Override
+                public boolean keyDown(InputEvent event, int keycode) {
+                    if (keycode == com.badlogic.gdx.Input.Keys.ENTER || keycode == com.badlogic.gdx.Input.Keys.ESCAPE
+                            || keycode == com.badlogic.gdx.Input.Keys.SPACE) {
+                        closeErrorPopup();
+                        return true;
+                    }
+                    return false;
+                }
+            });
+            stage.setKeyboardFocus(dim);
+        });
+    }
+
+    protected void closeErrorPopup() {
+        if (errorPopup != null) {
+            errorPopup.remove();
+            errorPopup = null;
+            stage.setKeyboardFocus(null);
+        }
+    }
 
     /** A short status line at the bottom of the screen that fades away after a few seconds. */
     protected void toast(String message, boolean ok) {
+        if (!ok) {
+            // a problem the user must notice: a pop-up that stays until it is dismissed, not a line that fades after a few seconds
+            showError("Please check this", message);
+            return;
+        }
         if (toastLabel != null) {
             toastLabel.remove();
         }

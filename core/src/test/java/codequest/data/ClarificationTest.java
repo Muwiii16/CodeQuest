@@ -44,4 +44,26 @@ class ClarificationTest {
                 "{\"error\":\"The daily AI limit has been reached.\"}").error());
         assertFalse(LessonGenerator.parseClarification("not json at all").ok());
     }
+
+    @Test
+    void aProblemExplainsWhatIsWrongAndIsNeverClear() {
+        var c = LessonGenerator.parseClarification("{\"clear\":true,\"summary\":\"\",\"problem\":\"Question 1 asked for loops but the "
+                + "answer is about pizza.\",\"topics\":[],\"questions\":[\"Which loops?\"]}");
+        assertTrue(c.hasProblem());
+        assertFalse(c.clear());
+        assertEquals("Question 1 asked for loops but the answer is about pizza.", c.problem());
+        // even a "clear" answer with a problem and no questions is not clear: the professor has to change something
+        var d = LessonGenerator.parseClarification("{\"clear\":true,\"summary\":\"\",\"problem\":\"This is not about C.\","
+                + "\"topics\":[],\"questions\":[]}");
+        assertFalse(d.clear());
+        assertTrue(d.hasProblem());
+    }
+
+    @Test
+    void noProblemMeansNothingToTell() {
+        var c = LessonGenerator.parseClarification("{\"clear\":true,\"summary\":\"x\",\"problem\":\"\",\"topics\":[],\"questions\":[]}");
+        assertFalse(c.hasProblem());
+        assertTrue(c.clear());
+        assertFalse(LessonGenerator.parseClarification("{\"clear\":true,\"summary\":\"x\",\"topics\":[],\"questions\":[]}").hasProblem());
+    }
 }

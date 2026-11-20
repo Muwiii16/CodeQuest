@@ -463,7 +463,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
         QuestionDraft d = draft().cleaned();
         Optional<String> problem = d.problem(lesson.hasProgram());
         if (problem.isPresent()) {
-            toast(problem.get(), false);
+            showError("This question can't be saved yet", problem.get());
             rebuildPreview();
             return;
         }

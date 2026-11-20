@@ -216,7 +216,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private void generate() {
         String request = promptBox.getText().trim();
         if (request.length() < 5) {
-            toast("Describe what you need first (at least a few words).", false);
+            showError("Describe the stage first", "Type what you want to teach in the box at the bottom (at least a few "
+                    + "words), then press Generate again.");
             return;
         }
         followUps = java.util.List.of();
@@ -230,16 +231,29 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         String notes = taughtNotes;
         load("Reading your description...", () -> new LessonGenerator().clarify(request, notes), c -> {
             if (!c.ok()) {
-                toast(c.error(), false);
+                showError("Could not check your description", c.error());
                 return;
             }
-            if (!c.clear() && round < 2) {
+            boolean again = !c.clear() && !c.questions().isEmpty() && round < 2;
+            if (again) {
                 followUps = c.questions();
                 pendingRequest = request;
                 clarifyRound = round;
                 answersText = "";
                 scopeNote = c.summary();
                 rebuild();
+            }
+            // never ask again (or stop) without saying why: the AI's own words come first
+            if (c.hasProblem()) {
+                showError(round == 0 ? "This can't be made into a lesson yet" : "Your answers don't fit the questions",
+                        c.problem() + (again ? "\n\nThe question is shown again below. Please answer it." : "\n\nChange your description and try again."));
+                return;
+            }
+            if (again) {
+                if (round > 0) {
+                    showError("I still need more detail", (c.summary().isEmpty() ? "" : c.summary() + "\n\n")
+                            + "Your answers were not specific enough yet. Please answer the questions shown below.");
+                }
                 return;
             }
             write(request, c.topics(), c.summary());
@@ -268,7 +282,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private void answered() {
         String answers = answersBox == null ? answersText : answersBox.getText();
         if (answers.isBlank()) {
-            toast("Answer the questions first, so the AI does not have to guess.", false);
+            showError("Please answer the questions", "Type your answers in the box first. The AI asks so that it does not "
+                    + "have to guess what you meant.");
             return;
         }
         StringBuilder full = new StringBuilder(pendingRequest).append("\n\nThe AI asked, and the professor answered:\n");
@@ -294,8 +309,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         load("Writing the lesson (this can take up to a minute)...",
                 () -> new LessonGenerator().generate(request, difficulty, focus, before, notes), result -> {
             if (!result.ok()) {
-                toast(result.error(), false);
                 rebuild();
+                showError("The AI could not write the lesson", result.error());
                 return;
             }
             generated = result.lesson();
@@ -327,7 +342,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private void save() {
         String title = titleField.getText().trim();
         if (title.isEmpty()) {
-            toast(asTest ? "Give the class test a title." : "Give the lesson a title.", false);
+            showError("The title is missing", asTest ? "Give the class test a title in the Title box, then save again."
+                    : "Give the lesson a title in the Title box, then save again.");
             return;
         }
         String difficulty = DIFFICULTIES[difficultyIdx];
