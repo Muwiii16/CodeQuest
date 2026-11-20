@@ -16,6 +16,7 @@ public class Main extends Game {
     public void dispose() {
         super.dispose();
         codequest.screens.Assets.disposeAll();
+        codequest.game.SchoolRoomPainter.disposeAll();
     }
 
     /** Disposes the outgoing screen's textures once the new one has taken over. */

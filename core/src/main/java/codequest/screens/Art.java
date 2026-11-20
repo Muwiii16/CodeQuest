@@ -47,6 +47,14 @@ public final class Art {
         return "game/maps/map" + stage + ".png";
     }
 
+    /**
+     * A School Assets sheet (doors, floors, objects, wall, windows) at its native 16 px tile size. The 32 and 64 folders
+     * hold enlarged copies; the school rooms are built from the 16 px ones and enlarged evenly (see SchoolRoomPainter).
+     */
+    public static String school(String sheet) {
+        return "game/school/16/" + sheet + ".png";
+    }
+
     /** The empty spots reserved for towers in a map picture (cell units, see TowerSlots). */
     public static String slots(int stage) {
         return "game/maps/map" + stage + "_slots.txt";

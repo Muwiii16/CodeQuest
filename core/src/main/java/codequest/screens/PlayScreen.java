@@ -315,7 +315,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             this.standings = null;
         }
 
-        this.map = new GameMap(DefaultStages.layoutFor(lesson.number()), (int) MAP_WIDTH);
+        this.map = new GameMap(DefaultStages.layoutFor(lesson.number()), (int) MAP_WIDTH, lesson.theme());
         this.pts = map.getWaypoints();
         this.cum = new float[pts.size()];
         for (int i = 1; i < pts.size(); i++) {

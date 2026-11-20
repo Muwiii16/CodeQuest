@@ -95,7 +95,7 @@ public class CampaignData {
         List<Lesson> out = new ArrayList<>();
         String filter = classId == null ? "campaign.class_id=is.null" : "campaign.class_id=eq." + classId;
         JsonValue rows = SupabaseClient.get("stages?select=id,campaign_id,order_index,title,base_difficulty,"
-                + "adaptive_enabled,prompt,program,topics,outputs,campaign:campaigns!inner(class_id,kind)&" + filter
+                + "adaptive_enabled,prompt,program,topics,outputs,campus_background,campaign:campaigns!inner(class_id,kind)&" + filter
                 + "&campaign.kind=eq." + kind + "&order=order_index");
         if (rows == null) {
             return out;
@@ -112,7 +112,8 @@ public class CampaignData {
         return new Lesson(r.getLong("id"), r.getLong("campaign_id"), r.getInt("order_index", fallbackNumber),
                 r.getString("title", test ? "Class test" : "Lesson"), r.getString("base_difficulty", "normal"),
                 r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
-                r.getString("topics", null), r.getString("outputs", null), test);
+                r.getString("topics", null), r.getString("outputs", null), test,
+                r.getString("campus_background", null));
     }
 
     /** The student's progress rows keyed by stage id. */
@@ -140,7 +141,7 @@ public class CampaignData {
 
     public Optional<Lesson> lesson(long stageId) {
         JsonValue rows = SupabaseClient.get("stages?id=eq." + stageId
-                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,"
+                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,campus_background,"
                 + "campaign:campaigns(kind)&limit=1");
         if (rows == null || rows.size == 0) {
             return Optional.empty();
@@ -166,6 +167,14 @@ public class CampaignData {
      */
     public Optional<Lesson> createStage(long classId, String sectionName, String title, String difficulty,
             boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics, boolean test) {
+        return createStage(classId, sectionName, title, difficulty, adaptive, prompt, topics, test,
+                codequest.game.MapTheme.CAMPUS);
+    }
+
+    /** Same, with how the stage looks (the campus map or a school room), saved in campus_background. */
+    public Optional<Lesson> createStage(long classId, String sectionName, String title, String difficulty,
+            boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics, boolean test,
+            codequest.game.MapTheme theme) {
         Long campaignId = campaignIdFor(classId, sectionName, test ? "test" : "lesson");
         if (campaignId == null) {
             return Optional.empty();
@@ -179,13 +188,15 @@ public class CampaignData {
         String body = "{\"campaign_id\":" + campaignId + ",\"order_index\":" + next + ",\"title\":\"" + escape(title)
                 + "\",\"base_difficulty\":\"" + escape(difficulty) + "\",\"adaptive_enabled\":" + adaptive
                 + (prompt == null || prompt.isBlank() ? "" : ",\"prompt\":\"" + escape(prompt) + "\"")
-                + (topics.isEmpty() ? "" : ",\"topics\":\"" + codequest.content.ScopeCheck.formatTopics(topics) + "\"") + "}";
+                + (topics.isEmpty() ? "" : ",\"topics\":\"" + codequest.content.ScopeCheck.formatTopics(topics) + "\"")
+                + (theme.isSchool() ? ",\"campus_background\":\"" + theme.key() + "\"" : "") + "}";
         JsonValue inserted = SupabaseClient.post("stages", body);
         if (inserted == null || inserted.size == 0) {
             return Optional.empty();
         }
         JsonValue r = inserted.get(0);
-        Lesson created = new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt, null, null, null, test);
+        Lesson created = new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt, null, null, null, test,
+                theme.isSchool() ? theme.key() : null);
         return Optional.of(created.withTopics(topics));
     }
 
