@@ -66,4 +66,30 @@ class CampaignDataTest {
     void lessonDifficultyFallsBackToNormalWhenUnknown() {
         assertTrue(new Lesson(1, 1, 1, "x", "weird", true, null).difficulty() == codequest.content.Difficulty.NORMAL);
     }
+
+    @Test
+    void aLessonIsInPrelimsUntilMoved() {
+        Lesson l = lesson(10, 1);
+        assertTrue(l.periodEnum() == Period.PRELIMS);
+        assertTrue(l.withPeriod(Period.FINALS).periodEnum() == Period.FINALS);
+        // other edits keep the period
+        assertTrue(l.withPeriod(Period.SEMIS).withUnlocked(true).withDetails("t", "easy", true, "p").periodEnum() == Period.SEMIS);
+    }
+
+    @Test
+    void anUnknownPeriodKeyFallsBackToPrelims() {
+        assertTrue(Period.fromKey(null) == Period.PRELIMS);
+        assertTrue(Period.fromKey("whatever") == Period.PRELIMS);
+        assertTrue(Period.fromKey(" Midterms ") == Period.MIDTERMS);
+    }
+
+    @Test
+    void filteringByPeriodKeepsTheOrder() {
+        List<Lesson> all = List.of(lesson(1, 1), lesson(2, 2).withPeriod(Period.MIDTERMS), lesson(3, 3),
+                lesson(4, 4).withPeriod(Period.MIDTERMS));
+        assertTrue(Period.filter(all, null).size() == 4);
+        List<Lesson> mid = Period.filter(all, Period.MIDTERMS);
+        assertTrue(mid.size() == 2 && mid.get(0).number() == 2 && mid.get(1).number() == 4);
+        assertTrue(Period.filter(all, Period.FINALS).isEmpty());
+    }
 }

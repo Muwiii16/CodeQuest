@@ -51,7 +51,7 @@ public class DatabaseManager {
     }
 
     public enum JoinStatus {
-        JOINED, ALREADY_IN, ENDED, INVALID_CODE, NOT_A_STUDENT, TOO_MANY, NOT_SIGNED_IN, ERROR
+        JOINED, ALREADY_IN, REQUESTED, PENDING, ENDED, INVALID_CODE, NOT_A_STUDENT, TOO_MANY, NOT_SIGNED_IN, ERROR
     }
 
     /** The answer to a sign-in: the account when the password was right, or {@code locked} after too many wrong tries. */
@@ -75,6 +75,8 @@ public class DatabaseManager {
         JoinStatus status = switch (result.getString("status", "")) {
             case "ok" -> JoinStatus.JOINED;
             case "already" -> JoinStatus.ALREADY_IN;
+            case "requested" -> JoinStatus.REQUESTED; // the code was right: the professor still has to approve
+            case "pending" -> JoinStatus.PENDING;     // asked before, still waiting
             case "ended" -> JoinStatus.ENDED;
             case "invalid" -> JoinStatus.INVALID_CODE;
             case "not_student" -> JoinStatus.NOT_A_STUDENT;

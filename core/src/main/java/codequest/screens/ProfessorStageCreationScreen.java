@@ -68,6 +68,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     /** How the stage looks: the campus map or one of the school rooms. */
     private MapTheme theme = MapTheme.CAMPUS;
     private boolean adaptive = true;
+    /** The grading period the new lesson belongs to (starts as the period of the last lesson of the class). */
+    private codequest.data.Period period = codequest.data.Period.PRELIMS;
     private GeneratedLesson generated;
 
     public ProfessorStageCreationScreen(Main game, String username, ClassInfo cls) {
@@ -93,6 +95,9 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         load("Loading...", () -> Map.entry(campaigns.lessons(cls.id()), campaigns.tests(cls.id())), both -> {
             java.util.List<Lesson> earlier = both.getKey();
             nextNumber = earlier.size() + 1;
+            if (!earlier.isEmpty()) {
+                period = earlier.get(earlier.size() - 1).periodEnum();
+            }
             nextTestNumber = both.getValue().size() + 1;
             StringBuilder notes = new StringBuilder();
             for (Lesson l : earlier) {
@@ -122,6 +127,18 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         text(asTest ? "Describe what the class test should cover" : "Describe what you need for this lesson", 90, 742, 1200, 36,
                 1.7f, AMBER, Align.left);
         solidButton(asTest ? "Save class test" : "Save lesson", 1330, 945, 500, 60, GOOD, this::save);
+        if (!asTest) {
+            // which grading period the lesson belongs to: students see their lessons grouped by it
+            text("Period", 1175, 150, 100, 44, 1.3f, MUTED, Align.right);
+            float px = 1290;
+            for (codequest.data.Period p : codequest.data.Period.values()) {
+                solidButton(p.label(), px, 148, 132, 48, p == period ? new Color(0.55f, 0.37f, 0.08f, 1f) : BUTTON, () -> {
+                    period = p;
+                    rebuild();
+                });
+                px += 140;
+            }
+        }
 
         text(asTest ? "Difficulty of the test" : "Starting difficulty", 90, 335, 400, 30, 1.4f, MUTED, Align.left);
         for (int i = 0; i < DIFFICULTIES.length; i++) {
@@ -368,10 +385,11 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         GeneratedLesson draft = generated;
         boolean test = asTest;
         MapTheme look = theme;
+        codequest.data.Period savedPeriod = period;
         Set<CTopic> savedTopics = draft != null ? usedTopics : scopeFor(prompt);
         load("Saving the lesson...", () -> {
             Optional<Lesson> saved = campaigns.createStage(cls.id(), cls.sectionName(), title, difficulty, adaptive && !test, prompt,
-                    savedTopics, test, look);
+                    savedTopics, test, look, savedPeriod);
             if (saved.isEmpty() || draft == null) {
                 return saved.map(l -> Map.entry(l, 0)).orElse(null);
             }

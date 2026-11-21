@@ -136,7 +136,12 @@ public class ProfessorSectionScreen extends ProfessorScreen {
             rect(90, y, 1200, 110, ROW);
             rect(90, y, 8, 110, showTests ? new Color(0.35f, 0.62f, 1f, 1f) : AMBER);
             text(showTests ? "T" + l.number() : String.valueOf(l.number()), 115, y, 70, 110, 3f, Color.WHITE, Align.center);
-            text(l.title(), 200, y + 14, manualLesson ? 500 : 560, 44, 2.1f, Color.WHITE, Align.left);
+            // the title, and the grading period the lesson belongs to on the right of it
+            float titleW = manualLesson ? 380 : 440;
+            text(l.title(), 200, y + 14, titleW, 44, 2.1f, Color.WHITE, Align.left).setEllipsis(true);
+            if (!showTests) {
+                text(l.periodEnum().label(), 200 + titleW, y + 18, 120, 36, 1.3f, AMBER, Align.right);
+            }
             text(showTests ? l.baseDifficulty().toUpperCase() + "   -   only for class tests"
                     : l.baseDifficulty().toUpperCase() + "   -   " + done + " / " + roster.size() + " completed"
                             + (manualLesson ? "   -   " + (l.unlocked() ? "open to students" : "locked") : ""),

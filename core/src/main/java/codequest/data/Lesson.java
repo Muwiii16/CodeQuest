@@ -12,7 +12,25 @@ import java.util.Set;
  * each of them prints, and {@code topics} the topics it teaches (null: no limit, for lessons made before topics existed).
  */
 public record Lesson(long stageId, long campaignId, int number, String title, String baseDifficulty, boolean adaptive,
-        String prompt, String program, String topics, String outputs, boolean test, String background, boolean unlocked) {
+        String prompt, String program, String topics, String outputs, boolean test, String background, boolean unlocked, String period) {
+
+    /** A stage in the Prelims period (the default). */
+    public Lesson(long stageId, long campaignId, int number, String title, String baseDifficulty, boolean adaptive,
+            String prompt, String program, String topics, String outputs, boolean test, String background, boolean unlocked) {
+        this(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt, program, topics, outputs, test, background,
+                unlocked, Period.PRELIMS.key());
+    }
+
+    /** The grading period the lesson belongs to. */
+    public Period periodEnum() {
+        return Period.fromKey(period);
+    }
+
+    /** The same lesson in another period. */
+    public Lesson withPeriod(Period newPeriod) {
+        return new Lesson(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt, program, topics, outputs, test,
+                background, unlocked, newPeriod.key());
+    }
 
     /** A stage that is locked until the professor opens it (only matters in a class run by hand). */
     public Lesson(long stageId, long campaignId, int number, String title, String baseDifficulty, boolean adaptive,
@@ -24,7 +42,7 @@ public record Lesson(long stageId, long campaignId, int number, String title, St
     /** The same lesson, opened or locked. */
     public Lesson withUnlocked(boolean open) {
         return new Lesson(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt, program, topics, outputs, test,
-                background, open);
+                background, open, period);
     }
 
     /** A stage without a saved look (it plays on the campus map). */
@@ -82,17 +100,17 @@ public record Lesson(long stageId, long campaignId, int number, String title, St
     public Lesson withProgram(String newProgram, String newOutputs) {
         return new Lesson(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt,
                 newProgram == null || newProgram.isBlank() ? null : newProgram, topics,
-                newOutputs == null || newOutputs.isBlank() ? null : newOutputs, test, background, unlocked);
+                newOutputs == null || newOutputs.isBlank() ? null : newOutputs, test, background, unlocked, period);
     }
 
     public Lesson withTopics(Set<CTopic> newTopics) {
         return new Lesson(stageId, campaignId, number, title, baseDifficulty, adaptive, prompt, program,
-                newTopics.isEmpty() ? null : ScopeCheck.formatTopics(newTopics), outputs, test, background, unlocked);
+                newTopics.isEmpty() ? null : ScopeCheck.formatTopics(newTopics), outputs, test, background, unlocked, period);
     }
 
     public Lesson withDetails(String newTitle, String difficulty, boolean isAdaptive, String newPrompt) {
         return new Lesson(stageId, campaignId, number, newTitle, difficulty, isAdaptive,
-                newPrompt == null || newPrompt.isBlank() ? null : newPrompt, program, topics, outputs, test, background, unlocked);
+                newPrompt == null || newPrompt.isBlank() ? null : newPrompt, program, topics, outputs, test, background, unlocked, period);
     }
 
     public Difficulty difficulty() {

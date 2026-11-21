@@ -57,6 +57,12 @@ public class JoinClassScreen extends StudentScreen {
         switch (r.status()) {
             case JOINED -> showNotice("You joined " + name,
                     "You can now play this class's lessons and take its class tests. Press OK to open the class.", toCampaign);
+            case REQUESTED -> showNotice("Request sent to your professor",
+                    "The code is right. " + name + " will appear in your campaign as soon as your professor approves you. "
+                            + "Ask them to check their join requests.", () -> game.setScreen(new CampaignScreen(game, username)));
+            case PENDING -> showNotice("You already asked to join " + name,
+                    "Your professor has not approved it yet. You do not need to type the code again.",
+                    () -> game.setScreen(new CampaignScreen(game, username)));
             case ALREADY_IN -> showNotice("You are already in " + name, "Nothing changed. Press OK to open the class.", toCampaign);
             case INVALID_CODE -> showError("That code does not match a class",
                     "Check the 6 letters and numbers with your professor. Codes never use 0, O, 1 or I. If your professor made a "

@@ -360,3 +360,17 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - Security phase B is live: the open "public access" policies are gone, the app can only do what the session-token policies allow, `profiles.full_name` is readable only through `app_full_names()`, and the Edge Functions require a session (generate-lesson: professors only).
 - Checked live after applying: no token sees no classes/profiles; the cosmetics list still loads; sign-in works; a student gets 403 from generate-lesson, no token gets 401.
 - Not yet done: a full hand playtest as professor and as student.
+
+## Round 32: grading periods (Prelims, Midterms, Semis, Finals)
+- Every lesson belongs to one period (`stages.period`, default prelims; migration 20261121160000_lesson_period.sql, applied). Existing lessons are Prelims until the professor moves them.
+- Professor: picks the period when creating a lesson (starts as the last lesson's period) and can change it in the lesson editor; the section list shows each lesson's period.
+- Student campaign: lessons are grouped under period headings (4 lessons per page now).
+- Professor "Overall class performance": tabs All / Prelims / Midterms / Semis / Finals; the table, the average and the AI analysis follow the chosen period.
+- Lesson order and numbering are unchanged (order the lessons were made); the period only groups them. Self-paced unlocking still follows the previous lesson in that order.
+- ERD: `stages.period`.
+
+## Round 33: join approval (second layer after the join code)
+- A student who types a valid join code only sends a request (`class_enrollments.status = 'pending'`). They are in the class (lessons, tests, roster) only after the professor approves it ('approved'). Migration 20261121170000_join_approval.sql (applied).
+- Professor dashboard: "Join requests (N)" button -> list with student game name, full name and class, Approve / Reject. Reject deletes the request (the student may ask again). Adding a student by username is approved at once (and approves a waiting request).
+- Database: `app_in_class` counts only approved rows, so a pending student sees nothing of the class; a student cannot approve themselves or insert an approved row; another professor cannot see or answer the request. Checked with 22 rolled-back tests.
+- ERD: `class_enrollments.status`.

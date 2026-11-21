@@ -75,7 +75,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
 
     /** The join code: what students type to enroll themselves, with Copy and a new code if it was shared too widely. */
     private void drawJoinCode() {
-        text("Join code  -  students type it in the game to enroll themselves", 1110, 148, 720, 26, 1.1f, MUTED, Align.left,
+        text("Join code  -  students type it to ask to join; you approve them on the dashboard", 1110, 148, 720, 26, 1.1f, MUTED, Align.left,
                 PixelFonts.Face.SANS);
         boolean has = cls.joinCode() != null && !cls.joinCode().isBlank();
         text(has ? JoinCode.display(cls.joinCode()) : "...", 1110, 176, 330, 60, 3.2f, new Color(1f, 0.82f, 0.3f, 1f), Align.left,

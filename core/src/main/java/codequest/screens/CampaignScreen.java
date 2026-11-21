@@ -25,7 +25,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public class CampaignScreen extends StudentScreen {
 
-    private static final int PAGE_SIZE = 5;
+    private static final int PAGE_SIZE = 4; // 4 lessons plus their period headings fit under the header row
 
     /** Everything the screen shows, fetched together in the background. */
     private record Loaded(long studentId, List<ClassInfo> classes, List<Cosmetic> catalog, Set<Long> owned,
@@ -133,6 +133,13 @@ public class CampaignScreen extends StudentScreen {
         int to = Math.min(lessons.size(), from + PAGE_SIZE);
         float y = 190;
         for (int i = from; i < to; i++) {
+            // a heading where a new grading period starts (and at the top of a page)
+            codequest.data.Period period = lessons.get(i).periodEnum();
+            if (i == from || period != lessons.get(i - 1).periodEnum()) {
+                text(period.label().toUpperCase(), 160, y, 900, 32, 1.6f, GOLD, Align.left);
+                rect(160, y + 32, 1600, 2, new Color(1f, 0.8f, 0.3f, 0.35f));
+                y += 42;
+            }
             y = drawLesson(i, y);
         }
 

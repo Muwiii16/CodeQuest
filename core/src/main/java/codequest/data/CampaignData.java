@@ -99,7 +99,7 @@ public class CampaignData {
     /** Classes the student is enrolled in, oldest enrollment first. */
     public List<ClassInfo> studentClasses(long studentId) {
         List<ClassInfo> out = new ArrayList<>();
-        JsonValue rows = SupabaseClient.get("class_enrollments?student_id=eq." + studentId
+        JsonValue rows = SupabaseClient.get("class_enrollments?student_id=eq." + studentId + "&status=eq.approved"
                 + "&select=class:classes(id,course_code,section_name,language,subject,term,ended,pacing)&order=enrolled_at");
         if (rows == null) {
             return out;
@@ -130,7 +130,7 @@ public class CampaignData {
         List<Lesson> out = new ArrayList<>();
         String filter = classId == null ? "campaign.class_id=is.null" : "campaign.class_id=eq." + classId;
         JsonValue rows = SupabaseClient.get("stages?select=id,campaign_id,order_index,title,base_difficulty,"
-                + "adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,campaign:campaigns!inner(class_id,kind)&" + filter
+                + "adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,period,campaign:campaigns!inner(class_id,kind)&" + filter
                 + "&campaign.kind=eq." + kind + "&order=order_index");
         if (rows == null) {
             return out;
@@ -148,7 +148,8 @@ public class CampaignData {
                 r.getString("title", test ? "Class test" : "Lesson"), r.getString("base_difficulty", "normal"),
                 r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
                 r.getString("topics", null), r.getString("outputs", null), test,
-                r.getString("campus_background", null), r.getBoolean("unlocked", false));
+                r.getString("campus_background", null), r.getBoolean("unlocked", false),
+                Period.fromKey(r.getString("period", null)).key());
     }
 
     /** The student's progress rows keyed by stage id. */
@@ -189,7 +190,7 @@ public class CampaignData {
 
     public Optional<Lesson> lesson(long stageId) {
         JsonValue rows = SupabaseClient.get("stages?id=eq." + stageId
-                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,"
+                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,period,"
                 + "campaign:campaigns(kind)&limit=1");
         if (rows == null || rows.size == 0) {
             return Optional.empty();
@@ -223,6 +224,13 @@ public class CampaignData {
     public Optional<Lesson> createStage(long classId, String sectionName, String title, String difficulty,
             boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics, boolean test,
             codequest.game.MapTheme theme) {
+        return createStage(classId, sectionName, title, difficulty, adaptive, prompt, topics, test, theme, Period.PRELIMS);
+    }
+
+    /** Same, and the grading period the lesson belongs to. */
+    public Optional<Lesson> createStage(long classId, String sectionName, String title, String difficulty,
+            boolean adaptive, String prompt, java.util.Set<codequest.content.CTopic> topics, boolean test,
+            codequest.game.MapTheme theme, Period period) {
         Long campaignId = campaignIdFor(classId, sectionName, test ? "test" : "lesson");
         if (campaignId == null) {
             return Optional.empty();
@@ -237,15 +245,21 @@ public class CampaignData {
                 + "\",\"base_difficulty\":\"" + escape(difficulty) + "\",\"adaptive_enabled\":" + adaptive
                 + (prompt == null || prompt.isBlank() ? "" : ",\"prompt\":\"" + escape(prompt) + "\"")
                 + (topics.isEmpty() ? "" : ",\"topics\":\"" + codequest.content.ScopeCheck.formatTopics(topics) + "\"")
-                + (theme.isSchool() ? ",\"campus_background\":\"" + theme.key() + "\"" : "") + "}";
+                + (theme.isSchool() ? ",\"campus_background\":\"" + theme.key() + "\"" : "")
+                + ",\"period\":\"" + period.key() + "\"}";
         JsonValue inserted = SupabaseClient.post("stages", body);
         if (inserted == null || inserted.size == 0) {
             return Optional.empty();
         }
         JsonValue r = inserted.get(0);
         Lesson created = new Lesson(r.getLong("id"), campaignId, next, title, difficulty, adaptive, prompt, null, null, null, test,
-                theme.isSchool() ? theme.key() : null);
+                theme.isSchool() ? theme.key() : null).withPeriod(period);
         return Optional.of(created.withTopics(topics));
+    }
+
+    /** Moves a lesson to another grading period. */
+    public boolean setPeriod(long stageId, Period period) {
+        return SupabaseClient.patch("stages?id=eq." + stageId, "{\"period\":\"" + period.key() + "\"}") != null;
     }
 
     /** Changes a lesson's title, starting difficulty, adaptive flag and prompt. */

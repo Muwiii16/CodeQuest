@@ -29,7 +29,10 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             Map<Long, Map<Long, Progress>> progress) {
     }
 
+    /** Every lesson of the class, and the ones in the chosen grading period (all of them when no period is chosen). */
+    private List<Lesson> allLessons = List.of();
     private List<Lesson> lessons = List.of();
+    private codequest.data.Period scope; // null = every period
     private List<ProfessorData.Student> students = List.of();
     private Map<Long, Map<Long, Progress>> progress = Map.of();
     private final int base;
@@ -41,8 +44,9 @@ public class ProfessorOverallScreen extends ProfessorScreen {
         card(60, 140, 1800, 650);
         card(60, 810, 1800, 210);
         text("AI analysis", 90, 825, 700, 36, 1.8f, AMBER, Align.left);
-        text("A written summary of how each student and the whole class progressed across the lessons. Only grades and "
-                + "ranks are sent to the AI, never names.", 90, 872, 1740, 60, 1.3f, MUTED, Align.topLeft,
+        text("A written summary of how each student and the whole class did on the lessons shown above (pick a grading "
+                + "period to analyse only that one). Only grades and ranks are sent to the AI, never names.", 90, 872, 1740, 60,
+                1.3f, MUTED, Align.topLeft,
                 PixelFonts.Face.SANS).setWrap(true);
         solidButton("Write AI analysis", 90, 950, 520, 60, new Color(0.45f, 0.3f, 0.7f, 1f),
                 () -> showAiAnalysis("Writing the analysis...", this::analyse));
@@ -53,7 +57,8 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             List<ProfessorData.Student> st = data.roster(cls.id());
             return new Loaded(ls, st, data.overallProgress(st, ls));
         }, l -> {
-            lessons = l.lessons();
+            allLessons = l.lessons();
+            lessons = allLessons;
             students = l.students();
             progress = l.progress();
             rebuild();
@@ -99,17 +104,38 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             lessonList.add("Lesson " + l.number() + ": " + l.title());
         }
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("scope", "all lessons");
+        data.put("scope", scope == null ? "all lessons" : scope.label() + " period");
         data.put("lessons", lessonList);
         data.put("students", rows);
         return new AiFeedback().forClass(data, names);
     }
 
+    /** One tab per grading period (and one for all of them): the table and the AI analysis follow the chosen one. */
+    private void drawTabs() {
+        Color chosen = new Color(0.2f, 0.42f, 0.78f, 1f);
+        solidButton("All  (" + allLessons.size() + ")", 90, 148, 180, 44, scope == null ? chosen : BUTTON, () -> pickScope(null));
+        float x = 280;
+        for (codequest.data.Period p : codequest.data.Period.values()) {
+            int n = codequest.data.Period.filter(allLessons, p).size();
+            solidButton(p.label() + "  (" + n + ")", x, 148, 200, 44, p == scope ? chosen : BUTTON, () -> pickScope(p));
+            x += 210;
+        }
+    }
+
+    private void pickScope(codequest.data.Period period) {
+        scope = period;
+        lessons = codequest.data.Period.filter(allLessons, period);
+        page = 0;
+        rebuild();
+    }
+
     private void rebuild() {
         clearFrom(base);
+        drawTabs();
         if (lessons.isEmpty() || students.isEmpty()) {
-            text(lessons.isEmpty() ? "This section has no lessons yet." : "This section has no students yet.", 90, 170,
-                    1700, 40, 1.8f, MUTED, Align.left);
+            text(lessons.isEmpty() ? (scope == null ? "This section has no lessons yet."
+                    : "No lessons in " + scope.label() + " yet.") : "This section has no students yet.", 90, 230, 1700, 40,
+                    1.8f, MUTED, Align.left);
             return;
         }
         int from = page * LESSONS_PER_PAGE;
@@ -118,7 +144,6 @@ public class ProfessorOverallScreen extends ProfessorScreen {
         int visible = to - from;
         float colW = Math.min(190f, (1740 - nameW - 190) / Math.max(1, visible));
 
-        text("Rank per lesson, from accuracy   (- = not completed)", 90, 155, 1000, 36, 1.5f, MUTED, Align.left);
         if (lessons.size() > LESSONS_PER_PAGE) {
             int pages = (lessons.size() + LESSONS_PER_PAGE - 1) / LESSONS_PER_PAGE;
             if (page > 0) {
@@ -135,7 +160,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             }
         }
 
-        text("Rank counts wrong answers; score is points earned (wrong answers take none away), so A can show 100%.",
+        text("Rank is from accuracy (- = not completed). Score is points earned; wrong answers take none away, so A can show 100%.",
                 90, 187, 1740, 26, 1.0f, MUTED, Align.left);
         rect(90, 215, 1740, 50, new Color(0.2f, 0.16f, 0.06f, 1f));
         text("STUDENT", 110, 215, nameW, 50, 1.3f, AMBER, Align.left);

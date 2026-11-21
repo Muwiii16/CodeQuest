@@ -10,6 +10,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.utils.Align;
 
 import java.util.List;
+import java.util.Map;
 
 /** Professor home: the sections they handle, and a button to create a new class. */
 public class ProfessorDashboardScreen extends ProfessorScreen {
@@ -17,6 +18,7 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
     private static final int PAGE_SIZE = 6;
 
     private List<ClassInfo> classes = List.of();
+    private int pending; // students waiting for approval after typing a join code
     private final int base;
     private int page;
 
@@ -27,9 +29,10 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
         base = mark();
         load("Loading your sections...", () -> {
             ProfessorData data = new ProfessorData();
-            return data.listClasses(data.professorId(username));
-        }, list -> {
-            classes = list;
+            return Map.entry(data.listClasses(data.professorId(username)), data.pendingRequests().size());
+        }, loaded -> {
+            classes = loaded.getKey();
+            pending = loaded.getValue();
             rebuild();
         });
     }
@@ -37,6 +40,10 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
     private void rebuild() {
         clearFrom(base);
         text(classes.size() + (classes.size() == 1 ? " section" : " sections"), 60, 140, 600, 56, 1.8f, MUTED, Align.left);
+        // students who typed a join code wait here for the professor's approval
+        solidButton(pending == 0 ? "Join requests" : "Join requests  (" + pending + ")", 960, 135, 440, 66,
+                pending == 0 ? BUTTON : new Color(0.7f, 0.45f, 0.08f, 1f),
+                () -> game.setScreen(new ProfessorJoinRequestsScreen(game, username)));
         if (classes.isEmpty()) {
             card(60, 240, VIRTUAL_WIDTH - 120, 220);
             text("You do not handle any sections yet.\nClick \"Create class\" to set up your first one.", 100, 240,

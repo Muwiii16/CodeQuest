@@ -97,8 +97,8 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         clearFrom(base);
         drawPacing();
         if (students.isEmpty()) {
-            text("No names needed: when you create the class you get a join code. Students enter it in the game to enroll "
-                    + "themselves.\n\nOr add students by username here (or later under Class management).", 1010, 310, 820, 160,
+            text("No names needed: when you create the class you get a join code. Students enter it in the game to ask to join; "
+                    + "you approve each request on your dashboard.\n\nOr add students by username here (or later under Class management).", 1010, 310, 820, 160,
                     1.5f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
             return;
         }
@@ -167,7 +167,7 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
                     created.get().joinCode(), chosenPacing);
             String code = JoinCode.display(created.get().joinCode());
             showNotice("Class created", "Join code:   " + code + "\n\nGive this code to your students. In the game they open "
-                    + "Campaign, press Join a class and type it, and they are enrolled. You can find the code again at any "
+                    + "Campaign, press Join a class and type it, and they send you a join request that you approve on your dashboard (Join requests). You can find the code again at any "
                     + "time under Class management, and replace it with a new one.",
                     () -> game.setScreen(new ProfessorSectionScreen(game, username, info)));
         });

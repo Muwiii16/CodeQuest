@@ -55,7 +55,7 @@ public class ProfessorData {
         JsonValue rows = SupabaseClient.get("classes?professor_id=eq." + professorId
                 + "&select=id,course_code,section_name,language,subject,term,ended,join_code,pacing,class_enrollments(count),"
                 + "campaigns(stages(count))"
-                + "&order=created_at");
+                + "&class_enrollments.status=eq.approved&order=created_at"); // pending requests are not students yet
         if (rows == null) {
             return out;
         }
@@ -187,11 +187,15 @@ public class ProfessorData {
         }
         long studentId = found.get(0).getLong("id");
         JsonValue existing = SupabaseClient.get("class_enrollments?class_id=eq." + classId + "&student_id=eq."
-                + studentId + "&select=student_id");
+                + studentId + "&select=student_id,status");
         if (existing != null && existing.size > 0) {
+            if ("pending".equals(existing.get(0).getString("status", "approved"))) {
+                // the student had asked with the join code: adding them by hand is the approval
+                return approve(classId, studentId) ? EnrollResult.ENROLLED : EnrollResult.ERROR;
+            }
             return EnrollResult.ALREADY_ENROLLED;
         }
-        String body = "{\"class_id\":" + classId + ",\"student_id\":" + studentId + "}";
+        String body = "{\"class_id\":" + classId + ",\"student_id\":" + studentId + ",\"status\":\"approved\"}";
         return SupabaseClient.post("class_enrollments", body) != null ? EnrollResult.ENROLLED : EnrollResult.ERROR;
     }
 
@@ -200,9 +204,54 @@ public class ProfessorData {
         return SupabaseClient.delete("class_enrollments?class_id=eq." + classId + "&student_id=eq." + studentId);
     }
 
+    /** A student who typed a class's join code and waits for the professor to approve them. */
+    public record JoinRequest(long classId, String classLabel, long studentId, String username, String fullName,
+            String requestedAt) {
+    }
+
+    /** The join requests of all the professor's classes, oldest first (the database only shows a professor their own). */
+    public List<JoinRequest> pendingRequests() {
+        List<JoinRequest> out = new ArrayList<>();
+        JsonValue rows = SupabaseClient.get("class_enrollments?status=eq.pending&select=class_id,student_id,enrolled_at,"
+                + "student:profiles(id,username),class:classes(section_name,subject,course_code)&order=enrolled_at");
+        if (rows == null) {
+            return out;
+        }
+        List<Long> ids = new ArrayList<>();
+        for (JsonValue r : rows) {
+            ids.add(r.getLong("student_id"));
+        }
+        java.util.Map<Long, String> names = DatabaseManager.fullNames(ids);
+        for (JsonValue r : rows) {
+            JsonValue s = r.get("student");
+            JsonValue c = r.get("class");
+            if (s == null || c == null) {
+                continue;
+            }
+            String subject = c.getString("subject", null);
+            String label = c.getString("section_name", "?") + (subject == null || subject.isBlank() ? "" : "  -  " + subject);
+            long sid = r.getLong("student_id");
+            out.add(new JoinRequest(r.getLong("class_id"), label, sid, s.getString("username", "?"), names.get(sid),
+                    r.getString("enrolled_at", "")));
+        }
+        return out;
+    }
+
+    /** Lets a student who asked with the join code into the class. */
+    public boolean approve(long classId, long studentId) {
+        return SupabaseClient.patch("class_enrollments?class_id=eq." + classId + "&student_id=eq." + studentId
+                + "&status=eq.pending", "{\"status\":\"approved\"}") != null;
+    }
+
+    /** Turns a join request down (the student may ask again with the code). */
+    public boolean reject(long classId, long studentId) {
+        return SupabaseClient.delete("class_enrollments?class_id=eq." + classId + "&student_id=eq." + studentId
+                + "&status=eq.pending");
+    }
+
     public List<Student> roster(long classId) {
         List<Student> out = new ArrayList<>();
-        JsonValue rows = SupabaseClient.get("class_enrollments?class_id=eq." + classId
+        JsonValue rows = SupabaseClient.get("class_enrollments?class_id=eq." + classId + "&status=eq.approved"
                 + "&select=student:profiles(id,username)&order=enrolled_at");
         if (rows == null) {
             return out;

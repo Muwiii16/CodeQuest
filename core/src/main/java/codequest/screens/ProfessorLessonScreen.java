@@ -46,6 +46,8 @@ public class ProfessorLessonScreen extends ProfessorScreen {
     private final Group listRegion;
     private int difficultyIdx;
     private boolean adaptive;
+    /** The grading period being edited (saved with the details). */
+    private codequest.data.Period period;
     private boolean deleteArmed;
     private long questionDeleteArmed = -1;
     private List<Question> questions = List.of();
@@ -58,6 +60,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         this.lesson = lesson;
         this.difficultyIdx = Math.max(0, java.util.Arrays.asList(DIFFICULTIES).indexOf(lesson.baseDifficulty()));
         this.adaptive = lesson.adaptive();
+        this.period = lesson.periodEnum();
 
         // ── lesson details ──
         card(60, 140, 700, 880);
@@ -65,8 +68,8 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         text("Title", 90, 215, 300, 30, 1.4f, MUTED, Align.left);
         titleField = textField("Lesson title", false, 90, 248, 640, 64);
         titleField.setText(lesson.title());
-        text("What you asked for (kept for the AI step)", 90, 560, 640, 30, 1.4f, MUTED, Align.left);
-        promptBox = textArea("(nothing written)", 90, 595, 640, 200, PixelFonts.Face.SANS);
+        text("What you asked for (kept for the AI step)", 90, 635, 640, 30, 1.4f, MUTED, Align.left);
+        promptBox = textArea("(nothing written)", 90, 667, 640, 150, PixelFonts.Face.SANS);
         promptBox.setText(lesson.prompt() == null ? "" : lesson.prompt());
         formRegion = region();
         rebuildForm();
@@ -106,6 +109,17 @@ public class ProfessorLessonScreen extends ProfessorScreen {
                             adaptive = !adaptive;
                             rebuildForm();
                         });
+            }
+            if (!lesson.test()) {
+                // which grading period the lesson belongs to (students see their lessons grouped by it)
+                text("Grading period", 90, 548, 400, 28, 1.4f, MUTED, Align.left);
+                for (codequest.data.Period p : codequest.data.Period.values()) {
+                    solidButton(p.label(), 90 + p.ordinal() * 162, 578, 152, 48,
+                            p == period ? new Color(0.55f, 0.37f, 0.08f, 1f) : BUTTON, () -> {
+                                period = p;
+                                rebuildForm();
+                            });
+                }
             }
             solidButton("Save details", 90, 830, 640, 62, GOOD, this::saveDetails);
             solidButton(deleteArmed ? "Click again: delete this lesson" : "Delete lesson", 90, 905, 640, 62,
@@ -324,9 +338,12 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         String difficulty = DIFFICULTIES[difficultyIdx];
         boolean adapt = adaptive && !lesson.test();
         String prompt = promptBox.getText();
-        load("Saving...", () -> campaigns.updateLesson(lesson.stageId(), title, difficulty, adapt, prompt), ok -> {
+        codequest.data.Period chosen = period;
+        boolean periodChanged = chosen != lesson.periodEnum();
+        load("Saving...", () -> campaigns.updateLesson(lesson.stageId(), title, difficulty, adapt, prompt)
+                && (!periodChanged || campaigns.setPeriod(lesson.stageId(), chosen)), ok -> {
             if (ok) {
-                lesson = lesson.withDetails(title, difficulty, adapt, prompt);
+                lesson = lesson.withDetails(title, difficulty, adapt, prompt).withPeriod(chosen);
                 toast("Lesson details saved.", true);
             } else {
                 toast("Could not save. Check your connection.", false);
