@@ -1,10 +1,8 @@
 -- ============================================================
--- SECURITY, PHASE B: LOCKDOWN  (branch security/lockdown-phase-b; NOT applied to the live database yet)
+-- SECURITY, PHASE B: LOCKDOWN  (APPLIED to the live database on 2026-11-21)
 --
--- Apply this ONLY after the game that sends the session token (branch security/session-tokens) is merged into main
--- and is the game people run: from the moment it is applied, a game without the token can no longer read or write
--- anything but the public lists (cosmetics, dictionary) and the sign-in / sign-up calls.
--- The database is shared by every branch, so merging this file does nothing until the SQL is actually run.
+-- From the moment it was applied, a game without the session token can no longer read or write anything but the
+-- public lists (cosmetics, dictionary) and the sign-in / sign-up calls.
 --
 -- To undo (emergency only):  create policy "public access" on <table> for all using (true) with check (true);  for each table,
 -- and  delete from app_secrets where key = 'enforce_sessions';

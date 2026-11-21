@@ -355,3 +355,8 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - Manual: the order does not matter (an unlocked lesson is playable even if the one before is not finished); new lessons start locked. The lock is enforced in the game, not by the database.
 - Dictionary: removed from the main menu; opens from a class in the campaign and shows only that class's language (`DictionaryData.languagesOf` / `entries(languages)` support several languages for later).
 - ERD: `classes.pacing`, `stages.unlocked`.
+
+## Round 31: lockdown applied (2026-11-21)
+- Security phase B is live: the open "public access" policies are gone, the app can only do what the session-token policies allow, `profiles.full_name` is readable only through `app_full_names()`, and the Edge Functions require a session (generate-lesson: professors only).
+- Checked live after applying: no token sees no classes/profiles; the cosmetics list still loads; sign-in works; a student gets 403 from generate-lesson, no token gets 401.
+- Not yet done: a full hand playtest as professor and as student.
