@@ -223,7 +223,7 @@ public class ProfessorClassAnalysisScreen extends ProfessorScreen {
         data.put("topics", topics);
         data.put("students", students);
         data.put("certificatesEarned", loaded.certificates());
-        return new AiFeedback().forClass(data, names);
+        return new AiFeedback(codequest.content.Language.fromKey(cls.language())).forClass(data, names);
     }
 
     private static double rate(int[] c) {

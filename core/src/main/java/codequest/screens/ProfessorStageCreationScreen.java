@@ -85,8 +85,9 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         text("Stage preview", 880, 155, 500, 40, 2f, AMBER, Align.left);
 
         card(60, 730, 1800, 290);
-        promptBox = textArea("e.g. Teach printf: printing text, the #include line and return 0. Only that, for "
-                + "first-year students...", 90, 785, 1740, 150);
+        promptBox = textArea("e.g. Teach "
+                + (codequest.content.Language.fromKey(cls.language()) == codequest.content.Language.CPP ? "cout" : "printf")
+                + ": printing text, the #include line and return 0. Only that, for first-year students...", 90, 785, 1740, 150);
         solidButton("Generate preview with AI", 90, 945, 760, 60, new Color(0.45f, 0.3f, 0.7f, 1f), this::generate);
 
         // Everything after this mark is redrawn when the lesson number arrives or a form button is clicked.
@@ -263,7 +264,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     /** Step 1: the AI reads the request and either says it is clear or asks what it needs to know (it never assumes). */
     private void check(String request, int round) {
         String notes = taughtNotes;
-        load("Reading your description...", () -> new LessonGenerator().clarify(request, notes), c -> {
+        load("Reading your description...", () -> new LessonGenerator(codequest.content.Language.fromKey(cls.language())).clarify(request, notes), c -> {
             if (!c.ok()) {
                 showError("Could not check your description", c.error());
                 return;
@@ -303,7 +304,9 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         }
         text(qs.toString().trim(), 880, 255, 940, 230, 1.4f, Color.WHITE, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
         text("Your answers (one line per question is fine)", 880, 495, 940, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.SANS);
-        answersBox = textArea("e.g. 1. for and while loops   2. no scanf, just printing", 880, 525, 940, 90, PixelFonts.Face.SANS);
+        answersBox = textArea("e.g. 1. for and while loops   2. no "
+                + (codequest.content.Language.fromKey(cls.language()) == codequest.content.Language.CPP ? "cin" : "scanf")
+                + ", just printing", 880, 525, 940, 90, PixelFonts.Face.SANS);
         answersBox.setText(answersText);
         solidButton("Continue", 880, 630, 460, 56, GOOD, this::answered);
         solidButton("Change my description", 1360, 630, 460, 56, BUTTON, () -> {
@@ -341,7 +344,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         Set<CTopic> before = EnumSet.copyOf(taught.isEmpty() ? EnumSet.noneOf(CTopic.class) : taught);
         String notes = taughtNotes;
         load("Writing the lesson (this can take up to a minute)...",
-                () -> new LessonGenerator().generate(request, difficulty, focus, before, notes), result -> {
+                () -> new LessonGenerator(codequest.content.Language.fromKey(cls.language())).generate(request, difficulty, focus, before, notes), result -> {
             if (!result.ok()) {
                 rebuild();
                 showError("The AI could not write the lesson", result.error());
@@ -398,7 +401,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                 return Map.entry(lesson, -1);
             }
             int added = 0;
-            QuestionData questions = new QuestionData();
+            QuestionData questions = new QuestionData(codequest.content.Language.fromKey(cls.language()));
             for (QuestionDraft q : draft.questions()) {
                 if (questions.add(lesson.stageId(), q)) {
                     added++;

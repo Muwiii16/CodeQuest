@@ -40,7 +40,7 @@ public class ClassTestResultScreen extends StudentScreen {
             List<Participant> ps = tests.participants(session.id());
             String status = tests.session(session.id()).map(s -> tests.endIfOver(s, ps)).orElse("active");
             return new Standings(ps, status);
-        }, 1500);
+        }, Poller.CLASS_TEST_PERIOD_MS);
     }
 
     @Override

@@ -18,11 +18,11 @@ public final class ScopeCheck {
     private static final Pattern STRINGS = Pattern.compile("\"(\\\\.|[^\"\\\\])*\"|'(\\\\.|[^'\\\\])*'");
     private static final Pattern COMMENTS = Pattern.compile("/\\*.*?\\*/|//[^\\n]*", Pattern.DOTALL);
     private static final Pattern LOOP_OR_IF = Pattern.compile("\\b(if|else|for|while|do|switch|case|break|continue)\\b");
-    private static final Pattern DECLARATION = Pattern.compile("\\b(int|float|double|char|long|short)\\s+\\*?\\s*[A-Za-z_]\\w*\\s*(=|;|,|\\[)");
-    private static final Pattern FUNCTION_DEF = Pattern.compile("\\b(int|void|float|double|char|long)\\s+([A-Za-z_]\\w*)\\s*\\([^)]*\\)\\s*[{;]");
+    private static final Pattern DECLARATION = Pattern.compile("\\b(int|float|double|char|long|short|bool|string|auto)\\s+\\*?\\s*[A-Za-z_]\\w*\\s*(=|;|,|\\[)");
+    private static final Pattern FUNCTION_DEF = Pattern.compile("\\b(int|void|float|double|char|long|bool|string)\\s+([A-Za-z_]\\w*)\\s*\\([^)]*\\)\\s*[{;]");
     private static final Pattern ARRAY = Pattern.compile("[A-Za-z_]\\w*\\s*\\[");
-    private static final Pattern POINTER = Pattern.compile("\\b(int|float|double|char|void|long)\\s*\\*|\\bNULL\\b|(^|[=(,;{\\s])\\*\\s*[A-Za-z_]\\w*\\s*=[^=]");
-    private static final Pattern SCANF = Pattern.compile("\\b(scanf|gets|fgets|getchar)\\b");
+    private static final Pattern POINTER = Pattern.compile("\\b(int|float|double|char|void|long|bool)\\s*\\*|\\bNULL\\b|\\bnullptr\\b|(^|[=(,;{\\s])\\*\\s*[A-Za-z_]\\w*\\s*=[^=]");
+    private static final Pattern SCANF = Pattern.compile("\\b(scanf|gets|fgets|getchar|cin|getline)\\b");
 
     private ScopeCheck() {
     }
@@ -78,7 +78,7 @@ public final class ScopeCheck {
     private static final Pattern[] MENTION = new Pattern[CTopic.values().length];
 
     static {
-        MENTION[CTopic.VARIABLES.ordinal()] = Pattern.compile("\\b(variables?|data ?types?|integers?|floats?|doubles?|scanf|user input)\\b");
+        MENTION[CTopic.VARIABLES.ordinal()] = Pattern.compile("\\b(variables?|data ?types?|integers?|floats?|doubles?|strings?|booleans?|scanf|cin|user input)\\b");
         MENTION[CTopic.CONTROL_STRUCTURES.ordinal()] = Pattern.compile("\\b(if[- /]else|else|if statements?|loops?|while|switch|conditionals?)\\b");
         MENTION[CTopic.FUNCTIONS.ordinal()] = Pattern.compile("(?<!main )\\bfunctions?\\b");
         MENTION[CTopic.ARRAYS.ordinal()] = Pattern.compile("\\barrays?\\b");

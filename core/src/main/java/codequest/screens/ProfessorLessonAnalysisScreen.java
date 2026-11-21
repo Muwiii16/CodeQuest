@@ -187,7 +187,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
         }
         data.put("questionsWeakestFirst", questions);
         data.put("students", students);
-        return new AiFeedback().forClass(data, names);
+        return new AiFeedback(codequest.content.Language.fromKey(cls.language())).forClass(data, names);
     }
 
     private static double rate(int[] c) {

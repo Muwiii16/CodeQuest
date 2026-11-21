@@ -61,9 +61,9 @@ public class LoginScreen extends BaseScreen {
         stage.addActor(mark);
         outlinedText("CodeQuest", 205, 62, 400, 50, 2.8f, Color.WHITE, Align.left);
 
-        outlinedText("-  LEARN C. BEAT THE TOWERS.", 110, 262, 700, 34, 1.8f, new Color(0.85f, 0.95f, 0.6f, 1f), Align.left);
-        outlinedText("Learn C by\nbeating the\ntowers.", 110, 310, 950, 360, 6.6f, Color.WHITE, Align.topLeft);
-        outlinedText("The forest is crawling with enemy towers. Learn C, and take them down.", 110, 700, 640, 90, 2.1f,
+        outlinedText("-  LEARN C++. BEAT THE TOWERS.", 110, 262, 700, 34, 1.8f, new Color(0.85f, 0.95f, 0.6f, 1f), Align.left);
+        outlinedText("Learn C++ by\nbeating the\ntowers.", 110, 310, 950, 360, 6.6f, Color.WHITE, Align.topLeft);
+        outlinedText("The forest is crawling with enemy towers. Learn C++, and take them down.", 110, 700, 640, 90, 2.1f,
                 new Color(0.88f, 0.94f, 0.85f, 1f), Align.topLeft).setWrap(true);
 
         outlinedText("*  ALL SYSTEMS OPERATIONAL      v1.0.0", 110, 1030, 700, 30, 1.5f, new Color(0.85f, 0.95f, 0.65f, 1f),

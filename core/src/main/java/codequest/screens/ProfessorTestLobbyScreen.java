@@ -57,7 +57,7 @@ public class ProfessorTestLobbyScreen extends ProfessorScreen {
                 List<Participant> ps = tests.participants(session.id());
                 String status = tests.session(session.id()).map(s -> tests.endIfOver(s, ps)).orElse("scheduled");
                 return new Live(status, ps);
-            }, 1500);
+            }, Poller.CLASS_TEST_PERIOD_MS);
         });
     }
 

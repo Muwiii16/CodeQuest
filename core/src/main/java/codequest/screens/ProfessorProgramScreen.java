@@ -31,7 +31,7 @@ public class ProfessorProgramScreen extends ProfessorScreen {
     private static final int MAX_SHOWN = 24;
 
     private final CampaignData campaigns = new CampaignData();
-    private final QuestionData questionData = new QuestionData();
+    private QuestionData questionData = new QuestionData();
     private final ClassInfo cls;
     private Lesson lesson;
     private final TextArea programBox;
@@ -43,13 +43,16 @@ public class ProfessorProgramScreen extends ProfessorScreen {
         super(game, username, "Program  -  " + lesson.label() + "  " + lesson.title(),
                 () -> ProfessorLessonScreen.open(game, username, cls, lesson));
         this.cls = cls;
+        this.questionData = new QuestionData(codequest.content.Language.fromKey(cls.language())); // the class language
         this.lesson = lesson;
 
         card(60, 140, 1000, 880);
-        text("The full C program this lesson builds", 90, 155, 940, 40, 2f, AMBER, Align.left, Face.SANS);
+        boolean cpp = codequest.content.Language.fromKey(cls.language()) == codequest.content.Language.CPP;
+        text("The full " + (cpp ? "C++" : "C") + " program this lesson builds", 90, 155, 940, 40, 2f, AMBER, Align.left, Face.SANS);
         text("Each question adds the next lines to the student's code block. For a small lesson, write several short programs "
                 + "and separate them with a line of ---", 90, 196, 940, 44, 1.1f, MUTED, Align.topLeft, Face.SANS).setWrap(true);
-        programBox = textArea("#include <stdio.h>\n\nint main() {\n    ...\n}", 90, 245, 940, 330, Face.MONO);
+        programBox = textArea(cpp ? "#include <iostream>\nusing namespace std;\n\nint main() {\n    ...\n}"
+                : "#include <stdio.h>\n\nint main() {\n    ...\n}", 90, 245, 940, 330, Face.MONO);
         programBox.setText(lesson.program() == null ? "" : lesson.program());
         text("What each program prints when it runs (same order, separated by a line of ---). The terminal shows it.", 90, 585,
                 940, 26, 1.1f, MUTED, Align.left, Face.SANS);
@@ -125,7 +128,8 @@ public class ProfessorProgramScreen extends ProfessorScreen {
 
     /** Puts the built-in program in the box and, if the lesson has no questions, adds the matching questions. */
     private void useBuiltIn() {
-        BuiltInPrograms.Program p = BuiltInPrograms.forLayout(DefaultStages.layoutFor(lesson.number()));
+        BuiltInPrograms.Program p = BuiltInPrograms.forLayout(DefaultStages.layoutFor(lesson.number()),
+                codequest.content.Language.fromKey(cls.language()));
         boolean empty = questions.isEmpty();
         load("Adding the built-in program...", () -> {
             if (!campaigns.updateProgram(lesson.stageId(), p.text(), p.outputs())) {

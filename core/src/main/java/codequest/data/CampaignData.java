@@ -188,6 +188,23 @@ public class CampaignData {
         return previous != null && previous.completed();
     }
 
+    /**
+     * The language the lesson's class teaches. The built-in default campaign (no class) uses the pilot language, C++; a
+     * class whose language cannot be read is C, like every class made before C++ was added.
+     */
+    public codequest.content.Language languageOfCampaign(long campaignId) {
+        JsonValue rows = SupabaseClient.get("campaigns?id=eq." + campaignId + "&select=class_id,class:classes(language)&limit=1");
+        if (rows == null || rows.size == 0) {
+            return codequest.content.Language.C;
+        }
+        JsonValue row = rows.get(0);
+        if (row.get("class_id") == null || row.get("class_id").isNull()) {
+            return codequest.content.Language.PILOT;
+        }
+        JsonValue cls = row.get("class");
+        return codequest.content.Language.fromKey(cls == null ? null : cls.getString("language", null));
+    }
+
     public Optional<Lesson> lesson(long stageId) {
         JsonValue rows = SupabaseClient.get("stages?id=eq." + stageId
                 + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,period,"

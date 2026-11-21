@@ -14,13 +14,9 @@ import java.util.Optional;
 
 /**
  * Class creation: a details form, the students who belong to the class, and the
- * programming language to teach. Only C is playable today; the others are shown
- * greyed out. Once Gemini is connected, the language will also seed the class's
- * generated dictionary.
+ * programming language to teach: C++ (the pilot language, the default) or C; the others are shown greyed out.
  */
 public class ProfessorClassCreationScreen extends ProfessorScreen {
-
-    private static final String[] LANGUAGES = { "C", "Python", "C++", "Java" };
 
     private final ProfessorData data = new ProfessorData();
     private final List<String> students = new ArrayList<>();
@@ -31,6 +27,9 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
     private final TextField studentField;
     private final int base;
     private String pacing = ClassInfo.SELF_PACED;
+    /** The language being chosen: C++ (the pilot) unless the professor picks C. */
+    private codequest.content.Language language = codequest.content.Language.PILOT;
+    private com.badlogic.gdx.scenes.scene2d.Group languageRegion;
 
     public ProfessorClassCreationScreen(Main game, String username) {
         super(game, username, "Create class", () -> game.setScreen(new ProfessorDashboardScreen(game, username)));
@@ -49,19 +48,9 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         termField = textField("e.g. 1st Sem 2026-2027", false, 90, 539, 820, 60);
         termField.setText(codequest.data.Terms.current(java.time.LocalDate.now()));
         text("Programming language", 90, 612, 600, 30, 1.4f, MUTED, Align.left);
-        float lw = 195;
-        for (int i = 0; i < LANGUAGES.length; i++) {
-            boolean playable = i == 0;
-            String language = LANGUAGES[i];
-            float x = 90 + i * (lw + 13.3f);
-            if (playable) {
-                solidButton(language, x, 642, lw, 56, new Color(0.55f, 0.37f, 0.08f, 1f), INERT);
-            } else {
-                solidButton(language, x, 642, lw, 56, new Color(0.14f, 0.16f, 0.21f, 1f), Color.GRAY,
-                        () -> toast(language + " is coming soon. C is the only language available for now.", false));
-                text("coming soon", x, 699, lw, 22, 1.0f, MUTED, Align.center);
-            }
-        }
+        // the language the class teaches: C++ is the pilot language (and the default); C stays for classes that use it
+        languageRegion = region();
+        drawLanguages();
         // how lessons open (the buttons and their explanation are drawn in rebuild(), so they can show the choice)
         text("How lessons open for students", 90, 735, 600, 30, 1.4f, MUTED, Align.left);
         solidButton("Create class", 90, 930, 820, 70, GOOD, this::create);
@@ -73,6 +62,37 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         solidButton("Add", 1590, 215, 240, 64, GOOD, this::addStudent);
         base = mark();
         rebuild();
+    }
+
+    /** The language buttons: C++ and C can be chosen, Python and Java are shown as coming soon. */
+    private void drawLanguages() {
+        fill(languageRegion, this::languageButtons);
+    }
+
+    private void languageButtons() {
+        Color chosen = new Color(0.55f, 0.37f, 0.08f, 1f);
+        Color other = new Color(0.14f, 0.16f, 0.21f, 1f);
+        float lw = 195;
+        String[] names = { "C++", "C", "Python", "Java" };
+        for (int i = 0; i < names.length; i++) {
+            String name = names[i];
+            float x = 90 + i * (lw + 13.3f);
+            boolean playable = i < 2;
+            if (playable) {
+                codequest.content.Language l = codequest.content.Language.fromKey(name);
+                boolean on = l == language;
+                solidButton(name, x, 642, lw, 56, on ? chosen : other, on ? Color.WHITE : Color.GRAY, () -> {
+                    language = l;
+                    drawLanguages();
+                });
+                text(l == codequest.content.Language.PILOT ? "pilot language" : "existing classes", x, 699, lw, 22, 1.0f, MUTED,
+                        Align.center);
+            } else {
+                solidButton(name, x, 642, lw, 56, other, Color.GRAY,
+                        () -> toast(name + " is coming soon. C++ is the pilot language.", false));
+                text("coming soon", x, 699, lw, 22, 1.0f, MUTED, Align.center);
+            }
+        }
     }
 
     /** The two ways lessons can open, with the chosen one highlighted and what it means. */
@@ -153,16 +173,17 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         String term = termField.getText().trim();
         List<String> toEnroll = new ArrayList<>(students);
         String chosenPacing = pacing;
+        String chosenLanguage = language.key();
         load("Creating the class...", () -> {
             long professorId = data.professorId(username);
             return professorId < 0 ? Optional.<ProfessorData.CreatedClass>empty()
-                    : data.createClass(professorId, section, finalCourse, "C", toEnroll, subject, term, chosenPacing);
+                    : data.createClass(professorId, section, finalCourse, chosenLanguage, toEnroll, subject, term, chosenPacing);
         }, created -> {
             if (created.isEmpty()) {
                 toast("Could not create the class. Check your connection.", false);
                 return;
             }
-            ClassInfo info = new ClassInfo(created.get().classId(), finalCourse, section, "C",
+            ClassInfo info = new ClassInfo(created.get().classId(), finalCourse, section, chosenLanguage,
                     created.get().enrolled().size(), 0, subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, false,
                     created.get().joinCode(), chosenPacing);
             String code = JoinCode.display(created.get().joinCode());

@@ -18,6 +18,18 @@ import java.util.List;
  */
 public class QuestionData {
 
+    private final codequest.content.Language language;
+
+    /** Questions of a C lesson (every class made before C++ was added). */
+    public QuestionData() {
+        this(codequest.content.Language.C);
+    }
+
+    /** Questions of a lesson of this class language: what is written to challenges.language and imported as starters. */
+    public QuestionData(codequest.content.Language language) {
+        this.language = language;
+    }
+
     /**
      * A stored question; {@code id} is the challenges row id. Questions with the same {@code slot} are the same chunk of
      * the lesson's program asked at different difficulties.
@@ -135,7 +147,7 @@ public class QuestionData {
             next = last.size > 0 ? last.get(0).getInt("sequence_index", 0) + 1 : 1;
         }
         String body = "{\"stage_id\":" + stageId + ",\"sequence_index\":" + next + ",\"section_index\":1"
-                + ",\"language\":\"C\",\"ai_generated\":false" + fields(q) + "}";
+                + ",\"language\":\"" + language.key() + "\",\"ai_generated\":false" + fields(q) + "}";
         JsonValue inserted = SupabaseClient.post("challenges", body);
         if (inserted == null || inserted.size == 0) {
             return false;
@@ -176,7 +188,7 @@ public class QuestionData {
      */
     public int importBuiltIn(long stageId) {
         int added = 0;
-        for (Challenge q : new StaticChallengeProvider().all()) {
+        for (Challenge q : new StaticChallengeProvider(language).all()) {
             if (add(stageId, new QuestionDraft(q.topic(), q.difficulty(), q.prompt(), q.correctToken(),
                     q.distractors(), q.hint(), q.kind(), q.accepted(), q.chunk(), q.context(), q.explanation(), q.errorText()))) {
                 added++;

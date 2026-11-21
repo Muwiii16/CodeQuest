@@ -112,7 +112,7 @@ public class CampaignScreen extends StudentScreen {
                 .setEllipsis(true);
         // the dictionary of the language this class teaches (the built-in lessons are C)
         final Long openClassId = classes.isEmpty() ? null : classes.get(classIdx).id();
-        final String language = classes.isEmpty() ? "C" : classes.get(classIdx).language();
+        final String language = classes.isEmpty() ? codequest.content.Language.PILOT.key() : classes.get(classIdx).language();
         solidButton("Dictionary", 980, 122, 220, 52, BUTTON,
                 () -> game.setScreen(new DictionaryScreen(game, username, language,
                         () -> game.setScreen(new CampaignScreen(game, username, openClassId)))));

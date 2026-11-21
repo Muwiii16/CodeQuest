@@ -192,7 +192,7 @@ public class ProfessorPeriodAnalysisScreen extends ProfessorScreen {
         data.put("lessons", lessonList);
         data.put("topics", topicList);
         data.put("students", rows);
-        return new AiFeedback().forClass(data, names);
+        return new AiFeedback(codequest.content.Language.fromKey(cls.language())).forClass(data, names);
     }
 
     private static double rate(int[] c) {

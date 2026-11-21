@@ -37,7 +37,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
     private static final int PAGE_SIZE = 9;
 
     private final CampaignData campaigns = new CampaignData();
-    private final QuestionData questionData = new QuestionData();
+    private QuestionData questionData = new QuestionData();
     private final ClassInfo cls;
     private Lesson lesson;
     private final TextField titleField;
@@ -57,6 +57,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         super(game, username, lesson.label() + "  -  " + lesson.title(),
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         this.cls = cls;
+        this.questionData = new QuestionData(codequest.content.Language.fromKey(cls.language())); // the class language
         this.lesson = lesson;
         this.difficultyIdx = Math.max(0, java.util.Arrays.asList(DIFFICULTIES).indexOf(lesson.baseDifficulty()));
         this.adaptive = lesson.adaptive();

@@ -236,7 +236,7 @@ public class ProfessorSubjectAnalysisScreen extends ProfessorScreen {
         data.put("topics", topics);
         // the class endpoint expects a student list; here the rows are the sections, so no names are involved
         data.put("studentRowsAreSections", true);
-        AiFeedback.Result r = new AiFeedback().forClass(data, List.of());
+        AiFeedback.Result r = new AiFeedback(codequest.content.Language.fromKey(st.sections().get(0).cls().language())).forClass(data, List.of());
         if (!r.ok()) {
             return r;
         }

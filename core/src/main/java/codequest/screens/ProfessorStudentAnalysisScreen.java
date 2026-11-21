@@ -217,7 +217,7 @@ public class ProfessorStudentAnalysisScreen extends ProfessorScreen {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("scope", "one student, compared with the class average");
         data.put("students", students);
-        return new AiFeedback().forClass(data, List.of(student.username()));
+        return new AiFeedback(codequest.content.Language.fromKey(cls.language())).forClass(data, List.of(student.username()));
     }
 
     private static double rate(int[] c) {

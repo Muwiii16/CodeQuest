@@ -122,6 +122,8 @@ public class PlayScreen extends InputAdapter implements Screen {
     private volatile DatabaseManager.RollOutcome rollOutcome;
     /** The subject this lesson belongs to once the run was saved: it holds the certificate when all its lessons are completed. */
     private volatile codequest.data.AwardsData.Subject subjectDone;
+    /** The language this lesson is taught in (its class): the AI feedback follows it. */
+    private codequest.content.Language language = codequest.content.Language.C;
 
     // what happens to the projectile after an answer: held in place until the weapon hits it, then knocked
     // back to its tower (right answer), or carried on into the student (wrong answer)
@@ -212,7 +214,7 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     /** Everything the screen needs from the database, fetched beforehand (see {@link #open}) so starting never freezes. */
     public record PlayData(List<Challenge> authored, long studentId, Map<String, Long> equipped,
-            List<DatabaseManager.Cosmetic> catalog) {
+            List<DatabaseManager.Cosmetic> catalog, codequest.content.Language language) {
 
         static PlayData fetch(DatabaseManager db, String username, Lesson lesson) {
             CompletableFuture<List<Challenge>> questions = CompletableFuture
@@ -222,10 +224,13 @@ public class PlayScreen extends InputAdapter implements Screen {
                 return new Object[] { id, id < 0 ? Map.<String, Long>of() : db.getEquippedCosmetics(id) };
             });
             CompletableFuture<List<DatabaseManager.Cosmetic>> catalog = CompletableFuture.supplyAsync(db::getCatalog);
+            // the language of the lesson's class: the built-in lessons and starter questions follow it
+            CompletableFuture<codequest.content.Language> language = CompletableFuture
+                    .supplyAsync(() -> new codequest.data.CampaignData().languageOfCampaign(lesson.campaignId()));
             Object[] s = student.join();
             @SuppressWarnings("unchecked")
             Map<String, Long> equipped = (Map<String, Long>) s[1];
-            return new PlayData(questions.join(), (Long) s[0], equipped, catalog.join());
+            return new PlayData(questions.join(), (Long) s[0], equipped, catalog.join(), language.join());
         }
     }
 
@@ -262,8 +267,9 @@ public class PlayScreen extends InputAdapter implements Screen {
 
         // A lesson with a program (or with no questions at all, which plays a built-in program) is built block by block:
         // one tower per chunk, in program order. Any other lesson draws its questions at random as before.
+        this.language = data.language();
         int layout = DefaultStages.layoutFor(lesson.number());
-        List<Challenge> programSlots = programSlots(lesson, data.authored(), layout);
+        List<Challenge> programSlots = programSlots(lesson, data.authored(), layout, data.language());
         Stage stage;
         ChallengeProvider provider;
         ProgramLayout programLayout = null;
@@ -274,7 +280,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             String programText;
             String outputsText;
             if (data.authored().isEmpty()) {
-                BuiltInPrograms.Program builtIn = BuiltInPrograms.forLayout(layout);
+                BuiltInPrograms.Program builtIn = BuiltInPrograms.forLayout(layout, data.language());
                 programText = builtIn.text();
                 outputsText = builtIn.outputs();
             } else {
@@ -292,7 +298,8 @@ public class PlayScreen extends InputAdapter implements Screen {
             // gives everyone the same questions and a resumed lesson replays exactly.
             KindRotation rotation = new KindRotation();
             provider = new FallbackChallengeProvider(
-                    new PooledChallengeProvider(data.authored(), seed, rotation), new StaticChallengeProvider(seed + 1, rotation));
+                    new PooledChallengeProvider(data.authored(), seed, rotation),
+                    new StaticChallengeProvider(data.language(), seed + 1, rotation));
         }
         this.towerCount = stage.towerCount();
         this.run = new StageRun(stage, startDifficulty, classTest ? StageRun.Mode.CLASS_TEST : StageRun.Mode.CAMPAIGN,
@@ -312,7 +319,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 List<ClassTestData.Participant> ps = tests.participants(testSession.id());
                 String status = tests.session(testSession.id()).map(s -> tests.endIfOver(s, ps)).orElse("active");
                 return new Live(ps, status);
-            }, 2000);
+            }, Poller.CLASS_TEST_PERIOD_MS);
         } else {
             this.standings = null;
         }
@@ -386,9 +393,10 @@ public class PlayScreen extends InputAdapter implements Screen {
      * questions at random. A lesson with a program and questions that all say which lines they add is built from its own
      * questions; a lesson with no questions at all plays the built-in program of its map.
      */
-    private static List<Challenge> programSlots(Lesson lesson, List<Challenge> authored, int layout) {
+    private static List<Challenge> programSlots(Lesson lesson, List<Challenge> authored, int layout,
+            codequest.content.Language language) {
         if (authored.isEmpty()) {
-            return BuiltInPrograms.forLayout(layout).slots();
+            return BuiltInPrograms.forLayout(layout, language).slots();
         }
         if (lesson.hasProgram() && authored.stream().allMatch(c -> c.codeChunk() != null)) {
             return authored;
@@ -994,7 +1002,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         String rank = run.rank().name();
         int accuracy = (int) Math.round(run.overallAccuracy() * 100);
         uploader.submit(() -> {
-            AiFeedback.Result r = new AiFeedback().forStudent(title, rank, accuracy, items);
+            AiFeedback.Result r = new AiFeedback(language).forStudent(title, rank, accuracy, items);
             aiText = r.text();
             aiError = r.error();
             aiLoading = false;

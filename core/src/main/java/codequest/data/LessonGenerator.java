@@ -21,6 +21,18 @@ import java.util.Set;
  */
 public class LessonGenerator {
 
+    private final codequest.content.Language language;
+
+    /** A generator of C lessons (every class made before C++ was added). */
+    public LessonGenerator() {
+        this(codequest.content.Language.C);
+    }
+
+    /** A generator for the language the class teaches: the AI writes the program and questions in it. */
+    public LessonGenerator(codequest.content.Language language) {
+        this.language = language;
+    }
+
     /** Exactly one of lesson and error is set. */
     public record Result(GeneratedLesson lesson, String error) {
         public boolean ok() {
@@ -45,7 +57,7 @@ public class LessonGenerator {
         String problems = null;
         String lastProblem = "The AI did not give a usable lesson.";
         for (int attempt = 0; attempt < 2; attempt++) {
-            String body = "{\"prompt\":\"" + SupabaseClient.jsonEscape(prompt) + "\",\"difficulty\":\""
+            String body = "{\"language\":\"" + language.key() + "\",\"prompt\":\"" + SupabaseClient.jsonEscape(prompt) + "\",\"difficulty\":\""
                     + SupabaseClient.jsonEscape(difficulty) + "\",\"focus\":\"" + ScopeCheck.formatTopics(focus)
                     + "\",\"taught\":\"" + ScopeCheck.formatTopics(taught) + "\",\"taughtNotes\":\""
                     + SupabaseClient.jsonEscape(taughtNotes) + "\""
@@ -89,7 +101,7 @@ public class LessonGenerator {
 
     /** Asks whether the request can be turned into a lesson without guessing. Blocks: call it from a background thread. */
     public Clarification clarify(String prompt, String taughtNotes) {
-        String body = "{\"mode\":\"clarify\",\"prompt\":\"" + SupabaseClient.jsonEscape(prompt) + "\",\"taughtNotes\":\""
+        String body = "{\"mode\":\"clarify\",\"language\":\"" + language.key() + "\",\"prompt\":\"" + SupabaseClient.jsonEscape(prompt) + "\",\"taughtNotes\":\""
                 + SupabaseClient.jsonEscape(taughtNotes) + "\"}";
         SupabaseClient.FunctionResult r = SupabaseClient.callFunction("generate-lesson", body, 60);
         if (!r.ok()) {

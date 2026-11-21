@@ -75,7 +75,7 @@ public class ClassTestScreen extends StudentScreen {
                     }
                 }
                 return new State(sessions, participants);
-            }, 1500);
+            }, Poller.CLASS_TEST_PERIOD_MS);
         });
     }
 

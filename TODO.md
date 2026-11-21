@@ -419,3 +419,19 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - New screen "Subject analysis" (professor dashboard, next to Join requests). A subject is every section (class) of the professor that has the same subject name (or the same course code when no name is set), so "Programming 1" taught to BSCS 1-1 and CS 1-1 is one subject. Tabs pick the subject.
 - Shows: four pooled numbers (students over all sections, work completed, average grade, students needing attention), the sections side by side (students, completion, average, attention; Open goes to that section class analysis; * marks the best average), the grading periods pooled, the weakest topics and the lowest graded lessons over all sections, and a written AI analysis comparing the sections (the AI sees Section 1, 2, ... and the real section names are put back; no student names are sent).
 - `SubjectStats` does the arithmetic and is unit-tested. No database change.
+
+## Round 42: C++ is the pilot language (branch feature/cpp-pilot)
+- A class teaches one language (`classes.language`: 'C' or 'C++'). New classes default to C++ (the pilot); the existing C classes stay C and keep playing exactly what they did. Python and Java are still "coming soon". The class creation screen has C++ (pilot, default) and C.
+- Style decided: iostream with `using namespace std;` (cout, cin, endl).
+- Built-in lessons (3 programs) and starter questions (about 40) now exist in C++ (`BuiltInProgramsCpp`, `StaticChallengeProvider(Language.CPP)`); students not in a class play the C++ built-in lessons. C++ question ids start with `cpp` so the answer log tells them apart.
+- Dictionary: 37 C++ entries (migration 20261121200000_cpp_language.sql, applied). It opens from a class in the campaign and follows the class language.
+- The AI follows the class language: generate-lesson (v22) writes the program and questions in C++ with iostream rules and g++ error messages; ai-feedback (v6) tutors in C++. A request with no language is C, so the old game still works.
+- ScopeCheck understands cin, string, bool, nullptr. The game text (login screen, editor hints, program box) says C++ for a C++ class.
+- Tests: `CppContentTest` (valid questions, programs complete and buildable from their questions, no C syntax in C++ content).
+- The topics (syntax, variables, control structures, functions, arrays, pointers) are the same for both languages; C++-only topics (classes, references, STL beyond string and vector) are not added yet.
+- ERD: no new column (`classes.language` already existed; its default is now 'C++').
+
+## Round 43: load test and gentler polling
+- Load test on the live free-plan project with throwaway accounts (all removed afterwards): 20 students in one section and 80 students in four sections at once, both with zero errors (80 students: about 103 requests a second, slowest 5% under 0.3 s, 5.4 MB a minute). Pushed to about 139 requests a second (polling about 3x faster than the game) it slowed down (median 0.5 s, slowest up to 5 s) but still gave no errors, so the comfortable limit is somewhere around 100 to 140 requests a second on the free plan.
+- The class-test screens now poll every 3 s instead of 1.5 to 2 s (`Poller.CLASS_TEST_PERIOD_MS`): about two thirds of the load, for a leaderboard that updates every 3 seconds.
+- Advice: start the four sections a few minutes apart rather than in the same second; open the Supabase project the day before (free projects pause after about a week idle).

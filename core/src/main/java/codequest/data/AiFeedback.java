@@ -29,6 +29,18 @@ public class AiFeedback {
 
     private static final int TIMEOUT_SECONDS = 60;
 
+    private final codequest.content.Language language;
+
+    /** Feedback about C (every class made before C++ was added). */
+    public AiFeedback() {
+        this(codequest.content.Language.C);
+    }
+
+    /** Feedback about the language the class teaches: the AI writes about C++ for a C++ class. */
+    public AiFeedback(codequest.content.Language language) {
+        this.language = language;
+    }
+
     /** Feedback for one student on a lesson they just played. Blocks: call it from a background thread. */
     public Result forStudent(String lessonTitle, String rank, int accuracyPercent, List<Item> items) {
         List<Object> answers = new java.util.ArrayList<>();
@@ -67,7 +79,7 @@ public class AiFeedback {
     }
 
     private Result call(String mode, Object data) {
-        String body = "{\"mode\":\"" + mode + "\",\"data\":" + toJson(data) + "}";
+        String body = "{\"mode\":\"" + mode + "\",\"language\":\"" + language.key() + "\",\"data\":" + toJson(data) + "}";
         SupabaseClient.FunctionResult r = SupabaseClient.callFunction("ai-feedback", body, TIMEOUT_SECONDS);
         String message = null;
         String text = null;

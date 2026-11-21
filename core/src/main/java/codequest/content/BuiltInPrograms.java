@@ -21,7 +21,12 @@ public final class BuiltInPrograms {
     private BuiltInPrograms() {
     }
 
-    /** The program for a map layout (1 to {@link DefaultStages#LAYOUTS}). */
+    /** The program for a map layout in the given language: C or C++ (the pilot language). */
+    public static Program forLayout(int layout, Language language) {
+        return language == Language.CPP ? BuiltInProgramsCpp.forLayout(layout) : forLayout(layout);
+    }
+
+    /** The C program for a map layout (1 to {@link DefaultStages#LAYOUTS}). */
     public static Program forLayout(int layout) {
         return switch (layout) {
             case 2 -> arrays();
@@ -33,7 +38,7 @@ public final class BuiltInPrograms {
     // ── helpers ──
 
     /** Gives each question listed the terminal message its wrong answers cause (see Challenge#errorFor). */
-    private static List<Challenge> withErrors(List<Challenge> questions, java.util.Map<String, String> texts) {
+    static List<Challenge> withErrors(List<Challenge> questions, java.util.Map<String, String> texts) {
         List<Challenge> out = new ArrayList<>();
         for (Challenge c : questions) {
             String text = texts.get(c.id());
@@ -43,7 +48,7 @@ public final class BuiltInPrograms {
     }
 
     /** Gives each question listed its explanation (why the answer is right), keeping the order. */
-    private static List<Challenge> withExplanations(List<Challenge> questions, java.util.Map<String, String> texts) {
+    static List<Challenge> withExplanations(List<Challenge> questions, java.util.Map<String, String> texts) {
         List<Challenge> out = new ArrayList<>();
         for (Challenge c : questions) {
             String text = texts.get(c.id());
@@ -53,7 +58,7 @@ public final class BuiltInPrograms {
     }
 
     /** Gives each question listed its context line (what the code is for), keeping the order. */
-    private static List<Challenge> withContext(List<Challenge> questions, java.util.Map<String, String> contexts) {
+    static List<Challenge> withContext(List<Challenge> questions, java.util.Map<String, String> contexts) {
         List<Challenge> out = new ArrayList<>();
         for (Challenge c : questions) {
             String text = contexts.get(c.id());
@@ -62,28 +67,28 @@ public final class BuiltInPrograms {
         return out;
     }
 
-    private static Challenge choice(String id, CTopic t, Difficulty d, String prompt, String correct, List<String> wrong,
+    static Challenge choice(String id, CTopic t, Difficulty d, String prompt, String correct, List<String> wrong,
             String hint) {
         return new Challenge(id, t, d, prompt, correct, wrong, hint);
     }
 
-    private static Challenge fill(String id, CTopic t, Difficulty d, String prompt, String correct, List<String> accepted,
+    static Challenge fill(String id, CTopic t, Difficulty d, String prompt, String correct, List<String> accepted,
             String hint) {
         return new Challenge(id, t, d, prompt, correct, List.of(), hint, AnswerKind.FILL_BLANK, accepted);
     }
 
-    private static Challenge trueFalse(String id, CTopic t, Difficulty d, String statement, boolean isTrue, String chunk,
+    static Challenge trueFalse(String id, CTopic t, Difficulty d, String statement, boolean isTrue, String chunk,
             String hint) {
         return new Challenge(id, t, d, statement, isTrue ? Challenge.TRUE : Challenge.FALSE, List.of(), hint,
                 AnswerKind.TRUE_FALSE, List.of(), chunk);
     }
 
-    private static Challenge arrange(String id, CTopic t, Difficulty d, String prompt, String order, List<String> decoys,
+    static Challenge arrange(String id, CTopic t, Difficulty d, String prompt, String order, List<String> decoys,
             String hint) {
         return new Challenge(id, t, d, prompt, order, decoys, hint, AnswerKind.ARRANGE, List.of());
     }
 
-    private static Challenge bug(String id, CTopic t, Difficulty d, String code, int badLine, String fixedChunk,
+    static Challenge bug(String id, CTopic t, Difficulty d, String code, int badLine, String fixedChunk,
             String hint) {
         return new Challenge(id, t, d, code, String.valueOf(badLine), List.of(), hint, AnswerKind.FIND_BUG, List.of(),
                 fixedChunk);

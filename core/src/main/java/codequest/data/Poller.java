@@ -13,6 +13,13 @@ import java.util.function.Supplier;
  */
 public final class Poller<T> implements AutoCloseable {
 
+    /**
+     * How often the class-test screens (lobby, test, results; student and professor) ask the server for the latest. Every
+     * student in a test polls, so this sets the load: a load test of 80 students (4 sections of 20) at 2 s gave about 100
+     * requests a second and was fine; 3 s brings that to about two thirds, which leaves more room on a small database.
+     */
+    public static final long CLASS_TEST_PERIOD_MS = 3000;
+
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "codequest-poller");
         t.setDaemon(true);

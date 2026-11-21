@@ -35,7 +35,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
     private static final Color STEP_DONE = new Color(0.16f, 0.3f, 0.5f, 1f);
     private static final String[] STEPS = { "1   Kind of question", "2   Question and answer", "3   Help and errors" };
 
-    private final QuestionData questionData = new QuestionData();
+    private QuestionData questionData = new QuestionData();
     private final ClassInfo cls;
     private final Lesson lesson;
     private final Question existing;
@@ -87,6 +87,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
         super(game, username, (existing != null ? "Edit question" : variantOf != null ? "New difficulty level" : "New question")
                 + "  -  " + lesson.label(), () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, lesson)));
         this.cls = cls;
+        this.questionData = new QuestionData(codequest.content.Language.fromKey(cls.language())); // the class language
         this.lesson = lesson;
         this.existing = existing;
         this.variantOf = variantOf;
@@ -126,6 +127,15 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
     }
 
     /** Copies what is typed in the boxes on screen into the fields above. */
+    /** True when the class teaches C++ (the pilot language): the examples in the boxes use cout, not printf. */
+    private boolean isCpp() {
+        return codequest.content.Language.fromKey(cls.language()) == codequest.content.Language.CPP;
+    }
+
+    private String languageName() {
+        return codequest.content.Language.fromKey(cls.language()).key();
+    }
+
     private void sync() {
         if (promptBox != null) {
             promptT = promptBox.getText();
@@ -265,11 +275,11 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
             case CHOICE -> "Question (type ___ where the answer goes)";
         }, 268);
         promptBox = textArea(switch (kind) {
-            case TRUE_FALSE -> "e.g. Every C program starts running at main.";
-            case FIND_BUG -> "int x = 5;\nint *p = x;\nprintf(\"%d\", *p);";
+            case TRUE_FALSE -> "e.g. Every " + languageName() + " program starts running at main.";
+            case FIND_BUG -> isCpp() ? "int x = 5;\nint *p = x;\ncout << *p;" : "int x = 5;\nint *p = x;\nprintf(\"%d\", *p);";
             case FILL_BLANK -> "e.g. for (int i = 0; i < 3; i___)";
             case ARRANGE -> "e.g. Build the line that prints Hi.";
-            case CHOICE -> "e.g. printf(\"Hello\")___";
+            case CHOICE -> isCpp() ? "e.g. cout << \"Hello\"___" : "e.g. printf(\"Hello\")___";
         }, 90, 304, 1040, 90, PixelFonts.faceForPrompt(kind, promptT));
         promptBox.setText(promptT);
 
@@ -303,7 +313,7 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
             correctField = textField(switch (kind) {
                 case FIND_BUG -> "e.g. 2";
                 case FILL_BLANK -> "e.g. ++";
-                case ARRANGE -> "e.g. printf ( \"Hi\" ) ;";
+                case ARRANGE -> isCpp() ? "e.g. cout << \"Hi\" ;" : "e.g. printf ( \"Hi\" ) ;";
                 default -> "the token that fills the blank, e.g. ;";
             }, false, 90, 556, 1040, 52, Face.MONO);
             correctField.setText(correctT);
@@ -344,8 +354,10 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
 
         heading("Explanation  (shown after the student answers)", 384);
         help("Say why the right answer is right. Needed in a lesson that builds a program.", 416, 26);
-        explanationBox = textArea("e.g. #include <stdio.h> loads the library that contains printf. Without it the compiler "
-                + "does not know printf.", 90, 448, 1040, 124, Face.SANS);
+        explanationBox = textArea(isCpp()
+                ? "e.g. #include <iostream> loads the library that contains cout. Without it the compiler does not know cout."
+                : "e.g. #include <stdio.h> loads the library that contains printf. Without it the compiler "
+                        + "does not know printf.", 90, 448, 1040, 124, Face.SANS);
         explanationBox.setText(explanationT);
 
         heading("Terminal message  (optional)", 600);

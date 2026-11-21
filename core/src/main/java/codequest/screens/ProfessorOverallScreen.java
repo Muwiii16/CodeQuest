@@ -109,7 +109,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
         data.put("scope", scope == null ? "all lessons" : scope.label() + " period");
         data.put("lessons", lessonList);
         data.put("students", rows);
-        return new AiFeedback().forClass(data, names);
+        return new AiFeedback(codequest.content.Language.fromKey(cls.language())).forClass(data, names);
     }
 
     /** One tab per grading period (and one for all of them): the table and the AI analysis follow the chosen one. */
