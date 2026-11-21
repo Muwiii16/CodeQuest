@@ -374,3 +374,23 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - Professor dashboard: "Join requests (N)" button -> list with student game name, full name and class, Approve / Reject. Reject deletes the request (the student may ask again). Adding a student by username is approved at once (and approves a waiting request).
 - Database: `app_in_class` counts only approved rows, so a pending student sees nothing of the class; a student cannot approve themselves or insert an approved row; another professor cannot see or answer the request. Checked with 22 rolled-back tests.
 - ERD: `class_enrollments.status`.
+
+## Round 34: period analysis
+- New screen "Period analysis" (section tools): tabs Prelims / Midterms / Semis / Finals; per student: lessons done, average grade, attempts, last played and a note (Not started / In progress / Needs attention (avg under 50%) / n left / Done); the topics the class got wrong most in that period (from the answer log); and a written AI analysis scoped to the period (names never sent).
+- "Overall class performance" keeps its period tabs (table + AI follow the tab); the new screen is the per-period deep dive, like the per-lesson analysis is for one lesson.
+- No database change.
+
+## Round 35: badges and subject certificates
+- A completed lesson now gives a badge (a picture with the student's name, lesson, subject, rank, grade, period and date, savable as PNG to show the professor). Badges are read from `campaign_progress`, nothing extra is stored.
+- A certificate (PDF) is given only for finishing the whole subject: every lesson of the class completed (the professor's last lesson and all before it). The game no longer issues certificates itself; `issue_subject_certificate()` checks the completion on the server and is the only way a certificate row is written. One per student and class. The app can no longer insert/edit/delete certifications. Migration 20261121180000_subject_certificates.sql (applied).
+- Student screens: main menu "Achievements" -> tabs Badges / Certificates (a subject that is not finished shows "n of m lessons finished"). After a lesson: "Badge earned"; after the last lesson of a subject: "Get certificate".
+- Old per-lesson certificate rows stay in the table (kind = 'lesson') but are no longer shown; their lessons appear as badges.
+- A lesson added after the certificate was issued does not take the certificate back; a student who has not finished yet must complete it too.
+- The certificate rank/percentage is the average grade over the lessons (computed in the game); the completion itself is verified by the server.
+- ERD: `certifications.class_id`, `certifications.kind`.
+
+## Round 36: certificates per period + a grand certificate for the whole subject
+- A student gets a certificate for each grading period (Prelims, Midterms, Semis, Finals) once every lesson of that period is completed (plain design), and a second, fancier "Certificate of Achievement" (navy and gold frame, rank medallion, star seal) once every lesson of the subject is completed.
+- Only the server writes them: `issue_period_certificate()` and `issue_subject_certificate()` check the completed lessons. Migration 20261121190000_period_certificates.sql (applied): `certifications.period`, kind 'period' added, one per student, class and period.
+- Result screen after a lesson: if the lesson finished its period -> "Get certificate" (period one); if it finished the subject -> the grand one (the period one stays under Achievements). Achievements > Certificates lists, per subject, the grand certificate and one row per period that has lessons.
+- ERD: `certifications.period` (and kind now: lesson | period | subject).

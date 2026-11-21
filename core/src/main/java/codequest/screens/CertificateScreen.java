@@ -3,8 +3,8 @@ package codequest.screens;
 import codequest.Main;
 import codequest.certificate.CertificateData;
 import codequest.certificate.CertificatePdf;
+import codequest.data.AwardsData;
 import codequest.data.DatabaseManager;
-import codequest.data.Lesson;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
@@ -23,10 +23,9 @@ import java.io.IOException;
 import java.time.LocalDate;
 
 /**
- * DFD process 8.0 (Issue Certification), student side. After a run it records the
- * certificate in D7, builds the PDF, shows it and lets the student save it; from
- * the Certificates list it shows one that was already earned. Nothing is shown
- * if the record can't be saved. The database work and the PDF are done in the
+ * DFD process 8.0 (Issue Certification), student side. A certificate is earned by finishing every lesson of a subject; the
+ * server records it in D7 (only after checking the completion), and this screen builds the PDF, shows it and lets the
+ * student save it. Nothing is shown if the record is not there. The database work and the PDF are done in the
  * background; only the picture is made on the render thread.
  */
 public class CertificateScreen extends BaseScreen {
@@ -41,52 +40,56 @@ public class CertificateScreen extends BaseScreen {
     private byte[] pdf;
     private String fileName;
 
-    /** Right after a run: issue (or upgrade) the certificate, then show it. {@code back} is what the button underneath does. */
-    public CertificateScreen(Main game, String username, Lesson lesson, String rank, double accuracy, Runnable back) {
-        setBackground(Art.BG_MENU);
-        addCenteredTitle("YOUR CERTIFICATE", 70f, 4f, Color.WHITE);
-        load("Preparing your certificate...", () -> {
-            var record = db.issueCertificate(username, lesson.stageId(), rank, accuracy * 100);
-            if (record.isEmpty()) {
-                return null;
-            }
-            return prepare(username, lesson.number(), lesson.title(), record.get().rank(),
-                    record.get().scorePercentage(), LocalDate.now());
-        }, prepared -> show(prepared, back, "Continue"));
+    /**
+     * The certificate of a finished subject (earned by completing every lesson of it; the server issued it already).
+     * {@code back} is what the button underneath does.
+     */
+    public CertificateScreen(Main game, String username, AwardsData.Subject subject, Runnable back, String backLabel) {
+        this(game, username, subject, null, back, backLabel);
     }
 
-    /** From the Certificates list: show one the student already earned. */
-    public CertificateScreen(Main game, String username, DatabaseManager.CertificateListing listing) {
+    /**
+     * The certificate of one grading period of a subject (every lesson of that period completed), or of the whole subject
+     * when {@code period} is null (the fancier design).
+     */
+    public CertificateScreen(Main game, String username, AwardsData.Subject subject, codequest.data.Period period,
+            Runnable back, String backLabel) {
         setBackground(Art.BG_MENU);
-        addCenteredTitle("YOUR CERTIFICATE", 70f, 4f, Color.WHITE);
-        Runnable back = () -> game.setScreen(new CertificatesScreen(game, username));
+        addCenteredTitle(period == null ? "YOUR SUBJECT CERTIFICATE" : "YOUR " + period.label().toUpperCase() + " CERTIFICATE", 70f,
+                4f, Color.WHITE);
         load("Preparing your certificate...", () -> {
+            AwardsData.PeriodAward award = period == null ? null : subject.award(period);
+            AwardsData.Certificate cert = period == null ? subject.certificate() : award == null ? null : award.certificate();
+            if (cert == null) {
+                return null;
+            }
             LocalDate issued;
             try {
-                issued = LocalDate.parse(listing.issuedAt().substring(0, 10));
+                issued = LocalDate.parse(cert.issuedAt().substring(0, 10));
             } catch (RuntimeException e) {
                 issued = LocalDate.now();
             }
-            return prepare(username, listing.lessonNumber(), listing.lessonTitle(), listing.rank(),
-                    listing.scorePercentage(), issued);
-        }, prepared -> show(prepared, back, "Back to certificates"));
+            return prepare(username, subject, period, cert, issued);
+        }, prepared -> show(prepared, back, backLabel));
     }
 
     /** Looks up the student's name, then builds the PDF and its preview image (no graphics calls here). */
-    private Prepared prepare(String username, int lessonNumber, String lessonTitle, String rank, double percent,
-            LocalDate date) {
+    private Prepared prepare(String username, AwardsData.Subject subject, codequest.data.Period period,
+            AwardsData.Certificate cert, LocalDate date) {
         try {
             var profile = db.getProfile(username);
             String name = profile.map(p -> p.fullName() != null && !p.fullName().isBlank() ? p.fullName() : p.username())
                     .orElse(username);
-            String section = profile.map(DatabaseManager.Profile::section).orElse(null);
-            CertificateData data = new CertificateData(name, section, "Lesson " + lessonNumber + ": " + lessonTitle, rank,
-                    percent, date);
+            String what = period == null ? "the subject " + subject.name() + " (" + subject.courseCode() + ")"
+                    : "the " + period.label() + " period of " + subject.name() + " (" + subject.courseCode() + ")";
+            CertificateData data = new CertificateData(name, subject.section(), what, cert.rank(), cert.percent(), date,
+                    period == null);
             byte[] pdfBytes = CertificatePdf.generate(data);
             BufferedImage img = CertificatePdf.preview(pdfBytes, 110f);
             ByteArrayOutputStream png = new ByteArrayOutputStream();
             ImageIO.write(img, "png", png);
-            String file = "CodeQuest-Certificate-" + username.replaceAll("[^A-Za-z0-9_-]", "_") + "-lesson" + lessonNumber
+            String file = "CodeQuest-Certificate-" + username.replaceAll("[^A-Za-z0-9_-]", "_") + "-"
+                    + subject.name().replaceAll("[^A-Za-z0-9_-]", "_") + (period == null ? "-Subject" : "-" + period.label())
                     + ".pdf";
             return new Prepared(file, pdfBytes, png.toByteArray());
         } catch (IOException | RuntimeException e) {

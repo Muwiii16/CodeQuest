@@ -30,6 +30,9 @@ public final class CertificatePdf {
     }
 
     public static byte[] generate(CertificateData d) throws IOException {
+        if (d.grand()) {
+            return GrandCertificate.generate(d); // finishing a whole subject has its own, fancier design
+        }
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(new PDRectangle(PAGE_W, PAGE_H));
             doc.addPage(page);
@@ -84,7 +87,7 @@ public final class CertificatePdf {
         }
     }
 
-    private static void centered(PDPageContentStream cs, PDFont font, float size, String text, float y)
+    static void centered(PDPageContentStream cs, PDFont font, float size, String text, float y)
             throws IOException {
         String s = encodable(font, text);
         float width = font.getStringWidth(s) / 1000f * size;
@@ -96,7 +99,7 @@ public final class CertificatePdf {
     }
 
     /** Standard PDF fonts only cover Latin text; anything else becomes '?' instead of crashing the export. */
-    private static String encodable(PDFont font, String text) {
+    static String encodable(PDFont font, String text) {
         StringBuilder sb = new StringBuilder();
         text.codePoints().forEach(cp -> {
             if (cp < 32) {

@@ -381,6 +381,44 @@ public class ProfessorData {
         return out;
     }
 
+    /** What the answer log says about some lessons together: per topic for the whole class, and per student and topic. */
+    public record TopicStats(Map<String, int[]> classTopics, Map<Long, Map<String, int[]>> byStudent) {
+    }
+
+    /** Per topic {right, total} over all the given lessons (one period), for the class and for each student. */
+    public TopicStats topicAccuracyFor(List<Student> students, List<Lesson> lessons) {
+        Map<String, int[]> classTopics = new java.util.TreeMap<>();
+        Map<Long, Map<String, int[]>> byStudent = new HashMap<>();
+        if (students.isEmpty() || lessons.isEmpty()) {
+            return new TopicStats(classTopics, byStudent);
+        }
+        StringBuilder stageIds = new StringBuilder();
+        for (Lesson l : lessons) {
+            stageIds.append(stageIds.length() == 0 ? "" : ",").append(l.stageId());
+        }
+        JsonValue rows = SupabaseClient.get("submissions?stage_id=in.(" + stageIds + ")&student_id=in.(" + idList(students)
+                + ")&select=student_id,topic,is_correct&limit=5000");
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                String topic = r.getString("topic", null);
+                if (topic == null) {
+                    continue;
+                }
+                boolean right = r.getBoolean("is_correct", false);
+                int[] all = classTopics.computeIfAbsent(topic, k -> new int[2]);
+                int[] mine = byStudent.computeIfAbsent(r.getLong("student_id"), k -> new java.util.TreeMap<>())
+                        .computeIfAbsent(topic, k -> new int[2]);
+                all[1]++;
+                mine[1]++;
+                if (right) {
+                    all[0]++;
+                    mine[0]++;
+                }
+            }
+        }
+        return new TopicStats(classTopics, byStudent);
+    }
+
     private static String idList(List<Student> students) {
         StringBuilder ids = new StringBuilder();
         for (Student s : students) {

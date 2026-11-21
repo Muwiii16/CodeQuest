@@ -120,6 +120,8 @@ public class PlayScreen extends InputAdapter implements Screen {
     private CosmeticLook.Outfit outfit;
     private WeaponRig rig;
     private volatile DatabaseManager.RollOutcome rollOutcome;
+    /** The subject this lesson belongs to once the run was saved: it holds the certificate when all its lessons are completed. */
+    private volatile codequest.data.AwardsData.Subject subjectDone;
 
     // what happens to the projectile after an answer: held in place until the weapon hits it, then knocked
     // back to its tower (right answer), or carried on into the student (wrong answer)
@@ -657,6 +659,8 @@ public class PlayScreen extends InputAdapter implements Screen {
                 } else if (pass) {
                     db.saveLessonProgress(username, lesson.stageId(), startDifficulty.name().toLowerCase(), score, rank);
                     rollOutcome = db.rollReward(username, lesson.stageId());
+                    // the certificate comes only when every lesson of the subject is completed (the server checks it)
+                    subjectDone = new codequest.data.AwardsData().subjectOfLesson(username, lesson).orElse(null);
                 }
             } finally {
                 saveDone = true;
@@ -776,8 +780,9 @@ public class PlayScreen extends InputAdapter implements Screen {
             } else if (feedbackAvailable() && feedbackButton().contains(mx, my)) {
                 openFeedback();
             } else if (certificateEligible() && certButton().contains(mx, my)) {
-                game.setScreen(new CertificateScreen(game, username, lesson,
-                        run.rank().name(), run.overallAccuracy(), () -> game.setScreen(afterRun())));
+                // finishing the whole subject gives the grand certificate; otherwise this lesson finished its period
+                codequest.data.Period which = subjectDone.certificate() != null ? null : lesson.periodEnum();
+                game.setScreen(new CertificateScreen(game, username, subjectDone, which, () -> game.setScreen(afterRun()), "Continue"));
             }
             return true;
         }
@@ -937,8 +942,16 @@ public class PlayScreen extends InputAdapter implements Screen {
         return false;
     }
 
+    /** A certificate is only for finishing the whole subject: true when this run completed the last unfinished lesson of it. */
     private boolean certificateEligible() {
-        return !classTest && !run.isFailed() && run.rank().passes();
+        return !classTest && !run.isFailed() && subjectDone != null
+                && (subjectDone.certificate() != null || periodAwardOfLesson() != null);
+    }
+
+    /** The certificate of this lesson's grading period, when every lesson of that period is completed (else null). */
+    private codequest.data.AwardsData.PeriodAward periodAwardOfLesson() {
+        codequest.data.AwardsData.PeriodAward a = subjectDone == null ? null : subjectDone.award(lesson.periodEnum());
+        return a != null && a.certificate() != null ? a : null;
     }
 
     private boolean feedbackAvailable() {
@@ -1716,10 +1729,16 @@ public class PlayScreen extends InputAdapter implements Screen {
             }
         }
         if (certificateEligible()) {
-            drawCentered("Rank B or higher: you earned a lesson certificate", W / 2f, 780, 1.5f,
+            drawCentered(subjectDone.certificate() != null
+                    ? "You finished every lesson of " + subjectDone.name() + ": you earned the subject certificate!"
+                    : "You finished the " + lesson.periodEnum().label() + " period: you earned its certificate!", W / 2f, 780, 1.5f,
                     new Color(0.6f, 0.95f, 0.6f, 1f));
             Rect cert = certButton();
             drawCentered("Get certificate", cert.x + cert.w / 2f, cert.y + 28 - lift(cert), 1.8f, Color.WHITE);
+        }
+        if (cleared && !classTest) {
+            drawCentered("Badge earned for lesson " + lesson.number() + "!  Find it under Badges and certificates.", W / 2f, 830, 1.4f,
+                    new Color(1f, 0.85f, 0.4f, 1f));
         }
         if (feedbackAvailable()) {
             Rect fb = feedbackButton();

@@ -92,4 +92,28 @@ class CampaignDataTest {
         assertTrue(mid.size() == 2 && mid.get(0).number() == 2 && mid.get(1).number() == 4);
         assertTrue(Period.filter(all, Period.FINALS).isEmpty());
     }
+
+    @Test
+    void aPeriodSummaryCountsCompletedLessonsAndAveragesTheirGrades() {
+        List<Lesson> period = List.of(lesson(10, 1), lesson(11, 2), lesson(12, 3));
+        Map<Long, Progress> mine = Map.of(
+                10L, new Progress("completed", 0, "F", 2, "2026-11-01T10:00:00Z"),
+                11L, new Progress("in_progress", 0, null, 1, "2026-11-05T10:00:00Z"));
+        PeriodSummary s = PeriodSummary.of(period, mine);
+        assertTrue(s.total() == 3 && s.done() == 1);
+        assertTrue(s.attempts() == 3);
+        assertTrue(s.lastPlayed().startsWith("2026-11-05"));
+        assertTrue(s.averageGrade() == 0);
+        assertTrue("Needs attention".equals(s.note()));
+    }
+
+    @Test
+    void aPeriodSummaryNotesWhoHasNotStartedAndWhoIsDone() {
+        List<Lesson> period = List.of(lesson(10, 1));
+        assertTrue("Not started".equals(PeriodSummary.of(period, Map.of()).note()));
+        assertTrue(PeriodSummary.of(period, Map.of()).averageGrade() == -1);
+        assertTrue("In progress".equals(PeriodSummary.of(period, Map.of(10L, new Progress("in_progress", 0, null, 1, null))).note()));
+        // a lesson the student never touched, in an empty period
+        assertTrue("-".equals(PeriodSummary.of(List.of(), Map.of()).note()));
+    }
 }

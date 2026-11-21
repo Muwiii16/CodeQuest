@@ -74,23 +74,25 @@ public class ProfessorSectionScreen extends ProfessorScreen {
         text("Section tools", x, 160, w, 40, 2f, AMBER, Align.left);
         text(roster.size() + " students  -  " + lessons.size() + " lessons  -  " + tests.size() + " class tests", x, 205, w, 30,
                 1.25f, MUTED, Align.left);
-        solidButton("Stage creation", x, 255, w, 80, GOOD, () -> game.setScreen(new ProfessorStageCreationScreen(game, username, cls)));
-        solidButton("Class management", x, 355, w, 80, BUTTON,
+        solidButton("Stage creation", x, 245, w, 70, GOOD, () -> game.setScreen(new ProfessorStageCreationScreen(game, username, cls)));
+        solidButton("Class management", x, 325, w, 70, BUTTON,
                 () -> game.setScreen(new ProfessorClassManagementScreen(game, username, cls)));
-        solidButton("Overall class performance", x, 455, w, 80, BUTTON,
+        solidButton("Overall class performance", x, 405, w, 70, BUTTON,
                 () -> game.setScreen(new ProfessorOverallScreen(game, username, cls)));
-        solidButton("Class test history", x, 555, w, 80, BUTTON,
+        solidButton("Period analysis", x, 485, w, 70, BUTTON,
+                () -> game.setScreen(new ProfessorPeriodAnalysisScreen(game, username, cls)));
+        solidButton("Class test history", x, 565, w, 70, BUTTON,
                 () -> game.setScreen(new ProfessorTestHistoryScreen(game, username, cls)));
         if (openTest.isPresent()) {
             ClassTestData.Session s = openTest.get();
-            text("Class test " + (s.isActive() ? "running" : "lobby open") + " on " + s.label().toLowerCase(), x, 670, w,
+            text("Class test " + (s.isActive() ? "running" : "lobby open") + " on " + s.label().toLowerCase(), x, 648, w,
                     60, 1.5f, new Color(0.55f, 0.9f, 0.65f, 1f), Align.topLeft).setWrap(true);
         }
         String code = cls.joinCode();
         if (code != null && !code.isBlank()) {
-            text("Join code for students", x, 735, w, 26, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
-            text(JoinCode.display(code), x, 764, 300, 60, 3.2f, new Color(1f, 0.82f, 0.3f, 1f), Align.left, PixelFonts.Face.MONO);
-            solidButton("Copy", x + 320, 768, 170, 54, new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
+            text("Join code for students", x, 725, w, 26, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
+            text(JoinCode.display(code), x, 754, 300, 60, 3.2f, new Color(1f, 0.82f, 0.3f, 1f), Align.left, PixelFonts.Face.MONO);
+            solidButton("Copy", x + 320, 758, 170, 54, new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
                 com.badlogic.gdx.Gdx.app.getClipboard().setContents(JoinCode.display(code));
                 toast("Join code copied: " + JoinCode.display(code), true);
             });
