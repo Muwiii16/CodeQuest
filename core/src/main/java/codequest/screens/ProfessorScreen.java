@@ -29,6 +29,7 @@ public abstract class ProfessorScreen extends BaseScreen {
     protected ProfessorScreen(Main game, String username, String title, Runnable backTarget) {
         this.game = game;
         this.username = username;
+        this.kitStyle = false; // the professor side keeps its flat amber look
         setBackground(Art.BG_PROFESSOR);
 
         rect(0, 0, VIRTUAL_WIDTH, 110, BAR);

@@ -108,7 +108,12 @@ public class CampaignScreen extends StudentScreen {
                 : classes.get(classIdx).subjectName() + "  -  " + classes.get(classIdx).sectionName()
                         + (classes.get(classIdx).termLabel().isEmpty() ? "" : "  -  " + classes.get(classIdx).termLabel())
                         + (classes.get(classIdx).ended() ? "   (ended)" : "");
-        text(context, 160, 128, 800, 40, 1.8f, classes.isEmpty() || !classes.get(classIdx).ended() ? MUTED : GOLD, Align.left)
+        // the class line sits on a dark banner so it can be read over the bright campus picture
+        com.badlogic.gdx.scenes.scene2d.ui.Image contextBanner = new com.badlogic.gdx.scenes.scene2d.ui.Image(UiKit.STRIP.drawable());
+        placeTopLeft(contextBanner, 150, 118, 800, 56);
+        stage.addActor(contextBanner);
+        contextBanner.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+        text(context, 180, 126, 740, 40, 1.6f, !classes.isEmpty() && classes.get(classIdx).ended() ? GOLD : Color.WHITE, Align.left)
                 .setEllipsis(true);
         // the dictionary of the language this class teaches (the built-in lessons are C)
         final Long openClassId = classes.isEmpty() ? null : classes.get(classIdx).id();

@@ -43,6 +43,12 @@ public abstract class BaseScreen implements Screen {
     protected final Stage stage;
     protected Texture background;
 
+    /**
+     * True when buttons and input boxes are drawn from the picture kit (assets/ui/kit): every screen except the professor
+     * ones, which keep their flat amber look.
+     */
+    protected boolean kitStyle = true;
+
     private final List<Texture> ownedTextures = new ArrayList<>();
     private BitmapFont sharedFont;
     private Texture whiteTexture;
@@ -79,6 +85,46 @@ public abstract class BaseScreen implements Screen {
         // the picture fills whatever size the button is given (the pixel-art buttons are small and are shown enlarged)
         button.getImageCell().expand().fill();
         button.getImage().setScaling(com.badlogic.gdx.utils.Scaling.stretch);
+        return button;
+    }
+
+    /**
+     * A button that is a whole picture in three states: at rest, under the mouse, and while pressed (the picture carries its
+     * own icon and label). The cursor becomes a hand over it. It is placed with top-left coordinates and added to the stage.
+     */
+    protected ImageButton stateButton(String idlePath, String hoverPath, String pressedPath, float x, float yFromTop, float w,
+            float h, Runnable action) {
+        ImageButton.ImageButtonStyle style = new ImageButton.ImageButtonStyle();
+        style.imageUp = new TextureRegionDrawable(new TextureRegion(texture(idlePath)));
+        style.imageOver = new TextureRegionDrawable(new TextureRegion(texture(hoverPath)));
+        style.imageDown = new TextureRegionDrawable(new TextureRegion(texture(pressedPath)));
+        ImageButton button = new ImageButton(style);
+        button.getImageCell().expand().fill();
+        button.getImage().setScaling(com.badlogic.gdx.utils.Scaling.stretch);
+        placeTopLeft(button, x, yFromTop, w, h);
+        button.addListener(new ClickListener() {
+            @Override
+            public void enter(InputEvent event, float ex, float ey, int pointer, Actor from) {
+                super.enter(event, ex, ey, pointer, from);
+                if (pointer == -1) {
+                    Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
+                }
+            }
+
+            @Override
+            public void exit(InputEvent event, float ex, float ey, int pointer, Actor to) {
+                super.exit(event, ex, ey, pointer, to);
+                if (pointer == -1) {
+                    Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
+                }
+            }
+
+            @Override
+            public void clicked(InputEvent event, float cx, float cy) {
+                action.run();
+            }
+        });
+        put(button);
         return button;
     }
 
@@ -453,11 +499,39 @@ public abstract class BaseScreen implements Screen {
             shadow = rect(x + 5, yFromTop + 10, w - 10, h - 4, new Color(0f, 0f, 0f, 0f));
             shadow.setTouchable(Touchable.disabled);
         }
-        Color border = new Color(fill.r * 0.7f, fill.g * 0.7f, fill.b * 0.7f, 1f);
-        Image frame = rect(x, yFromTop, w, h, border);
-        frame.setTouchable(Touchable.disabled);
-        Image body = rect(x + 3, yFromTop + 3, w - 6, h - 6, fill);
-        body.setTouchable(Touchable.disabled);
+        Image frame = null;
+        Image body = null;
+        Image gloss = null;
+        Image lip = null;
+        Image sprite = null;
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable spriteUp = null;
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable spriteOver = null;
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable spriteDown = null;
+        if (kitStyle) {
+            // a coloured button picture (hover and pressed have their own); dull colours become the dark, inactive look
+            String color = UiKit.colorFor(fill);
+            boolean dark = "dark".equals(color);
+            String c = dark ? "blue" : color;
+            spriteUp = UiKit.button(c, dark ? "down" : "up").drawable();
+            spriteOver = dark ? spriteUp : UiKit.button(c, "over").drawable();
+            spriteDown = UiKit.button(c, "down").drawable();
+            sprite = new Image(spriteUp);
+            placeTopLeft(sprite, x - 4, yFromTop - 3, w + 8, h + 6);
+            put(sprite);
+            sprite.setTouchable(Touchable.disabled);
+        } else {
+            Color border = new Color(fill.r * 0.7f, fill.g * 0.7f, fill.b * 0.7f, 1f);
+            frame = rect(x, yFromTop, w, h, border);
+            frame.setTouchable(Touchable.disabled);
+            body = rect(x + 3, yFromTop + 3, w - 6, h - 6, fill);
+            body.setTouchable(Touchable.disabled);
+            // a light strip along the top and a darker lip along the bottom give the button the raised, chunky game look
+            float bevel = Math.max(4f, Math.min(8f, h * 0.1f));
+            gloss = rect(x + 3, yFromTop + 3, w - 6, bevel, new Color(1f, 1f, 1f, 0.2f));
+            gloss.setTouchable(Touchable.disabled);
+            lip = rect(x + 3, yFromTop + h - 3 - bevel, w - 6, bevel, new Color(0f, 0f, 0f, 0.22f));
+            lip.setTouchable(Touchable.disabled);
+        }
         Label label = text(text, x, yFromTop, w, h, Math.min(1.9f, h / 38f), textColor, Align.center, face);
         label.setTouchable(Touchable.disabled);
         // the part that takes the mouse stays where the button was, so a raised button never flickers at its lower edge
@@ -465,9 +539,19 @@ public abstract class BaseScreen implements Screen {
         Image shade = shadow;
         // everything that rises with the button, with the y it rests at; rideAlong adds a screen's own icons and text
         java.util.Map<Actor, Float> movers = new java.util.LinkedHashMap<>();
-        movers.put(frame, frame.getY());
-        movers.put(body, body.getY());
+        if (sprite != null) {
+            movers.put(sprite, sprite.getY());
+        } else {
+            movers.put(frame, frame.getY());
+            movers.put(body, body.getY());
+            movers.put(gloss, gloss.getY());
+            movers.put(lip, lip.getY());
+        }
         movers.put(label, label.getY());
+        Image picture = sprite;
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable pictureUp = spriteUp;
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable pictureOver = spriteOver;
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable pictureDown = spriteDown;
         hit.setUserObject(movers);
         hit.addListener(new ClickListener() {
             @Override
@@ -476,6 +560,9 @@ public abstract class BaseScreen implements Screen {
                     return;
                 }
                 movers.forEach((a, restY) -> rise(a, restY + HOVER_LIFT));
+                if (picture != null) {
+                    picture.setDrawable(pictureOver);
+                }
                 shade.clearActions();
                 shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0.55f, HOVER_SECONDS));
                 Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
@@ -487,9 +574,28 @@ public abstract class BaseScreen implements Screen {
                     return;
                 }
                 movers.forEach((a, restY) -> rise(a, restY));
+                if (picture != null) {
+                    picture.setDrawable(pictureUp);
+                }
                 shade.clearActions();
                 shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0f, HOVER_SECONDS));
                 Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
+            }
+
+            @Override
+            public boolean touchDown(InputEvent event, float tx, float ty, int pointer, int button) {
+                if (live && picture != null) {
+                    picture.setDrawable(pictureDown);
+                }
+                return super.touchDown(event, tx, ty, pointer, button);
+            }
+
+            @Override
+            public void touchUp(InputEvent event, float tx, float ty, int pointer, int button) {
+                super.touchUp(event, tx, ty, pointer, button);
+                if (live && picture != null) {
+                    picture.setDrawable(isOver() ? pictureOver : pictureUp);
+                }
             }
 
             @Override
@@ -541,8 +647,22 @@ public abstract class BaseScreen implements Screen {
 
     protected TextField textField(String hint, boolean password, float x, float yFromTop, float w, float h,
             Color box, Color underline, Color textColor, Color hintColor, PixelFonts.Face face) {
-        rect(x, yFromTop, w, h, box);
-        rect(x, yFromTop + h - 3, w, 3, underline);
+        Image focusPicture = null;
+        if (kitStyle) {
+            // the input box picture; the brighter outline shows while the box has the keyboard
+            Image picture = new Image(UiKit.INPUT.drawable());
+            placeTopLeft(picture, x - 6, yFromTop - 4, w + 12, h + 8);
+            put(picture);
+            picture.setTouchable(Touchable.disabled);
+            focusPicture = new Image(UiKit.INPUT_FOCUS.drawable());
+            placeTopLeft(focusPicture, x - 6, yFromTop - 4, w + 12, h + 8);
+            focusPicture.setVisible(false);
+            put(focusPicture);
+            focusPicture.setTouchable(Touchable.disabled);
+        } else {
+            rect(x, yFromTop, w, h, box);
+            rect(x, yFromTop + h - 3, w, 3, underline);
+        }
         Texture cursor = solidTexture(Color.WHITE);
         TextField.TextFieldStyle style = new TextField.TextFieldStyle();
         style.font = PixelFonts.font(face, Math.min(1.8f, h / 34f));
@@ -555,6 +675,15 @@ public abstract class BaseScreen implements Screen {
         style.selection = new TextureRegionDrawable(new TextureRegion(cursor));
         TextField field = new TextField("", style);
         field.setMessageText(hint);
+        if (focusPicture != null) {
+            Image glow = focusPicture;
+            field.addListener(new com.badlogic.gdx.scenes.scene2d.utils.FocusListener() {
+                @Override
+                public void keyboardFocusChanged(FocusEvent event, Actor actor, boolean focused) {
+                    glow.setVisible(focused);
+                }
+            });
+        }
         if (password) {
             field.setPasswordCharacter('*');
             field.setPasswordMode(true);

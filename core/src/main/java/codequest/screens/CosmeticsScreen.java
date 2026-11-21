@@ -81,13 +81,24 @@ public class CosmeticsScreen extends StudentScreen {
         return image;
     }
 
+    /** A picture of the kit (a ribbon or a panel strip) drawn behind the text that follows. */
+    private void banner(UiKit.Patch patch, float x, float y, float w, float h) {
+        Image picture = new Image(patch.drawable());
+        placeTopLeft(picture, x, y, w, h);
+        stage.addActor(picture);
+        picture.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+    }
+
     private void rebuild() {
         clearFrom(base);
         CosmeticLook.Outfit outfit = CosmeticLook.outfit(equipped, catalog);
 
         // ── character preview: hat, floating weapon with its glow, trail ──
         card(60, 140, 640, 880);
-        text("Your character", 90, 160, 580, 40, 2f, TEAL, Align.left);
+        // a blue ribbon with the hat icon behind the heading
+        banner(UiKit.button("blue", "up"), 150, 172, 460, 64);
+        icon("hat", 160, 177, 54);
+        text("YOUR CHARACTER", 215, 172, 380, 64, 1.55f, Color.WHITE, Align.center);
         rect(150, 700, 460, 18, new Color(0, 0, 0, 0.35f));
 
         Cosmetic trail = outfit.trail();
@@ -129,12 +140,19 @@ public class CosmeticsScreen extends StudentScreen {
             sword.setRotation(-20f);
             sword.addAction(Actions.forever(Actions.sequence(Actions.moveBy(0, 14, 1.1f), Actions.moveBy(0, -14, 1.1f))));
         }
-        text(outfit.hat() != null && !outfit.hat().isDefault() ? "Hat: " + outfit.hat().name() : "Hat: none", 90, 770, 580, 30,
-                1.4f, MUTED, Align.center);
-        text("Weapon: " + (weapon == null ? "none" : weapon.name()), 90, 805, 580, 30, 1.4f, MUTED, Align.center);
-        text("Trail: " + (trail == null ? "none" : trail.name()), 90, 840, 580, 30, 1.4f, MUTED, Align.center);
+        // what the hero wears: one panel banner with the three lines
+        banner(UiKit.STRIP, 100, 722, 560, 124);
+        text(outfit.hat() != null && !outfit.hat().isDefault() ? "Hat: " + outfit.hat().name() : "Hat: none", 120, 750, 520, 26,
+                1.2f, Color.WHITE, Align.center);
+        text("Weapon: " + (weapon == null ? "none" : weapon.name()), 120, 779, 520, 26, 1.2f, Color.WHITE, Align.center);
+        text("Trail: " + (trail == null ? "none" : trail.name()), 120, 808, 520, 26, 1.2f, Color.WHITE, Align.center);
+        // the title the student has earned, on a gold banner
         Cosmetic title = pickTitle();
-        text(title == null ? "" : title.name(), 90, 880, 580, 40, 2f, GOLD, Align.center);
+        if (title != null) {
+            banner(UiKit.button("orange", "up"), 160, 854, 440, 56);
+            icon("title", 174, 857, 48);
+            text(title.name(), 220, 854, 360, 56, 1.7f, new Color(0.2f, 0.1f, 0.02f, 1f), Align.center);
+        }
 
         int gachaTotal = 0;
         int gachaOwned = 0;
@@ -146,10 +164,11 @@ public class CosmeticsScreen extends StudentScreen {
                 }
             }
         }
-        text("Collected " + gachaOwned + " of " + gachaTotal + "   -   " + stats.rolls() + " rolls so far", 90, 935, 580, 30,
-                1.25f, MUTED, Align.center);
+        banner(UiKit.STRIP, 100, 918, 560, 82);
+        text("Collected " + gachaOwned + " of " + gachaTotal + "   -   " + stats.rolls() + " rolls so far", 120, 944, 520, 26,
+                1.15f, Color.WHITE, Align.center);
         text(stats.untilGuarantee() <= 1 ? "Your next roll is guaranteed rare or better!"
-                : "Rare or better guaranteed in " + stats.untilGuarantee() + " rolls", 90, 968, 580, 30, 1.25f, GOLD,
+                : "Rare or better guaranteed in " + stats.untilGuarantee() + " rolls", 120, 971, 520, 26, 1.1f, GOLD,
                 Align.center);
 
         // ── collection ──
@@ -181,7 +200,9 @@ public class CosmeticsScreen extends StudentScreen {
             boolean have = owned.contains(c.id()) || c.isDefault();
             boolean on = equipped.get(category) != null ? equipped.get(category) == c.id() : isDefaultOfCategory(c);
             Color rarity = CosmeticLook.rarityColor(c.rarity());
-            rect(770, y, 1060, 88, ROW);
+            // owned items get a full outline in the colour of their rarity (grey, blue, purple, gold); locked ones stay plain
+            rect(770, y, 1060, 88, have ? rarity : new Color(0.2f, 0.24f, 0.36f, 1f));
+            rect(773, y + 3, 1054, 82, ROW);
             rect(770, y, 8, 88, have ? rarity : new Color(0.3f, 0.32f, 0.42f, 1f));
             Image swatch = rect(795, y + 12, 64, 64, have ? CosmeticLook.colorOf(c) : new Color(0.2f, 0.22f, 0.3f, 1f));
             swatch.setTouchable(Touchable.disabled);
@@ -197,7 +218,10 @@ public class CosmeticsScreen extends StudentScreen {
             }
             y += 98;
         }
-        text("Odds per roll:   " + GachaRoll.oddsText(), 770, 975, 1060, 30, 1.25f, MUTED, Align.center);
+        // the odds on their own dark banner with the dice icon
+        rect(790, 964, 1020, 40, new Color(0.02f, 0.06f, 0.18f, 0.95f));
+        icon("dice", 800, 962, 44);
+        text("Odds per roll:   " + GachaRoll.oddsText(), 850, 966, 950, 36, 1.25f, Color.WHITE, Align.center);
     }
 
     private boolean isDefaultOfCategory(Cosmetic c) {

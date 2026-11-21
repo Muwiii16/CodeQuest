@@ -28,7 +28,10 @@ public class Lwjgl3Launcher {
         //// useful for testing performance, but can also be very stressful to some hardware.
         //// You may also need to configure GPU drivers to fully disable Vsync; this can cause screen tearing.
 
+        // The game starts full screen (F11 or Alt+Enter switches to a window and back, see Main). The window size is
+        // what the game uses when it is switched to a window; the picture always keeps its 16:9 shape.
         configuration.setWindowedMode(1280, 720);
+        configuration.setFullscreenMode(Lwjgl3ApplicationConfiguration.getDisplayMode());
         configuration.setResizable(true);
         //// You can change these files; they are in lwjgl3/src/main/resources/ .
         //// They can also be loaded from the root of assets/ .

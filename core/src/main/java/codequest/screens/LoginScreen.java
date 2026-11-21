@@ -24,11 +24,13 @@ import com.badlogic.gdx.utils.Align;
  */
 public class LoginScreen extends BaseScreen {
 
-    private static final Color INK = new Color(0x1F3D2AFF);
-    private static final Color SOFT_INK = new Color(0x6B7A66FF);
-    private static final Color GREEN = new Color(0x3C6E3FFF);
-    private static final Color PALE = new Color(0xDCE5CCFF);
-    private static final Color ERROR = new Color(0xB3382CFF);
+    // the card is navy now (the picture kit), so the text is light
+    private static final Color INK = new Color(0xFFFFFFFF);
+    private static final Color SOFT_INK = new Color(0xA9BCE0FF);
+    private static final Color BLUE = new Color(0.12f, 0.42f, 0.86f, 1f);
+    private static final Color DARK = new Color(0.12f, 0.17f, 0.35f, 1f);
+    private static final Color OK_TEXT = new Color(0.5f, 0.95f, 0.72f, 1f);
+    private static final Color ERROR = new Color(1f, 0.58f, 0.52f, 1f);
 
     private static final float CARD_X = 1130f;
     private static final float CARD_Y = 140f;
@@ -98,8 +100,8 @@ public class LoginScreen extends BaseScreen {
         clearFrom(base);
         codeField = null;
 
-        Image card = new Image(new TextureRegionDrawable(new TextureRegion(texture(Art.LOGIN_CARD))));
-        placeTopLeft(card, CARD_X, CARD_Y, CARD_W, CARD_H);
+        Image card = new Image(UiKit.PANEL.drawable());
+        placeTopLeft(card, CARD_X - 14, CARD_Y - 14, CARD_W + 28, CARD_H + 28);
         stage.addActor(card);
 
         float x = CARD_X + PAD;
@@ -111,43 +113,54 @@ public class LoginScreen extends BaseScreen {
         text(">  TOWER ACCESS", x, CARD_Y + 94, w, 28, 1.6f, SOFT_INK, Align.left);
         text(registerMode ? "Join the fight against the towers." : "Ready to take down the towers?", x, CARD_Y + 128,
                 w, 100, 2.7f, INK, Align.topLeft).setWrap(true);
-        text(registerMode ? "Create an account to start learning C."
-                : "Sign in to keep learning C and defeat the next enemy tower.", x, CARD_Y + 238, w, 66, 1.7f,
+        text(registerMode ? "Create an account to start learning C++."
+                : "Sign in to keep learning C++ and defeat the next enemy tower.", x, CARD_Y + 238, w, 66, 1.7f,
                 SOFT_INK, Align.topLeft).setWrap(true);
 
         float segW = (w - 10) / 2f;
         float roleY = CARD_Y + 310;
-        solidButton("I'm a student", x, roleY, segW, 56, professorRole ? PALE : GREEN,
-                professorRole ? INK : Color.WHITE, () -> switchRole(false));
-        solidButton("I'm a professor", x + segW + 10, roleY, segW, 56, professorRole ? GREEN : PALE,
-                professorRole ? Color.WHITE : INK, () -> switchRole(true));
+        solidButton("I'm a student", x, roleY, segW, 56, professorRole ? DARK : BLUE, Color.WHITE, () -> switchRole(false));
+        solidButton("I'm a professor", x + segW + 10, roleY, segW, 56, professorRole ? BLUE : DARK, Color.WHITE, () -> switchRole(true));
 
         Color box = new Color(0xFFFFFFFF);
         Color line = new Color(0xB9B49CFF);
         float y = roleY + 82;
         userField = textField("Username", false, x, y, w, 62, box, line, INK, SOFT_INK);
+        padForIcon(userField, "user", x, y, 62);
         userField.setText(typedUser);
         y += 76;
         passField = textField("Password", true, x, y, w, 62, box, line, INK, SOFT_INK);
+        padForIcon(passField, "lock", x, y, 62);
         passField.setText(typedPass);
         y += 76;
         if (registerMode && professorRole) {
             codeField = textField("Professor access code", true, x, y, w, 62, box, line, INK, SOFT_INK);
+            padForIcon(codeField, "lock_small", x, y, 62);
             codeField.setText(typedCode);
             y += 76;
         }
 
-        solidButton(registerMode ? "Create account  >" : "Log in  >", x, y + 6, w, 68, GREEN, this::submit);
+        Image mainButton = solidButton(registerMode ? "Create account  >" : "Log in  >", x, y + 6, w, 68, new Color(0.1f, 0.74f, 0.64f, 1f), this::submit);
+        rideAlong(mainButton, iconOn(registerMode ? "pencil" : "login", x + 22, y + 6, 68));
         y += 90;
-        solidButton("Continue with school Google account", x, y, w, 56, Color.WHITE, INK, this::handleGoogle);
+        Image google = solidButton("", x, y, w, 56, new Color(0.06f, 0.12f, 0.28f, 1f), this::handleGoogle);
+        Image googleIcon = iconOn("google", x + 18, y, 56);
+        // the words go to the right of the G, so the two never overlap
+        Label googleLabel = text("Continue with school Google account", x + 84, y, w - 100, 56, 1.3f, Color.WHITE, Align.center);
+        googleLabel.setTouchable(Touchable.disabled);
+        rideAlong(google, googleIcon, googleLabel);
 
         if (!statusText.isEmpty()) {
-            Label status = text(statusText, x, y + 70, w, 56, 1.4f, statusOk ? GREEN : ERROR, Align.topLeft);
+            Label status = text(statusText, x, y + 70, w, 56, 1.4f, statusOk ? OK_TEXT : ERROR, Align.topLeft);
             status.setWrap(true);
         }
     }
 
     private void tab(String label, float x, boolean selected, Runnable onClick) {
+        Image picture = new Image((selected ? UiKit.TAB_ON : UiKit.TAB_OFF).drawable());
+        placeTopLeft(picture, x - 14, CARD_Y + 4, 178, 66);
+        stage.addActor(picture);
+        picture.setTouchable(Touchable.disabled);
         Image hit = rect(x, CARD_Y + 14, 150, 52, new Color(0, 0, 0, 0));
         Label caption = text(label, x, CARD_Y + 14, 150, 52, 1.7f, selected ? INK : SOFT_INK, Align.center);
         caption.setTouchable(Touchable.disabled);
@@ -178,9 +191,24 @@ public class LoginScreen extends BaseScreen {
                 onClick.run();
             }
         });
-        if (selected) {
-            rect(x + 20, CARD_Y + 64, 110, 4, INK).setTouchable(Touchable.disabled);
+    }
+
+    /** Moves the typed text to the right of an icon picture drawn at the left of the box. */
+    private void padForIcon(TextField field, String icon, float x, float y, float h) {
+        com.badlogic.gdx.scenes.scene2d.utils.Drawable bg = field.getStyle().background;
+        if (bg instanceof TextureRegionDrawable pad) {
+            pad.setLeftWidth(76f);
         }
+        iconOn(icon, x + 14, y + 6, h - 12);
+    }
+
+    /** An icon picture on top of what was just drawn (it ignores the mouse). */
+    private Image iconOn(String name, float x, float yFromTop, float size) {
+        Image image = new Image(texture(UiKit.icon(name)));
+        placeTopLeft(image, x, yFromTop, size, size);
+        image.setTouchable(Touchable.disabled);
+        stage.addActor(image);
+        return image;
     }
 
     private void switchMode(boolean register) {

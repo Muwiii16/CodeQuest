@@ -51,9 +51,13 @@ public class CertificatesScreen extends StudentScreen {
         Color on = new Color(0.2f, 0.42f, 0.78f, 1f);
         solidButton("Badges  (" + badges.size() + ")", 160, 130, 330, 52, showCertificates ? BUTTON : on, () -> pick(false));
         solidButton("Certificates  (" + certs + ")", 510, 130, 400, 52, showCertificates ? on : BUTTON, () -> pick(true));
+        com.badlogic.gdx.scenes.scene2d.ui.Image note = new com.badlogic.gdx.scenes.scene2d.ui.Image(UiKit.STRIP.drawable());
+        placeTopLeft(note, 930, 118, 830, 66);
+        stage.addActor(note);
+        note.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
         text(showCertificates ? "One certificate per grading period you finish, and a grand one for the whole subject."
-                : "A badge is earned for every lesson you complete. Show it to your professor as proof.", 940, 130, 820, 52,
-                1.2f, MUTED, Align.left);
+                : "A badge is earned for every lesson you complete. Show it to your professor as proof.", 975, 128, 740, 46,
+                1.1f, Color.WHITE, Align.left, PixelFonts.Face.SANS).setWrap(true);
         if (showCertificates) {
             drawCertificates();
         } else {
