@@ -30,6 +30,7 @@ final class GoogleSignIn {
     /** How long the browser may take before the sign-in is given up. */
     private static final int WAIT_SECONDS = 90;
     private static final SecureRandom RANDOM = new SecureRandom();
+    static final String CANCELLED = "Google sign-in was cancelled.";
 
     /** The one-time code and what the server needs to swap it, or a message when it did not work. */
     record Code(String code, String verifier, String redirectUri, String error) {
@@ -41,9 +42,43 @@ final class GoogleSignIn {
     private GoogleSignIn() {
     }
 
+    /** Lets the person stop waiting: closing the listener ends the wait at once. */
+    static final class Cancel {
+        private volatile boolean cancelled;
+        private volatile ServerSocket server;
+
+        void attach(ServerSocket s) {
+            server = s;
+            if (cancelled) {
+                close();
+            }
+        }
+
+        void cancel() {
+            cancelled = true;
+            close();
+        }
+
+        boolean isCancelled() {
+            return cancelled;
+        }
+
+        private void close() {
+            ServerSocket s = server;
+            if (s != null) {
+                try {
+                    s.close();
+                } catch (IOException ignored) {
+                    // already closed
+                }
+            }
+        }
+    }
+
     /** Opens Google in the browser and waits for the answer. Blocks (up to {@value #WAIT_SECONDS} s): call it off the render thread. */
-    static Code obtainCode() {
+    static Code obtainCode(Cancel cancel) {
         try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+            cancel.attach(server);
             String redirect = "http://127.0.0.1:" + server.getLocalPort();
             String verifier = randomUrlSafe(64);
             String state = randomUrlSafe(32);
@@ -55,6 +90,9 @@ final class GoogleSignIn {
             JsonValue answer = parse(start.body());
             if (!start.ok() || answer == null || answer.getString("url", null) == null) {
                 return Code.failed(messageOf(answer, "Google sign-in is not available right now."));
+            }
+            if (cancel.isCancelled()) {
+                return Code.failed(CANCELLED);
             }
             Gdx.net.openURI(answer.getString("url"));
 
@@ -85,6 +123,9 @@ final class GoogleSignIn {
             }
             return Code.failed("Google sign-in took too long. Try again.");
         } catch (Exception e) {
+            if (cancel.isCancelled()) {
+                return Code.failed(CANCELLED); // the listener was closed on purpose
+            }
             return Code.failed("Could not start Google sign-in: " + e.getMessage());
         }
     }

@@ -285,12 +285,12 @@ public class ProfessorData {
         if (!students.isEmpty()) {
             String ids = idList(students);
             JsonValue rows = SupabaseClient.get("campaign_progress?stage_id=eq." + stageId + "&student_id=in.(" + ids
-                    + ")&select=student_id,status,score,rank,attempts,last_played_at");
+                    + ")&select=student_id,status,score,rank,attempts,last_played_at,max_score");
             if (rows != null) {
                 for (JsonValue r : rows) {
                     progress.put(r.getLong("student_id"), new Progress(r.getString("status", "locked"),
                             r.getInt("score", 0), r.getString("rank", null), r.getInt("attempts", 0),
-                            r.getString("last_played_at", null)));
+                            r.getString("last_played_at", null), r.getInt("max_score", 0)));
                 }
             }
             JsonValue tests = SupabaseClient.get("class_test_participants?student_id=in.(" + ids
@@ -320,12 +320,12 @@ public class ProfessorData {
             stageIds.append(stageIds.length() == 0 ? "" : ",").append(l.stageId());
         }
         JsonValue rows = SupabaseClient.get("campaign_progress?student_id=in.(" + idList(students) + ")&stage_id=in.("
-                + stageIds + ")&select=student_id,stage_id,status,score,rank,attempts,last_played_at");
+                + stageIds + ")&select=student_id,stage_id,status,score,rank,attempts,last_played_at,max_score");
         if (rows != null) {
             for (JsonValue r : rows) {
                 out.computeIfAbsent(r.getLong("student_id"), k -> new HashMap<>()).put(r.getLong("stage_id"),
                         new Progress(r.getString("status", "locked"), r.getInt("score", 0), r.getString("rank", null),
-                                r.getInt("attempts", 0), r.getString("last_played_at", null)));
+                                r.getInt("attempts", 0), r.getString("last_played_at", null), r.getInt("max_score", 0)));
             }
         }
         return out;

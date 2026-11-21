@@ -64,7 +64,7 @@ public class AwardsData {
             return out;
         }
         JsonValue rows = SupabaseClient.get("campaign_progress?student_id=eq." + studentId + "&status=eq.completed"
-                + "&select=stage_id,rank,score,last_played_at,stage:stages(title,order_index,period,"
+                + "&select=stage_id,rank,score,max_score,last_played_at,stage:stages(title,order_index,period,"
                 + "campaign:campaigns(kind,class:classes(section_name,subject,course_code)))&order=last_played_at.desc");
         if (rows == null) {
             return out;
@@ -77,7 +77,8 @@ public class AwardsData {
             }
             JsonValue cls = campaign.get("class");
             int number = stage.getInt("order_index", 1);
-            int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(number)).towerCount());
+            int max = r.getInt("max_score", 0) > 0 ? r.getInt("max_score", 0)
+                    : Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(number)).towerCount());
             String subject = cls == null ? "CodeQuest"
                     : nonBlank(cls.getString("subject", null), cls.getString("course_code", "CodeQuest"));
             out.add(new Badge(r.getLong("stage_id"), number, stage.getString("title", "Lesson"),

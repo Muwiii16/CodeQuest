@@ -53,6 +53,9 @@ public class LoginScreen extends BaseScreen {
     private TextField userField;
     private TextField passField;
     private TextField codeField;
+    /** The Google sign-in in progress (the browser is open), or null. */
+    private DatabaseManager.GoogleAttempt googleAttempt;
+    private final java.util.List<com.badlogic.gdx.scenes.scene2d.Actor> waitingActors = new java.util.ArrayList<>();
 
     public LoginScreen(Main game) {
         this.game = game;
@@ -75,6 +78,12 @@ public class LoginScreen extends BaseScreen {
         stage.addListener(new InputListener() {
             @Override
             public boolean keyDown(InputEvent event, int keycode) {
+                if (googleAttempt != null) {
+                    if (keycode == Input.Keys.ESCAPE) {
+                        cancelGoogle();
+                    }
+                    return true; // the form is covered while the browser is open
+                }
                 if (keycode == Input.Keys.ENTER) {
                     submit();
                     return true;
@@ -283,17 +292,70 @@ public class LoginScreen extends BaseScreen {
      * (digits = student, a name = professor), so the student/professor toggle is not used here.
      */
     private void handleGoogle() {
-        load("Finish signing in in your browser...", dbManager::googleLogin, result -> {
-            if (result.error() != null) {
-                setStatus(result.error(), false);
-                return;
-            }
-            if (result.account().isProfessor()) {
-                game.setScreen(new ProfessorDashboardScreen(game, result.username()));
-            } else {
-                game.setScreen(new MainMenuScreen(game, result.username()));
-            }
-        });
+        if (googleAttempt != null) {
+            return;
+        }
+        DatabaseManager.GoogleAttempt attempt = new DatabaseManager.GoogleAttempt();
+        googleAttempt = attempt;
+        showWaiting();
+        Thread worker = new Thread(() -> {
+            DatabaseManager.GoogleResult result = dbManager.googleLogin(attempt);
+            Gdx.app.postRunnable(() -> {
+                if (googleAttempt != attempt) {
+                    return; // cancelled, or the screen was left
+                }
+                googleAttempt = null;
+                hideWaiting();
+                if (attempt.cancelled()) {
+                    return;
+                }
+                if (result.error() != null) {
+                    setStatus(result.error(), false);
+                    return;
+                }
+                if (result.account().isProfessor()) {
+                    game.setScreen(new ProfessorDashboardScreen(game, result.username()));
+                } else {
+                    game.setScreen(new MainMenuScreen(game, result.username()));
+                }
+            });
+        }, "codequest-google-login");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /** The person changed their mind while the browser is open: stop waiting and give the form back. */
+    private void cancelGoogle() {
+        DatabaseManager.GoogleAttempt attempt = googleAttempt;
+        if (attempt == null) {
+            return;
+        }
+        googleAttempt = null;
+        attempt.cancel();
+        hideWaiting();
+        setStatus("Google sign-in cancelled.", true);
+    }
+
+    /** A panel over the form while the browser is open, with a Cancel button (Esc does the same). */
+    private void showWaiting() {
+        int before = stage.getActors().size;
+        rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, new Color(0f, 0.02f, 0.1f, 0.72f)); // takes every click meanwhile
+        Image panel = new Image(UiKit.PANEL.drawable());
+        placeTopLeft(panel, 560, 330, 800, 400);
+        stage.addActor(panel);
+        text("Finish signing in in your browser", 600, 380, 720, 60, 2.2f, Color.WHITE, Align.center);
+        text("Pick your @ub.edu.ph account in the browser. Or Cancel to use a password.", 620, 460, 680, 120, 1.4f, SOFT_INK, Align.topLeft,
+                PixelFonts.Face.SANS).setWrap(true);
+        solidButton("Cancel", 810, 610, 300, 70, new Color(0.8f, 0.2f, 0.25f, 1f), this::cancelGoogle);
+        waitingActors.clear();
+        for (int i = before; i < stage.getActors().size; i++) {
+            waitingActors.add(stage.getActors().get(i));
+        }
+    }
+
+    private void hideWaiting() {
+        waitingActors.forEach(com.badlogic.gdx.scenes.scene2d.Actor::remove);
+        waitingActors.clear();
     }
 
     private void handleRegister(String user, String pass) {
@@ -308,7 +370,7 @@ public class LoginScreen extends BaseScreen {
                     setStatus("Account created. You can log in now.", true);
                 }
                 case TAKEN -> setStatus("That username is taken. Choose a different name.", false);
-                case INVALID -> setStatus("Use a username of at least 3 characters and a password of at least 4.", false);
+                case INVALID -> setStatus("Username: 3+ characters. Password: 4+.", false);
                 case BAD_INVITE -> setStatus("Wrong professor access code.", false);
                 case PROFESSOR_DISABLED -> setStatus("Professor sign-up is turned off.", false);
                 case TOO_MANY -> setStatus("Too many wrong access codes. Wait 15 minutes, then try again.", false);

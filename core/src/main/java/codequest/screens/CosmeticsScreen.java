@@ -81,6 +81,45 @@ public class CosmeticsScreen extends StudentScreen {
         return image;
     }
 
+    /**
+     * The real picture of a cosmetic in a framed square: the hat or weapon sprite, a row of glowing dots in the trail's colour,
+     * or the crown for a title. When the student does not have it yet, the same picture is drawn in solid black (its
+     * silhouette), so they can see what is waiting to be won.
+     */
+    private void cosmeticPicture(Cosmetic c, String category, boolean have, float x, float yFromTop, float size) {
+        Color frame = have ? CosmeticLook.rarityColor(c.rarity()) : new Color(0.25f, 0.3f, 0.45f, 1f);
+        rect(x, yFromTop, size, size, frame);
+        rect(x + 3, yFromTop + 3, size - 6, size - 6, new Color(0.03f, 0.07f, 0.18f, 1f));
+        Color tint = have ? Color.WHITE : Color.BLACK;
+        float inner = size - 18;
+        float cx = x + 9;
+        float cy = yFromTop + 9;
+        switch (category) {
+            case "trail" -> {
+                Color dotColor = have ? CosmeticLook.colorOf(c) : Color.BLACK;
+                for (int i = 0; i < 5; i++) {
+                    float d = inner * (0.34f - i * 0.05f);
+                    float px = cx + i * inner * 0.19f;
+                    float py = cy + inner * 0.62f - i * inner * 0.12f;
+                    Image dot = art("game/glow.png", dotColor, px, py, d, d);
+                    dot.getColor().a = have ? Math.max(0.3f, 1f - i * 0.15f) : 1f;
+                }
+            }
+            default -> {
+                String path = switch (category) {
+                    case "hat" -> c.isDefault() ? UiKit.icon("hat") : CosmeticLook.hatSprite(c);
+                    case "weapon" -> CosmeticLook.weaponSprite(c);
+                    default -> UiKit.icon("title");
+                };
+                com.badlogic.gdx.graphics.Texture t = texture(path);
+                float scale = Math.min(inner / t.getWidth(), inner / t.getHeight());
+                float w = t.getWidth() * scale;
+                float h = t.getHeight() * scale;
+                art(path, tint, cx + (inner - w) / 2f, cy + (inner - h) / 2f, w, h);
+            }
+        }
+    }
+
     /** A picture of the kit (a ribbon or a panel strip) drawn behind the text that follows. */
     private void banner(UiKit.Patch patch, float x, float y, float w, float h) {
         Image picture = new Image(patch.drawable());
@@ -141,17 +180,17 @@ public class CosmeticsScreen extends StudentScreen {
             sword.addAction(Actions.forever(Actions.sequence(Actions.moveBy(0, 14, 1.1f), Actions.moveBy(0, -14, 1.1f))));
         }
         // what the hero wears: one panel banner with the three lines
-        banner(UiKit.STRIP, 100, 722, 560, 124);
-        text(outfit.hat() != null && !outfit.hat().isDefault() ? "Hat: " + outfit.hat().name() : "Hat: none", 120, 750, 520, 26,
-                1.2f, Color.WHITE, Align.center);
-        text("Weapon: " + (weapon == null ? "none" : weapon.name()), 120, 779, 520, 26, 1.2f, Color.WHITE, Align.center);
-        text("Trail: " + (trail == null ? "none" : trail.name()), 120, 808, 520, 26, 1.2f, Color.WHITE, Align.center);
+        banner(UiKit.STRIP, 100, 712, 560, 116);
+        text(outfit.hat() != null && !outfit.hat().isDefault() ? "Hat: " + outfit.hat().name() : "Hat: none", 120, 734, 520, 24,
+                1.1f, Color.WHITE, Align.center);
+        text("Weapon: " + (weapon == null ? "none" : weapon.name()), 120, 759, 520, 24, 1.1f, Color.WHITE, Align.center);
+        text("Trail: " + (trail == null ? "none" : trail.name()), 120, 784, 520, 24, 1.1f, Color.WHITE, Align.center);
         // the title the student has earned, on a gold banner
         Cosmetic title = pickTitle();
         if (title != null) {
-            banner(UiKit.button("orange", "up"), 160, 854, 440, 56);
-            icon("title", 174, 857, 48);
-            text(title.name(), 220, 854, 360, 56, 1.7f, new Color(0.2f, 0.1f, 0.02f, 1f), Align.center);
+            banner(UiKit.button("orange", "up"), 160, 834, 440, 52);
+            icon("title", 174, 836, 48);
+            text(title.name(), 220, 834, 360, 52, 1.6f, new Color(0.2f, 0.1f, 0.02f, 1f), Align.center);
         }
 
         int gachaTotal = 0;
@@ -164,11 +203,11 @@ public class CosmeticsScreen extends StudentScreen {
                 }
             }
         }
-        banner(UiKit.STRIP, 100, 918, 560, 82);
-        text("Collected " + gachaOwned + " of " + gachaTotal + "   -   " + stats.rolls() + " rolls so far", 120, 944, 520, 26,
-                1.15f, Color.WHITE, Align.center);
+        banner(UiKit.STRIP, 100, 894, 560, 92);
+        text("Collected " + gachaOwned + " of " + gachaTotal + "   -   " + stats.rolls() + " rolls so far", 120, 916, 520, 24,
+                1.05f, Color.WHITE, Align.center);
         text(stats.untilGuarantee() <= 1 ? "Your next roll is guaranteed rare or better!"
-                : "Rare or better guaranteed in " + stats.untilGuarantee() + " rolls", 120, 971, 520, 26, 1.1f, GOLD,
+                : "Rare or better guaranteed in " + stats.untilGuarantee() + " rolls", 120, 941, 520, 24, 1.0f, GOLD,
                 Align.center);
 
         // ── collection ──
@@ -204,8 +243,8 @@ public class CosmeticsScreen extends StudentScreen {
             rect(770, y, 1060, 88, have ? rarity : new Color(0.2f, 0.24f, 0.36f, 1f));
             rect(773, y + 3, 1054, 82, ROW);
             rect(770, y, 8, 88, have ? rarity : new Color(0.3f, 0.32f, 0.42f, 1f));
-            Image swatch = rect(795, y + 12, 64, 64, have ? CosmeticLook.colorOf(c) : new Color(0.2f, 0.22f, 0.3f, 1f));
-            swatch.setTouchable(Touchable.disabled);
+            // the item itself in a small frame; an item not won yet shows as a pure black silhouette
+            cosmeticPicture(c, category, have, 788, y + 4, 80);
             text(have ? c.name() : "???", 880, y + 8, 520, 38, 2f, have ? Color.WHITE : MUTED, Align.left);
             text(c.rarity().toUpperCase() + (have ? "  -  " + c.description() : "  -  not won yet"), 880, y + 50, 600, 30,
                     1.3f, have ? rarity : MUTED, Align.left);

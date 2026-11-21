@@ -28,7 +28,48 @@ public final class BadgeImage {
     private BadgeImage() {
     }
 
+    /** The shield-and-laurel frame (resources/ui/badge_frame.png), or null when it is not on the class path. */
+    private static BufferedImage frame() {
+        try (var in = BadgeImage.class.getResourceAsStream("/ui/badge_frame.png")) {
+            return in == null ? null : ImageIO.read(in);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
     public static BufferedImage render(BadgeData d) {
+        BufferedImage frame = frame();
+        return frame == null ? renderMedal(d) : renderFramed(d, frame);
+    }
+
+    /** The badge inside the blue shield frame: rank, lesson, period, student, subject and date on the navy panel. */
+    private static BufferedImage renderFramed(BadgeData d, BufferedImage frame) {
+        int w = frame.getWidth();
+        BufferedImage img = new BufferedImage(w, frame.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g.drawImage(frame, 0, 0, null);
+            Color gold = new Color(0xFFC83D);
+            Color soft = new Color(0xBFD4FF);
+            int inner = w - 220; // the room between the frame's borders
+            centered(g, w, new Font(Font.SANS_SERIF, Font.BOLD, 34), "LESSON BADGE", 275, gold);
+            centered(g, w, new Font(Font.SERIF, Font.BOLD, 210), d.rank(), 500, rankColor(d.rank()).brighter());
+            centered(g, w, new Font(Font.SANS_SERIF, Font.BOLD, 32), fit(g, "Lesson " + d.lessonNumber() + ": " + d.lessonTitle(), inner, 32),
+                    585, Color.WHITE);
+            centered(g, w, new Font(Font.SANS_SERIF, Font.PLAIN, 28), d.period() + "   -   " + d.gradePercent() + "%", 635, gold);
+            centered(g, w, new Font(Font.SANS_SERIF, Font.BOLD, 38), fit(g, d.studentName(), inner, 38), 725, Color.WHITE);
+            String where = d.section() == null || d.section().isBlank() ? d.subject() : d.subject() + "  (" + d.section() + ")";
+            centered(g, w, new Font(Font.SANS_SERIF, Font.PLAIN, 26), fit(g, where, inner, 26), 773, soft);
+            centered(g, w, new Font(Font.SANS_SERIF, Font.PLAIN, 24), d.earnedOn().format(DATE), 818, soft);
+        } finally {
+            g.dispose();
+        }
+        return img;
+    }
+
+    private static BufferedImage renderMedal(BadgeData d) {
         BufferedImage img = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         try {
@@ -82,10 +123,14 @@ public final class BadgeImage {
     }
 
     private static void centered(Graphics2D g, Font font, String text, int baseline, Color color) {
+        centered(g, SIZE, font, text, baseline, color);
+    }
+
+    private static void centered(Graphics2D g, int width, Font font, String text, int baseline, Color color) {
         g.setFont(font);
         g.setColor(color);
         FontMetrics fm = g.getFontMetrics();
-        g.drawString(text, (SIZE - fm.stringWidth(text)) / 2f, baseline);
+        g.drawString(text, (width - fm.stringWidth(text)) / 2f, baseline);
     }
 
     /** The text, shortened with "..." when it is wider than the badge allows at this size. */

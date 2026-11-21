@@ -90,7 +90,19 @@ public class CampaignData {
     }
 
     /** A student's best result on one lesson. */
-    public record Progress(String status, int score, String rank, int attempts, String lastPlayed) {
+    public record Progress(String status, int score, String rank, int attempts, String lastPlayed, int maxScore) {
+        /** A result whose maximum was not saved (0): the game then guesses it from the lesson number. */
+        public Progress(String status, int score, String rank, int attempts, String lastPlayed) {
+            this(status, score, rank, attempts, lastPlayed, 0);
+        }
+
+        /** The most points this result could have earned: its saved maximum, else the built-in stage maximum. */
+        public int max(int lessonNumber) {
+            return maxScore > 0 ? maxScore
+                    : codequest.session.Grades.maxScore(codequest.content.DefaultStages.forNumber(
+                            codequest.content.DefaultStages.layoutFor(lessonNumber)).towerCount());
+        }
+
         public boolean completed() {
             return "completed".equals(status);
         }
@@ -156,11 +168,12 @@ public class CampaignData {
     public Map<Long, Progress> progress(long studentId) {
         Map<Long, Progress> out = new HashMap<>();
         JsonValue rows = SupabaseClient.get("campaign_progress?student_id=eq." + studentId
-                + "&select=stage_id,status,score,rank,attempts,last_played_at");
+                + "&select=stage_id,status,score,rank,attempts,last_played_at,max_score");
         if (rows != null) {
             for (JsonValue r : rows) {
                 out.put(r.getLong("stage_id"), new Progress(r.getString("status", "locked"), r.getInt("score", 0),
-                        r.getString("rank", null), r.getInt("attempts", 0), r.getString("last_played_at", null)));
+                        r.getString("rank", null), r.getInt("attempts", 0), r.getString("last_played_at", null),
+                        r.getInt("max_score", 0)));
             }
         }
         return out;

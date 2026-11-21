@@ -43,7 +43,7 @@ public final class Assets {
 
     static boolean smooth(String path) {
         return path.startsWith("game/hero/") || path.startsWith("game/towers/") || path.startsWith("game/maps/")
-                || path.startsWith("ui/menu/") || path.startsWith("ui/kit/")
+                || path.startsWith("ui/menu/") || path.startsWith("ui/kit/") || path.startsWith("ui/pro/")
                 || path.equals("game/glow.png") || path.equals("game/ring.png");
     }
 

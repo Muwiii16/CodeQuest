@@ -665,7 +665,8 @@ public class PlayScreen extends InputAdapter implements Screen {
                         tests.submitResult(testSession.id(), studentId, score);
                     }
                 } else if (pass) {
-                    db.saveLessonProgress(username, lesson.stageId(), startDifficulty.name().toLowerCase(), score, rank);
+                    db.saveLessonProgress(username, lesson.stageId(), startDifficulty.name().toLowerCase(), score, rank,
+                            codequest.session.Grades.maxScore(towerCount));
                     rollOutcome = db.rollReward(username, lesson.stageId());
                     // the certificate comes only when every lesson of the subject is completed (the server checks it)
                     subjectDone = new codequest.data.AwardsData().subjectOfLesson(username, lesson).orElse(null);
@@ -1486,8 +1487,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         List<Terminal.Row> rows = run.terminal();
         float width = 470f;
         if (rows.isEmpty()) {
-            drawWrapped(Face.SANS, "Finish a program to run it. You will see what it prints here, or the compiler's error "
-                    + "if a wrong answer broke the code.", x, top + 40, 1.1f, new Color(0.55f, 0.6f, 0.78f, 1f), width);
+            drawWrapped(Face.SANS, "Finish a program to see its output here.", x, top + 40, 1.1f, new Color(0.55f, 0.6f, 0.78f, 1f), width);
             return;
         }
         // keep the end of the terminal (the output) when there is more than fits
@@ -1697,7 +1697,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         } else if (aiText != null) {
             drawWrapped(Face.SANS, aiText, 260, 230, 1.7f, Color.WHITE, W - 520);
         }
-        drawCentered(Face.SANS, "Written by AI from your answers in this lesson (no name is sent). It can make mistakes.", W / 2f, 825,
+        drawCentered(Face.SANS, "Written by AI. It can make mistakes.", W / 2f, 825,
                 1.2f, new Color(0.6f, 0.65f, 0.8f, 1f));
         Rect close = aiCloseButton();
         drawCentered("Close", close.x + close.w / 2f, close.y + 28 - lift(close), 1.8f, Color.WHITE);
@@ -1729,7 +1729,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             drawCentered(placeLine(), W / 2f, 780, 1.8f, new Color(0.6f, 0.95f, 0.6f, 1f));
         } else if (cleared && rollOutcome != null) {
             if (rollOutcome.status() == DatabaseManager.RollStatus.ALREADY_CLAIMED) {
-                drawCentered("You already claimed this lesson's reward. Replays do not give another roll.", W / 2f, 735,
+                drawCentered("Reward already claimed.", W / 2f, 735,
                         1.5f, new Color(0.7f, 0.75f, 0.9f, 1f));
             } else {
                 drawCentered("You earned a reward roll!  Open it on the next screen.", W / 2f, 735, 1.6f,

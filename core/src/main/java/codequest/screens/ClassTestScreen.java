@@ -139,8 +139,8 @@ public class ClassTestScreen extends StudentScreen {
             return;
         }
         if (st.sessions().isEmpty()) {
-            text(inAClass ? "No class test is open right now.\nYour professor will open a lobby when it is time."
-                    : "You are not in a class yet.\nJoin one with the code your professor gave you.", 200, 150, 1520, 700, 2f,
+            text(inAClass ? "No class test open right now."
+                    : "You are not in a class yet.\nJoin one with a code.", 200, 150, 1520, 700, 2f,
                     MUTED, Align.center);
             if (!inAClass) {
                 solidButton("Join a class", 760, 600, 400, 76, GOOD,
@@ -158,7 +158,7 @@ public class ClassTestScreen extends StudentScreen {
 
         text(session.sectionName() + "   -   " + session.label() + ": " + session.lessonTitle(), 200, 175,
                 1520, 50, 2.4f, Color.WHITE, Align.left);
-        text("Everyone plays the same questions at the same time. Difficulty stays fixed.", 200, 235, 1520, 36, 1.5f,
+        text("Same questions for everyone, at the same time.", 200, 235, 1520, 36, 1.5f,
                 MUTED, Align.left);
 
         if (session.isActive() && !starting && RunCache.exists(RunCache.classTestKey(session.id()), username)) {

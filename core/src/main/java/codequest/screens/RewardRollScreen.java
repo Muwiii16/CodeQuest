@@ -123,18 +123,27 @@ public class RewardRollScreen extends BaseScreen {
             text(outcome.duplicate() ? "DUPLICATE" : "NEW!", CX - 292, 256, 584, 50, 2.6f,
                     outcome.duplicate() ? new Color(0.7f, 0.75f, 0.9f, 1f) : new Color(1f, 0.85f, 0.3f, 1f), Align.center);
 
-            // the item: a tinted picture of what it is (placeholder art)
-            String art = switch (won.category()) {
-                case "hat" -> "game/hat.png";
-                case "weapon" -> "game/weapon.png";
-                case "trail" -> "game/glow.png";
-                default -> null;
-            };
-            if (art != null) {
-                Image item = new Image(new TextureRegionDrawable(new TextureRegion(texture(art))));
-                item.setColor(CosmeticLook.colorOf(won));
-                float w = "weapon".equals(won.category()) ? 280 : 200;
-                float h = "weapon".equals(won.category()) ? 105 : 150;
+            // the item: its real picture (hat and weapon sprites), a trail of glowing dots, or the title in words
+            float boxX = CX - 150;
+            float boxY = 330;
+            float box = 300;
+            if ("trail".equals(won.category())) {
+                Color dot = CosmeticLook.colorOf(won);
+                for (int i = 0; i < 6; i++) {
+                    float d = 110 - i * 14;
+                    Image trailDot = new Image(new TextureRegionDrawable(new TextureRegion(texture("game/glow.png"))));
+                    trailDot.setColor(dot.r, dot.g, dot.b, Math.max(0.3f, 1f - i * 0.14f));
+                    trailDot.setBounds(boxX + i * 48, VIRTUAL_HEIGHT - boxY - 190 + i * 24 - d / 2f, d, d);
+                    trailDot.setTouchable(Touchable.disabled);
+                    card.addActor(trailDot);
+                }
+            } else if ("hat".equals(won.category()) || "weapon".equals(won.category())) {
+                String path = "hat".equals(won.category()) ? CosmeticLook.hatSprite(won) : CosmeticLook.weaponSprite(won);
+                com.badlogic.gdx.graphics.Texture t = texture(path);
+                float scale = Math.min(box / t.getWidth(), 170f / t.getHeight());
+                float w = t.getWidth() * scale;
+                float h = t.getHeight() * scale;
+                Image item = new Image(new TextureRegionDrawable(new TextureRegion(t)));
                 item.setBounds(CX - w / 2f, VIRTUAL_HEIGHT - 400 - h / 2f, w, h);
                 item.setTouchable(Touchable.disabled);
                 card.addActor(item);

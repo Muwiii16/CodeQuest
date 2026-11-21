@@ -103,8 +103,8 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         solidButton("Self-paced", 90, 765, 400, 56, manual ? other : chosen, manual ? Color.GRAY : Color.WHITE, () -> pickPacing(ClassInfo.SELF_PACED));
         solidButton("Manual", 510, 765, 400, 56, manual ? chosen : other, manual ? Color.WHITE : Color.GRAY, () -> pickPacing(ClassInfo.MANUAL));
         text(manual
-                ? "Manual: every lesson you add stays locked for students until you press Unlock on it in the section."
-                : "Self-paced: a lesson opens for a student as soon as they finish the one before it. No action needed from you.",
+                ? "Manual: you unlock each lesson."
+                : "Self-paced: a lesson opens after the previous one.",
                 90, 835, 820, 80, 1.3f, MUTED, Align.topLeft).setWrap(true);
     }
 

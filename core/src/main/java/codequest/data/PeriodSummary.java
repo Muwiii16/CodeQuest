@@ -31,8 +31,7 @@ public record PeriodSummary(int total, int done, int averageGrade, int attempts,
                 last = p.lastPlayed();
             }
             if (p.completed()) {
-                int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
-                sum += Grades.percent(p.score(), max);
+                sum += Grades.percent(p.score(), p.max(l.number()));
                 done++;
             }
         }

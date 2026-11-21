@@ -64,17 +64,19 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
             int slot = i - from;
             float x = x0 + (slot % 3) * (cardW + gap);
             float y = 240 + (slot / 3) * (cardH + gap);
-            Image card = solidButton("", x, y, cardW, cardH, CARD,
+            Color[] tints = { new Color(0.2f, 0.42f, 0.78f, 1f), new Color(0.55f, 0.3f, 0.9f, 1f), new Color(0.2f, 0.75f, 0.6f, 1f) };
+            Image card = solidButton("", x, y, cardW, cardH, tints[slot % 3],
                     () -> game.setScreen(new ProfessorSectionScreen(game, username, c)));
-            Image stripe = rect(x + 3, y + 3, cardW - 6, 8, AMBER);
+            Image stripe = rect(x, y, 0, 0, new Color(0, 0, 0, 0));
             stripe.setTouchable(Touchable.disabled);
-            Label name = text(c.sectionName(), x + 40, y + 50, cardW - 80, 70, 3.2f, Color.WHITE, Align.left);
+            Label name = text(c.sectionName(), x + 40, y + 8, cardW - 100, 58, 2.6f, Color.WHITE, Align.left);
+            name.setEllipsis(true);
             Label subject = text(c.subjectName() + (c.termLabel().isEmpty() ? "" : "  -  " + c.termLabel()), x + 40,
-                    y + 135, cardW - 80, 40, 1.5f, AMBER, Align.left);
+                    y + 92, cardW - 80, 40, 1.5f, AMBER, Align.left);
             Label counts = text(c.studentCount() + (c.studentCount() == 1 ? " student" : " students") + "   -   "
-                    + c.lessonCount() + (c.lessonCount() == 1 ? " lesson" : " lessons"), x + 40, y + 190, cardW - 80, 40,
+                    + c.lessonCount() + (c.lessonCount() == 1 ? " lesson" : " lessons"), x + 40, y + 142, cardW - 80, 40,
                     1.6f, MUTED, Align.left);
-            Label open = text((c.ended() ? "ENDED   -   " : "") + "Open  >", x + 40, y + 240, cardW - 80, 40, 1.6f,
+            Label open = text((c.ended() ? "ENDED   -   " : "") + "Open  >", x + 40, y + 205, cardW - 80, 40, 1.6f,
                     c.ended() ? new Color(1f, 0.75f, 0.4f, 1f) : Color.WHITE, Align.left);
             rideAlong(card, stripe, name, subject, counts, open);
         }

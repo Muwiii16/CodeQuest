@@ -28,7 +28,7 @@ public final class LoadingScreen extends BaseScreen {
             if (result.isPresent()) {
                 next.accept(result.get());
             } else {
-                text("Could not reach the server. Check your connection and try again.", 0, 440, VIRTUAL_WIDTH, 60, 2f,
+                text("Could not reach the server.", 0, 440, VIRTUAL_WIDTH, 60, 2f,
                         new Color(1f, 0.6f, 0.55f, 1f), Align.center);
                 solidButton("Back", VIRTUAL_WIDTH / 2f - 200, 560, 400, 80, new Color(0.3f, 0.1f, 0.1f, 1f), onFail);
             }

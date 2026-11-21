@@ -64,7 +64,7 @@ public class BadgeScreen extends BaseScreen {
 
     private void show(Prepared prepared, Runnable back) {
         if (prepared == null) {
-            addCenteredTitle("Could not make your badge. Check your connection and try again.", 480f, 1.8f,
+            addCenteredTitle("Could not make your badge. Try again.", 480f, 1.8f,
                     new Color(1f, 0.6f, 0.55f, 1f));
             solidButton("Back", 760f, 640f, 400f, 80f, new Color(0.3f, 0.1f, 0.1f, 1f), back);
             return;
@@ -77,7 +77,9 @@ public class BadgeScreen extends BaseScreen {
         preview.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
 
         Image view = new Image(new TextureRegionDrawable(new TextureRegion(preview)));
-        placeTopLeft(view, 260f, 140f, 848f, 848f);
+        float viewHeight = 860f;
+        float viewWidth = viewHeight * preview.getWidth() / preview.getHeight();
+        placeTopLeft(view, 780f - viewWidth / 2f, 130f, viewWidth, viewHeight);
         stage.addActor(view);
 
         solidButton("Save image", 1300f, 300f, 480f, 90f, new Color(0.12f, 0.3f, 0.12f, 1f), this::save);

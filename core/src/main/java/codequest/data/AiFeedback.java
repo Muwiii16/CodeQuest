@@ -57,7 +57,12 @@ public class AiFeedback {
      */
     public Result forClass(Map<String, Object> data, List<String> namesInLabelOrder) {
         Result r = call("class", data);
-        return r.ok() ? new Result(restoreNames(r.text(), namesInLabelOrder), null) : r;
+        return r.ok() ? new Result(restoreNames(r.text(), namesInLabelOrder, true), null) : r;
+    }
+
+    /** Text made safe to put inside a JSON string (no surrounding quotes). */
+    public static String escapeForJson(String value) {
+        return SupabaseClient.jsonEscape(value);
     }
 
     /** The label the n-th student (counting from 0) is sent under. */
@@ -67,11 +72,20 @@ public class AiFeedback {
 
     /** Replaces the labels S1, S2... in the AI's text with the students' real names. A label with no name is left as it is. */
     public static String restoreNames(String text, List<String> names) {
+        return restoreNames(text, names, false);
+    }
+
+    /** As above; with {@code json} the names are escaped first, so a name cannot break an answer that is JSON. */
+    public static String restoreNames(String text, List<String> names, boolean json) {
+        boolean escape = json && text.trim().startsWith("{");
         Matcher m = Pattern.compile("\\bS(\\d{1,3})\\b").matcher(text);
         StringBuilder out = new StringBuilder();
         while (m.find()) {
             int index = Integer.parseInt(m.group(1)) - 1;
             String replacement = index >= 0 && index < names.size() ? names.get(index) : m.group();
+            if (escape) {
+                replacement = SupabaseClient.jsonEscape(replacement);
+            }
             m.appendReplacement(out, Matcher.quoteReplacement(replacement));
         }
         m.appendTail(out);
@@ -79,7 +93,8 @@ public class AiFeedback {
     }
 
     private Result call(String mode, Object data) {
-        String body = "{\"mode\":\"" + mode + "\",\"language\":\"" + language.key() + "\",\"data\":" + toJson(data) + "}";
+        String format = mode.equals("class") ? "\"format\":\"cards\"," : "";
+        String body = "{\"mode\":\"" + mode + "\"," + format + "\"language\":\"" + language.key() + "\",\"data\":" + toJson(data) + "}";
         SupabaseClient.FunctionResult r = SupabaseClient.callFunction("ai-feedback", body, TIMEOUT_SECONDS);
         String message = null;
         String text = null;

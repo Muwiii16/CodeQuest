@@ -99,8 +99,8 @@ public class ProfessorTestLobbyScreen extends ProfessorScreen {
 
         text(lesson.title() + "   -   " + (lobby ? "LOBBY OPEN" : "TEST RUNNING"), 90, 158, 1200, 44, 2.2f,
                 lobby ? AMBER : new Color(0.55f, 0.9f, 0.65f, 1f), Align.left);
-        text(lobby ? "Students open Class Test in their menu to join. When everyone is ready, start the test."
-                : "Points update live. The test ends when everyone has finished, after 20 minutes, or when you end it.",
+        text(lobby ? "Students join from Class Test. Start when all are ready."
+                : "Live points. Ends when all finish, at 20 minutes, or when you end it.",
                 90, 212, 1200, 34, 1.5f, MUTED, Align.left);
 
         // ── participants ──

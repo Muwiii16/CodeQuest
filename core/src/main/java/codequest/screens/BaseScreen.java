@@ -48,6 +48,8 @@ public abstract class BaseScreen implements Screen {
      * ones, which keep their flat amber look.
      */
     protected boolean kitStyle = true;
+    /** With kitStyle: draw buttons from the professor's picture kit (assets/ui/pro) instead of the student's. */
+    protected boolean proKit = false;
 
     private final List<Texture> ownedTextures = new ArrayList<>();
     private BitmapFont sharedFont;
@@ -313,7 +315,7 @@ public abstract class BaseScreen implements Screen {
                 }
                 if (finalError != null) {
                     Gdx.app.error("CodeQuest", "Background load failed", finalError);
-                    showError("Could not reach the server", "Check your internet connection and try again. Nothing was lost.");
+                    showError("Could not reach the server", "Check your connection and try again.");
                     return;
                 }
                 done.accept(finalResult);
@@ -509,12 +511,24 @@ public abstract class BaseScreen implements Screen {
         com.badlogic.gdx.scenes.scene2d.utils.Drawable spriteDown = null;
         if (kitStyle) {
             // a coloured button picture (hover and pressed have their own); dull colours become the dark, inactive look
-            String color = UiKit.colorFor(fill);
-            boolean dark = "dark".equals(color);
-            String c = dark ? "blue" : color;
-            spriteUp = UiKit.button(c, dark ? "down" : "up").drawable();
-            spriteOver = dark ? spriteUp : UiKit.button(c, "over").drawable();
-            spriteDown = UiKit.button(c, "down").drawable();
+            if (proKit && h >= 140) {
+                // a big clickable area is a card, not a button: the card picture keeps its shape instead of stretching a button
+                spriteUp = UiKit.proCard(fill).drawable();
+                spriteOver = spriteUp;
+                spriteDown = spriteUp;
+            } else if (proKit) {
+                String pc = UiKit.proColorFor(fill);
+                spriteUp = UiKit.proButton(pc, "idle").drawable();
+                spriteOver = UiKit.proButton(pc, "hover").drawable();
+                spriteDown = UiKit.proButton(pc, "pressed").drawable();
+            } else {
+                String color = UiKit.colorFor(fill);
+                boolean dark = "dark".equals(color);
+                String c = dark ? "blue" : color;
+                spriteUp = UiKit.button(c, dark ? "down" : "up").drawable();
+                spriteOver = dark ? spriteUp : UiKit.button(c, "over").drawable();
+                spriteDown = UiKit.button(c, "down").drawable();
+            }
             sprite = new Image(spriteUp);
             placeTopLeft(sprite, x - 4, yFromTop - 3, w + 8, h + 6);
             put(sprite);

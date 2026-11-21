@@ -55,8 +55,8 @@ public class CertificatesScreen extends StudentScreen {
         placeTopLeft(note, 930, 118, 830, 66);
         stage.addActor(note);
         note.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
-        text(showCertificates ? "One certificate per grading period you finish, and a grand one for the whole subject."
-                : "A badge is earned for every lesson you complete. Show it to your professor as proof.", 975, 128, 740, 46,
+        text(showCertificates ? "One per finished period, and a grand one for the whole subject."
+                : "One badge for every lesson you complete.", 975, 128, 740, 46,
                 1.1f, Color.WHITE, Align.left, PixelFonts.Face.SANS).setWrap(true);
         if (showCertificates) {
             drawCertificates();
@@ -104,22 +104,25 @@ public class CertificatesScreen extends StudentScreen {
     private List<Entry> entries() {
         List<Entry> out = new java.util.ArrayList<>();
         for (Subject s : subjects) {
-            out.add(new Entry(s, null));
+            if (s.certificate() != null) {
+                out.add(new Entry(s, null));
+            }
             for (AwardsData.PeriodAward a : s.periods()) {
-                out.add(new Entry(s, a.period()));
+                if (a.certificate() != null) {
+                    out.add(new Entry(s, a.period()));
+                }
             }
         }
         return out;
     }
 
     private void drawCertificates() {
-        if (subjects.isEmpty()) {
+        List<Entry> all = entries();
+        if (all.isEmpty()) {
             card(160, 220, 1600, 200);
-            text("You are not in a subject yet. Join a class, then finish its lessons to earn certificates.", 200, 220,
-                    1520, 200, 2f, MUTED, Align.center);
+            text("No certificates yet.\nFinish a grading period to earn one.", 200, 220, 1520, 200, 2f, MUTED, Align.center);
             return;
         }
-        List<Entry> all = entries();
         int from = page * PAGE_SIZE;
         int to = Math.min(all.size(), from + PAGE_SIZE);
         float y = 210;
@@ -129,29 +132,20 @@ public class CertificatesScreen extends StudentScreen {
             boolean whole = e.period() == null;
             AwardsData.PeriodAward award = whole ? null : s.award(e.period());
             AwardsData.Certificate cert = whole ? s.certificate() : award.certificate();
-            boolean earned = cert != null;
             float x = whole ? 160 : 220; // a period sits under its subject, a little to the right
             rect(x, y, 1760 - x, 116, whole ? new Color(0.1f, 0.13f, 0.3f, 1f) : ROW);
-            rect(x, y, 8, 116, earned ? GOLD : new Color(0.35f, 0.38f, 0.5f, 1f));
+            rect(x, y, 8, 116, GOLD);
             String title = whole ? s.name() + "  (" + s.section() + ")  -  whole subject"
                     : e.period().label() + "  -  " + s.name() + "  (" + s.section() + ")";
-            text(title, x + 40, y + 14, 1100, 44, whole ? 2.3f : 2f, earned ? Color.WHITE : MUTED, Align.left).setEllipsis(true);
-            int done = whole ? s.done() : award.done();
-            int total = whole ? s.total() : award.total();
-            String scope = whole ? "every lesson" : "every " + e.period().label() + " lesson";
-            if (earned) {
+            text(title, x + 40, y + 14, 1100, 44, whole ? 2.3f : 2f, Color.WHITE, Align.left).setEllipsis(true);
+            {
                 String date = cert.issuedAt().length() >= 10 ? cert.issuedAt().substring(0, 10) : "";
-                text("Finished " + scope + "  -  Rank " + cert.rank() + "  -  " + String.format(Locale.ROOT, "%.0f", cert.percent())
-                        + "%  -  earned " + date + (whole ? "  -  the grand certificate" : ""), x + 40, y + 64, 1100, 34, 1.4f,
+                text("Rank " + cert.rank() + "  -  " + String.format(Locale.ROOT, "%.0f", cert.percent())
+                        + "%  -  " + date, x + 40, y + 64, 1100, 34, 1.4f,
                         whole ? GOLD : MUTED, Align.left).setEllipsis(true);
                 solidButton("View / Save PDF", 1400, y + 28, 320, 60, GOOD,
                         () -> game.setScreen(new CertificateScreen(game, username, s, e.period(),
                                 () -> game.setScreen(new CertificatesScreen(game, username)), "Back")));
-            } else {
-                text(total == 0 ? "No lessons here yet."
-                        : done + " of " + total + " lessons finished  -  finish " + scope + " to earn it", x + 40, y + 64, 1100, 34,
-                        1.4f, MUTED, Align.left).setEllipsis(true);
-                solidButton("Not yet", 1400, y + 28, 320, 60, new Color(0.2f, 0.22f, 0.3f, 1f), Color.GRAY, INERT);
             }
             y += 130;
         }

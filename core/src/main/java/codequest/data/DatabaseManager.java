@@ -124,14 +124,41 @@ public class DatabaseManager {
      * returns a session token like a password login does. Blocks while the person is in the browser: call it off the render thread.
      */
     public GoogleResult googleLogin() {
+        return googleLogin(new GoogleAttempt());
+    }
+
+    /** One try at signing in with Google, which the person can cancel while the browser is open. */
+    public static final class GoogleAttempt {
+        private final GoogleSignIn.Cancel cancel = new GoogleSignIn.Cancel();
+
+        /** Stops waiting for the browser; the sign-in then ends with no account and the attempt reads as cancelled. */
+        public void cancel() {
+            cancel.cancel();
+        }
+
+        public boolean cancelled() {
+            return cancel.isCancelled();
+        }
+
+        GoogleSignIn.Cancel token() {
+            return cancel;
+        }
+    }
+
+    /** Same, for an attempt that can be cancelled (see {@link GoogleAttempt#cancel}). */
+    public GoogleResult googleLogin(GoogleAttempt attempt) {
         SupabaseClient.setSession(null);
-        GoogleSignIn.Code code = GoogleSignIn.obtainCode();
+        GoogleSignIn.Code code = GoogleSignIn.obtainCode(attempt.token());
         if (code.error() != null) {
             return new GoogleResult(null, null, code.error());
         }
         SupabaseClient.FunctionResult done = SupabaseClient.callFunction("google-login", "{\"action\":\"exchange\",\"code\":\""
                 + escape(code.code()) + "\",\"code_verifier\":\"" + escape(code.verifier()) + "\",\"redirect_uri\":\""
                 + escape(code.redirectUri()) + "\"}", 30);
+        if (attempt.cancelled()) {
+            // the person changed their mind: a late answer must not replace the account they sign in with next
+            return new GoogleResult(null, null, GoogleSignIn.CANCELLED);
+        }
         JsonValue answer = GoogleSignIn.parse(done.body());
         String token = answer == null ? null : answer.getString("token", null);
         if (!done.ok() || token == null) {
@@ -225,6 +252,11 @@ public class DatabaseManager {
      * rank is the S-F letter earned on this run (nullable).
      */
     public void saveLessonProgress(String username, long stageId, String difficulty, int score, String rank) {
+        saveLessonProgress(username, stageId, difficulty, score, rank, 0);
+    }
+
+    /** As above; maxScore is the most this run could have earned (its questions x 10), kept with the best score. */
+    public void saveLessonProgress(String username, long stageId, String difficulty, int score, String rank, int maxScore) {
         System.out.println("Saving progress: " + username + " stage:" + stageId + " score:" + score + " rank:" + rank);
 
         Long studentId = resolveProfileId(username);
@@ -235,10 +267,11 @@ public class DatabaseManager {
 
         JsonValue existing = SupabaseClient.get(
                 "campaign_progress?student_id=eq." + studentId + "&stage_id=eq." + stageId
-                        + "&select=id,score,attempts,rank");
+                        + "&select=id,score,attempts,rank,max_score");
 
         int bestScore = score;
         String bestRank = rank;
+        int bestMax = maxScore;
         int attempts = 1;
         Long rowId = null;
         if (existing != null && existing.size > 0) {
@@ -248,6 +281,7 @@ public class DatabaseManager {
             if (oldScore > score) {
                 bestScore = oldScore;
                 bestRank = row.getString("rank", rank);
+                bestMax = row.getInt("max_score", 0); // the best score has its own maximum
             }
             attempts = row.getInt("attempts", 0) + 1;
         }
@@ -255,6 +289,7 @@ public class DatabaseManager {
         String body = "{\"student_id\":" + studentId + ",\"stage_id\":" + stageId
                 + ",\"status\":\"completed\",\"current_difficulty\":\"" + escape(difficulty) + "\""
                 + ",\"score\":" + bestScore + ",\"attempts\":" + attempts
+                + (bestMax > 0 ? ",\"max_score\":" + bestMax : "")
                 + (bestRank != null ? ",\"rank\":\"" + escape(bestRank) + "\"" : "")
                 + ",\"last_played_at\":\"" + Instant.now() + "\"}";
 

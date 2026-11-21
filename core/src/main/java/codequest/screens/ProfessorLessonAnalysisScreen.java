@@ -25,9 +25,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
 
-    private static final String[] HEADERS = { "STUDENT", "STATUS", "RANK", "GRADE", "SCORE", "ATTEMPTS", "CLASS TEST",
-            "LAST PLAYED" };
-    private static final float[] COL_X = { 110, 430, 650, 790, 950, 1090, 1260, 1520 };
+    private static final String[] HEADERS = { "STUDENT", "STATUS", "SCORE", "ATTEMPTS", "CLASS TEST", "LAST PLAYED" };
+    private static final float[] COL_X = { 110, 480, 780, 1060, 1300, 1560 };
 
     private record Loaded(List<ProfessorData.LessonRow> rows, Map<String, int[]> topics,
             Map<Long, Map<String, int[]>> byStudent, List<ProfessorData.QuestionStat> questions) {
@@ -59,16 +58,12 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
 
     private void rebuild(Loaded loaded) {
         clearFrom(base);
-        int maxScore = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(lesson.number())).towerCount());
         List<ProfessorData.LessonRow> rows = loaded.rows();
 
         long done = rows.stream().filter(r -> r.progress() != null && r.progress().completed()).count();
-        double avg = rows.stream().filter(r -> r.progress() != null && r.progress().completed())
-                .mapToInt(r -> Grades.percent(r.progress().score(), maxScore)).average().orElse(0);
 
         text(cls.sectionName() + "   -   " + lesson.periodEnum().label() + "   -   " + done + " of " + rows.size()
-                + " completed   -   average grade "
-                + (done == 0 ? "n/a" : String.format(Locale.ROOT, "%.0f%%", avg)), 90, 158, 1700, 40, 1.8f, AMBER,
+                + " completed", 90, 158, 1700, 40, 1.8f, AMBER,
                 Align.left);
 
         rect(90, 215, 1740, 50, new Color(0.2f, 0.16f, 0.06f, 1f));
@@ -87,9 +82,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
             String[] cells = {
                     r.student().username(),
                     completed ? "Completed" : p == null ? "Not started" : "In progress",
-                    completed && p.rank() != null ? p.rank() : "-",
-                    completed ? Grades.percent(p.score(), maxScore) + "%" : "-",
-                    p == null ? "-" : String.valueOf(p.score()),
+                    p == null ? "-" : p.score() + " / " + p.max(lesson.number()),
                     p == null ? "-" : String.valueOf(p.attempts()),
                     r.classTestScore() == null ? "-" : r.classTestScore() + " pts",
                     p == null || p.lastPlayed() == null ? "-" : p.lastPlayed().substring(0, Math.min(10, p.lastPlayed().length()))
@@ -99,8 +92,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
                     () -> game.setScreen(new ProfessorStudentAnalysisScreen(game, username, cls, r.student(),
                             () -> game.setScreen(new ProfessorLessonAnalysisScreen(game, username, cls, lesson)))));
             for (int c = 1; c < cells.length; c++) {
-                Color color = c == 1 ? (completed ? new Color(0.55f, 0.9f, 0.65f, 1f) : MUTED)
-                        : c == 2 ? AMBER : Color.WHITE;
+                Color color = c == 1 ? (completed ? new Color(0.55f, 0.9f, 0.65f, 1f) : MUTED) : Color.WHITE;
                 text(cells[c], COL_X[c], y, 300, 52, 1.4f, color, Align.left);
             }
         }
@@ -136,14 +128,14 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
         }
 
         text("AI analysis", 1390, 825, 440, 36, 1.6f, AMBER, Align.left);
-        text("A written summary of where the class struggled and who needs attention. Only statistics are sent, never names.",
+        text("AI summary. Only statistics are sent, never names.",
                 1390, 868, 440, 70, 1.15f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
         solidButton("Write AI analysis", 1390, 950, 440, 56, new Color(0.45f, 0.3f, 0.7f, 1f),
-                () -> showAiAnalysis("Writing the analysis...", () -> analyse(loaded, maxScore)));
+                () -> showAiAnalysis("Writing the analysis...", () -> analyse(loaded)));
     }
 
     /** The class's numbers for the AI: statistics and topics only, with the students as S1, S2, ... (names stay here). */
-    private AiFeedback.Result analyse(Loaded loaded, int maxScore) {
+    private AiFeedback.Result analyse(Loaded loaded) {
         List<Object> topics = new ArrayList<>();
         for (Map.Entry<String, int[]> e : loaded.topics().entrySet()) {
             Map<String, Object> t = new LinkedHashMap<>();
@@ -163,7 +155,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
             s.put("id", AiFeedback.label(i));
             s.put("status", completed ? "Completed" : p == null ? "Not started" : "In progress");
             s.put("rank", completed ? p.rank() : null);
-            s.put("gradePercent", completed ? Grades.percent(p.score(), maxScore) : null);
+            s.put("gradePercent", completed ? Grades.percent(p.score(), p.max(lesson.number())) : null);
             s.put("attempts", p == null ? 0 : p.attempts());
             s.put("classTestPoints", r.classTestScore());
             Map<String, Object> accuracy = new LinkedHashMap<>();

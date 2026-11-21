@@ -172,8 +172,8 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             asTest = true;
             rebuild();
         });
-        text(asTest ? "Only for class tests: students never see it in their campaign."
-                : "Students play it in their campaign, in order, and can run it as a class test too.", 90, 664, 700, 28, 1.1f,
+        text(asTest ? "Class tests only. Hidden from the campaign."
+                : "Appears in the campaign and works as a class test.", 90, 664, 700, 28, 1.1f,
                 MUTED, Align.left, PixelFonts.Face.SANS);
 
         if (!followUps.isEmpty()) {
@@ -241,7 +241,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                     26, 1.0f, Color.WHITE, Align.left, PixelFonts.Face.SANS);
             y += 28;
         }
-        text("A draft: Save stores it, and every question can be rewritten in the editor.", 880, 632, 960, 28, 1.15f, AMBER,
+        text("Draft. Save it, then edit questions in the editor.", 880, 632, 960, 28, 1.15f, AMBER,
                 Align.left, PixelFonts.Face.SANS);
         if (!scopeNote.isEmpty()) {
             text("The AI understood:  " + scopeNote, 880, 662, 960, 34, 1.05f, MUTED, Align.left, PixelFonts.Face.SANS).setWrap(true);
@@ -287,7 +287,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             if (again) {
                 if (round > 0) {
                     showError("I still need more detail", (c.summary().isEmpty() ? "" : c.summary() + "\n\n")
-                            + "Your answers were not specific enough yet. Please answer the questions shown below.");
+                            + "Please answer the questions below.");
                 }
                 return;
             }
@@ -379,7 +379,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
     private void save() {
         String title = titleField.getText().trim();
         if (title.isEmpty()) {
-            showError("The title is missing", asTest ? "Give the class test a title in the Title box, then save again."
+            showError("The title is missing", asTest ? "Add a title, then save."
                     : "Give the lesson a title in the Title box, then save again.");
             return;
         }
@@ -415,7 +415,7 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             }
             if (draft != null && saved.getValue() < draft.questions().size()) {
                 toast("The lesson was saved, but only " + Math.max(0, saved.getValue()) + " of "
-                        + draft.questions().size() + " AI questions could be stored. Check them in the lesson editor.", false);
+                        + draft.questions().size() + " AI questions stored.", false);
             }
             game.setScreen(new ProfessorLessonScreen(game, username, cls, saved.getKey()));
         });

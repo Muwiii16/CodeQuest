@@ -71,12 +71,11 @@ public record ClassStats(int students, int lessons, int completionPercent, int a
         for (Lesson l : lessons) {
             int completed = 0;
             int sum = 0;
-            int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
             for (ProfessorData.Student s : roster) {
                 Progress p = progress.getOrDefault(s.id(), Map.of()).get(l.stageId());
                 if (p != null && p.completed()) {
                     completed++;
-                    sum += Grades.percent(p.score(), max);
+                    sum += Grades.percent(p.score(), p.max(l.number()));
                 }
             }
             perLesson.add(new LessonStat(l, completed, roster.size(), completed == 0 ? -1 : Math.round(sum / (float) completed)));

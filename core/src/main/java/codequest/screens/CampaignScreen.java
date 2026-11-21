@@ -224,10 +224,10 @@ public class CampaignScreen extends StudentScreen {
     /** The first time you pass a lesson you get one roll; replays give none. */
     private String rewardText(Lesson lesson) {
         String head = rolled.contains(lesson.stageId())
-                ? "Reward claimed. Replaying this lesson gives no more rolls."
-                : "Pass this lesson for one reward roll (a hat, weapon, trail or title).   Odds:  " + GachaRoll.oddsText();
-        return head + "\nPity: a rare or better item is guaranteed within " + GachaRoll.PITY_ROLLS + " rolls.  "
-                + (stats.untilGuarantee() <= 1 ? "Your next roll is guaranteed!" : "Next guarantee in " + stats.untilGuarantee()
-                        + " rolls.");
+                ? "Reward claimed."
+                : "Pass for one reward roll.   Odds:  " + GachaRoll.oddsText();
+        return head + "\nPity: rare or better within " + GachaRoll.PITY_ROLLS + " rolls.  "
+                + (stats.untilGuarantee() <= 1 ? "Next roll is guaranteed!" : "Guarantee in " + stats.untilGuarantee()
+                        + " rolls");
     }
 }

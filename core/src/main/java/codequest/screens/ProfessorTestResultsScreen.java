@@ -18,7 +18,7 @@ public class ProfessorTestResultsScreen extends ProfessorScreen {
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         card(60, 140, 1800, 880);
         text(lessonTitle + "   -   TEST ENDED", 90, 158, 1500, 44, 2.2f, MUTED, Align.left);
-        text("Points are 500-1000 per correct answer by speed, plus streak bonuses. No rewards are given for class tests.",
+        text("500-1000 points per correct answer by speed, plus streaks.",
                 90, 212, 1700, 34, 1.4f, MUTED, Align.left);
 
         if (ranked.isEmpty()) {

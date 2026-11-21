@@ -154,7 +154,7 @@ public class ProfessorClassAnalysisScreen extends ProfessorScreen {
                     Color.WHITE, Align.left, PixelFonts.Face.SANS);
             cy += 28;
         }
-        text("A written summary of how the whole class is doing and what to do next. Only statistics are sent, never names.",
+        text("AI summary. Only statistics are sent, never names.",
                 1370, 855, 460, 70, 1.15f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
         solidButton("Write AI analysis", 1370, 940, 460, 56, new Color(0.45f, 0.3f, 0.7f, 1f),
                 () -> showAiAnalysis("Writing the analysis...", this::analyse));

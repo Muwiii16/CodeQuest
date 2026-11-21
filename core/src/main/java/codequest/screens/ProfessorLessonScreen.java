@@ -176,7 +176,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
                     report.complete() ? new Color(0.6f, 0.95f, 0.6f, 1f) : report.problem() != null
                             ? new Color(1f, 0.5f, 0.45f, 1f) : AMBER, Align.left, PixelFonts.Face.SANS);
         } else {
-            text("Students get a random question for each tower's topic. A topic with 0 uses the built-in questions.", 820,
+            text("A random question per tower topic. 0 uses built-in questions.", 820,
                     258, 1010, 30, 1.2f, MUTED, Align.left, PixelFonts.Face.SANS);
         }
 
@@ -312,7 +312,7 @@ public class ProfessorLessonScreen extends ProfessorScreen {
 
     private void importBuiltIn() {
         load("Adding the starter questions...", () -> questionData.importBuiltIn(lesson.stageId()), added -> {
-            toast(added + " starter questions added. Edit any of them to make them yours.", added > 0);
+            toast(added + " starter questions added.", added > 0);
             refreshQuestions();
         });
     }

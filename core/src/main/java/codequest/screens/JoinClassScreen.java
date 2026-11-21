@@ -21,8 +21,7 @@ public class JoinClassScreen extends StudentScreen {
         super(game, username, "Join a class", back);
         card(360, 190, 1200, 700);
         text("Enter your class code", 400, 230, 1120, 56, 2.6f, Color.WHITE, Align.center);
-        text("Your professor gives you a code of 6 letters and numbers, for example WWU-RJC. Capital letters do not matter "
-                + "and the dash is optional.", 450, 305, 1020, 90, 1.4f, MUTED, Align.center, PixelFonts.Face.SANS).setWrap(true);
+        text("The 6-character code from your professor, like WWU-RJC.", 450, 305, 1020, 90, 1.4f, MUTED, Align.center, PixelFonts.Face.SANS).setWrap(true);
         codeField = textField("CODE", false, 660, 430, 600, 96, PixelFonts.Face.MONO);
         codeField.setAlignment(Align.center);
         codeField.setMaxLength(10);
@@ -33,9 +32,9 @@ public class JoinClassScreen extends StudentScreen {
             }
         });
         solidButton("Join class", 660, 570, 600, 80, GOOD, this::join);
-        text("Codes never use 0, O, 1 or I, so they cannot be mixed up.", 450, 690, 1020, 36, 1.2f, MUTED, Align.center,
+        text("Codes never use 0, O, 1 or I.", 450, 690, 1020, 36, 1.2f, MUTED, Align.center,
                 PixelFonts.Face.SANS);
-        text("You can join more than one class, and you stay in a class after it ends.", 450, 735, 1020, 36, 1.2f, MUTED,
+        text("You can join more than one class.", 450, 735, 1020, 36, 1.2f, MUTED,
                 Align.center, PixelFonts.Face.SANS);
         stage.setKeyboardFocus(codeField);
     }
@@ -56,22 +55,18 @@ public class JoinClassScreen extends StudentScreen {
         Runnable toCampaign = () -> game.setScreen(new CampaignScreen(game, username, r.classId()));
         switch (r.status()) {
             case JOINED -> showNotice("You joined " + name,
-                    "You can now play this class's lessons and take its class tests. Press OK to open the class.", toCampaign);
+                    "Press OK to open the class.", toCampaign);
             case REQUESTED -> showNotice("Request sent to your professor",
-                    "The code is right. " + name + " will appear in your campaign as soon as your professor approves you. "
-                            + "Ask them to check their join requests.", () -> game.setScreen(new CampaignScreen(game, username)));
+                    name + " appears in your campaign once your professor approves.", () -> game.setScreen(new CampaignScreen(game, username)));
             case PENDING -> showNotice("You already asked to join " + name,
-                    "Your professor has not approved it yet. You do not need to type the code again.",
+                    "Waiting for your professor to approve.",
                     () -> game.setScreen(new CampaignScreen(game, username)));
             case ALREADY_IN -> showNotice("You are already in " + name, "Nothing changed. Press OK to open the class.", toCampaign);
             case INVALID_CODE -> showError("That code does not match a class",
-                    "Check the 6 letters and numbers with your professor. Codes never use 0, O, 1 or I. If your professor made a "
-                            + "new code, the old one no longer works.");
-            case ENDED -> showError("This class has ended", "Its professor has closed it, so nobody can join it any more. "
-                    + "Ask your professor if you need to be added another way.");
+                    "Check the code with your professor. A new code replaces the old one.");
+            case ENDED -> showError("This class has ended", "Its professor closed it. Ask them to add you.");
             case NOT_A_STUDENT -> showError("Only students can join a class", "This account is not a student account.");
-            case TOO_MANY -> showError("Too many wrong codes", "You typed several codes that do not match a class. Wait 15 minutes "
-                    + "and ask your professor to check the code.");
+            case TOO_MANY -> showError("Too many wrong codes", "Wait 15 minutes, then check the code with your professor.");
             case NOT_SIGNED_IN -> showError("Please sign in again", "Your session has ended. Log out and log in again.");
             default -> showError("Could not reach the server", "Check your internet connection and try again.");
         }

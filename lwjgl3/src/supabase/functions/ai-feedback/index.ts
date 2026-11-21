@@ -48,6 +48,41 @@ Plain text only: no markdown, no bullet symbols. Use short labelled paragraphs s
 "Suggestions:". At most 220 words.
 ${SAFETY}`;
 
+// The professor's analysis as cards (format "cards"): JSON only, which the game draws as tiles, cards and a checklist.
+// Older game builds send no format and keep getting the plain-text analysis above.
+const reportRules = (lang: string) => `You help a professor who teaches introductory ${lang} with CodeQuest, a game. You get class results (a lesson, a
+grading period, a student, a class test, or a whole subject): per topic accuracy and one row per student. Students are only
+called S1, S2, ... and sections Section 1, 2, ... : refer to them by those labels only.
+Answer with ONE JSON object and nothing else (no markdown, no code fence). Keys:
+{
+ "summary": string, one or two plain sentences on how it went (max 140 characters),
+ "tiles": up to 4 of {"label": string (max 22 chars), "value": string (max 10 chars)} - only numbers that appear in the data,
+ "attention": up to 2 of {"who": string, "finding": string (max 70 chars), "next": string (max 60 chars)} - students who need action,
+ "watch": same shape - students or things to keep an eye on,
+ "doingWell": same shape - students or things going well,
+ "struggles": up to 3 strings (max 60 chars), each a topic or question the group struggled with, with its numbers,
+ "nextSteps": up to 3 strings (max 70 chars), concrete things the professor can do,
+ "dataGaps": up to 2 strings (max 70 chars), what the data cannot tell yet
+}
+"who" is a label (S1, Section 2) or "" when it is about the whole group. Base every claim on the data; with little data
+say so in dataGaps. Use empty arrays where there is nothing to say. Keep every string short.
+${SAFETY}`;
+
+// Takes the model's answer and returns the JSON text if it is a valid report, else null.
+function validReport(text: string | null): string | null {
+  if (!text) return null;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const o = JSON.parse(text.slice(start, end + 1));
+    if (!o || typeof o !== "object" || typeof o.summary !== "string" || !o.summary.trim()) return null;
+    return JSON.stringify(o);
+  } catch {
+    return null;
+  }
+}
+
 function clip(value: unknown, max: number): string {
   return String(value ?? "").slice(0, max);
 }
@@ -80,7 +115,7 @@ async function askClaude(apiKey: string, system: string, user: string): Promise<
   }
 }
 
-async function askGemini(apiKey: string, system: string, user: string): Promise<string | null> {
+async function askGemini(apiKey: string, system: string, user: string, asJson = false): Promise<string | null> {
   const model = Deno.env.get("GEMINI_MODEL") || DEFAULT_GEMINI_MODEL;
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -89,7 +124,7 @@ async function askGemini(apiKey: string, system: string, user: string): Promise<
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.5 },
+        generationConfig: asJson ? { temperature: 0.4, responseMimeType: "application/json" } : { temperature: 0.5 },
       }),
     });
     if (!res.ok) return null;
@@ -125,7 +160,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
-  let body: { mode?: string; language?: string; data?: unknown };
+  let body: { mode?: string; language?: string; format?: string; data?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -150,15 +185,18 @@ Deno.serve(async (req: Request) => {
   if (!allowed) return json({ error: "The daily AI feedback limit has been reached. Try again tomorrow." }, 429);
 
   const lang = languageOf(body.language);
-  const system = mode === "student" ? studentRules(lang) : classRules(lang);
+  const cards = mode === "class" && body.format === "cards";
+  const system = mode === "student" ? studentRules(lang) : cards ? reportRules(lang) : classRules(lang);
   const user = `<data>\n${data}\n</data>`;
   if (claudeKey) {
     const text = await askClaude(claudeKey, system, user);
-    if (text) return json({ text, ai: "claude" });
+    const out = cards ? validReport(text) : text;
+    if (out) return json({ text: out, ai: "claude" });
   }
   if (geminiKey) {
-    const text = await askGemini(geminiKey, system, user);
-    if (text) return json({ text, ai: "gemini" });
+    const text = await askGemini(geminiKey, system, user, cards);
+    const out = cards ? validReport(text) : text;
+    if (out) return json({ text: out, ai: "gemini" });
   }
   return json({ error: "The AI could not write feedback right now. Try again." }, 502);
 });

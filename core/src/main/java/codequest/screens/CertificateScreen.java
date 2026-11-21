@@ -100,7 +100,7 @@ public class CertificateScreen extends BaseScreen {
 
     private void show(Prepared prepared, Runnable back, String backLabel) {
         if (prepared == null) {
-            addCenteredTitle("Could not make your certificate. Check your connection and try again.", 480f, 1.8f,
+            addCenteredTitle("Could not make your certificate. Try again.", 480f, 1.8f,
                     new Color(1f, 0.6f, 0.55f, 1f));
             solidButton("Back", 760f, 640f, 400f, 80f, new Color(0.3f, 0.1f, 0.1f, 1f), back);
             return;

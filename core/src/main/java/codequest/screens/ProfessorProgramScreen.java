@@ -54,7 +54,7 @@ public class ProfessorProgramScreen extends ProfessorScreen {
         programBox = textArea(cpp ? "#include <iostream>\nusing namespace std;\n\nint main() {\n    ...\n}"
                 : "#include <stdio.h>\n\nint main() {\n    ...\n}", 90, 245, 940, 330, Face.MONO);
         programBox.setText(lesson.program() == null ? "" : lesson.program());
-        text("What each program prints when it runs (same order, separated by a line of ---). The terminal shows it.", 90, 585,
+        text("What each program prints (same order, split by ---).", 90, 585,
                 940, 26, 1.1f, MUTED, Align.left, Face.SANS);
         outputsBox = textArea("Hello, CodeQuest!", 90, 615, 940, 225, Face.MONO);
         outputsBox.setText(lesson.outputs() == null ? "" : lesson.outputs());
@@ -78,7 +78,7 @@ public class ProfessorProgramScreen extends ProfessorScreen {
         ProgramCoverage.Report report = QuestionData.coverage(program, questions);
         fill(checkRegion, () -> {
             boolean ok = report.complete();
-            text(questions.isEmpty() ? "This lesson has no questions yet. Add one question per chunk of the program."
+            text(questions.isEmpty() ? "No questions yet. Add one per chunk."
                     : ProgramCoverage.describe(report), 1120, 205, 710, 90, 1.3f,
                     ok ? COVERED : report.problem() != null ? WRONG : AMBER, Align.topLeft, Face.SANS).setWrap(true);
             List<String> shown = new ArrayList<>();
@@ -117,8 +117,8 @@ public class ProfessorProgramScreen extends ProfessorScreen {
             if (ok) {
                 lesson = lesson.withProgram(program, outputs);
                 toast(lesson.hasProgram()
-                        ? "Program saved. Lessons with a program are played block by block."
-                        : "Program removed. The lesson draws its questions at random again.", true);
+                        ? "Program saved."
+                        : "Program removed.", true);
                 rebuildCheck();
             } else {
                 toast("Could not save the program. Check your connection.", false);
@@ -145,7 +145,7 @@ public class ProfessorProgramScreen extends ProfessorScreen {
             programBox.setText(p.text());
             outputsBox.setText(p.outputs() == null ? "" : p.outputs());
             toast(empty ? "Built-in program and " + added + " questions added. Edit any of them."
-                    : "Built-in program added. Your existing questions were kept: check they match it.", true);
+                    : "Built-in program added. Check your questions match it.", true);
             load("Loading the questions...", () -> questionData.list(lesson.stageId()), list -> {
                 questions = list;
                 rebuildCheck();

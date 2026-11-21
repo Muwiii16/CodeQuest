@@ -248,12 +248,14 @@ public class ProfessorSubjectAnalysisScreen extends ProfessorScreen {
 
     /** Replaces "Section 1", "Section 2", ... in the AI's text with the real section names (an unknown number stays as it is). */
     static String restoreSections(String text, List<String> names) {
+        boolean escape = text.trim().startsWith("{");
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\bSection (\\d{1,2})\\b").matcher(text);
         StringBuilder out = new StringBuilder();
         while (m.find()) {
             int index = Integer.parseInt(m.group(1)) - 1;
-            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(index >= 0 && index < names.size() ? names.get(index)
-                    : m.group()));
+            String name = index >= 0 && index < names.size() ? names.get(index) : m.group();
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(escape
+                    ? AiFeedback.escapeForJson(name) : name));
         }
         m.appendTail(out);
         return out.toString();

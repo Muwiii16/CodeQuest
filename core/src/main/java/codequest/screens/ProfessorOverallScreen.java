@@ -46,7 +46,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
         card(60, 140, 1800, 650);
         card(60, 810, 1800, 210);
         text("AI analysis", 90, 825, 700, 36, 1.8f, AMBER, Align.left);
-        text("A written summary of how each student and the whole class did on the lessons shown above (pick a grading "
+        text("AI summary of the lessons shown (pick a period to narrow it)."
                 + "period to analyse only that one). Only grades and ranks are sent to the AI, never names.", 90, 872, 1740, 60,
                 1.3f, MUTED, Align.topLeft,
                 PixelFonts.Face.SANS).setWrap(true);
@@ -86,8 +86,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
                 boolean done = p != null && p.completed();
                 cell.put("status", done ? "Completed" : p == null ? "Not started" : "In progress");
                 if (done) {
-                    int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
-                    int grade = Grades.percent(p.score(), max);
+                    int grade = Grades.percent(p.score(), p.max(l.number()));
                     cell.put("rank", p.rank());
                     cell.put("gradePercent", grade);
                     sum += grade;
@@ -162,7 +161,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             }
         }
 
-        text("Rank is from accuracy (- = not completed). Score is points earned; wrong answers take none away, so A can show 100%.",
+        text("Rank is from accuracy. Score is points earned.",
                 90, 187, 1740, 26, 1.0f, MUTED, Align.left);
         rect(90, 215, 1740, 50, new Color(0.2f, 0.16f, 0.06f, 1f));
         text("STUDENT", 110, 215, nameW, 50, 1.3f, AMBER, Align.left);
@@ -191,8 +190,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             for (Lesson l : lessons) {
                 Progress p = mine.get(l.stageId());
                 if (p != null && p.completed()) {
-                    int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
-                    sum += Grades.percent(p.score(), max);
+                    sum += Grades.percent(p.score(), p.max(l.number()));
                     counted++;
                 }
             }

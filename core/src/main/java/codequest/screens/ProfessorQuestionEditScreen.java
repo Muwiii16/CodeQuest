@@ -245,13 +245,13 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
                 rebuildForm();
             });
         }
-        help("Next, press Next to write the question and its answer. You can come back to this page at any time.", 850, 60);
+        help("Press Next to write the question and answer.", 850, 60);
     }
 
     private static String describe(AnswerKind k) {
         return switch (k) {
-            case CHOICE -> "The student picks the right token for a blank from a few choices.";
-            case FILL_BLANK -> "The student types the missing code themselves. Harder than choices.";
+            case CHOICE -> "Student picks from a few choices.";
+            case FILL_BLANK -> "Student types the missing code.";
             case TRUE_FALSE -> "A statement about the code. The student says True or False.";
             case ARRANGE -> "The student taps tokens in the right order to build one line.";
             case FIND_BUG -> "The student taps the line of code that has the mistake.";
@@ -346,14 +346,14 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
 
     /** Page 3: hint, explanation and the terminal message. */
     private void pageHelp() {
-        help("None of these is needed to save, except the explanation in a lesson that builds a program.", 228, 28);
+        help("Optional, except the explanation in program lessons.", 228, 28);
 
         heading("Hint  (optional)", 268);
         hintField = textField("A nudge shown when the student asks for a hint", false, 90, 304, 1040, 52, Face.SANS);
         hintField.setText(hintT);
 
         heading("Explanation  (shown after the student answers)", 384);
-        help("Say why the right answer is right. Needed in a lesson that builds a program.", 416, 26);
+        help("Why the right answer is right.", 416, 26);
         explanationBox = textArea(isCpp()
                 ? "e.g. #include <iostream> loads the library that contains cout. Without it the compiler does not know cout."
                 : "e.g. #include <stdio.h> loads the library that contains printf. Without it the compiler "
@@ -390,10 +390,10 @@ public class ProfessorQuestionEditScreen extends ProfessorScreen {
                         d.prompt().isEmpty() ? Face.SANS : PixelFonts.faceForPrompt(kind, d.prompt())).setWrap(true);
             }
             String note = switch (kind) {
-                case CHOICE -> "Green is the correct answer. In the game the choices are shuffled.";
-                case FILL_BLANK -> "The student types the answer. Spaces are ignored, capital letters are not.";
+                case CHOICE -> "Green is correct. Choices are shuffled in the game.";
+                case FILL_BLANK -> "Student types the answer. Spaces ignored.";
                 case TRUE_FALSE -> "Green is the right answer.";
-                case ARRANGE -> "The student taps the tokens in order. The tokens start out mixed up.";
+                case ARRANGE -> "Student taps the tokens in order.";
                 case FIND_BUG -> "The student taps a line. Green is the line with the bug.";
             };
             switch (kind) {

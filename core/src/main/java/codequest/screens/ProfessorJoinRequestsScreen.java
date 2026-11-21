@@ -43,7 +43,7 @@ public class ProfessorJoinRequestsScreen extends ProfessorScreen {
                 + "the code alone does not let anyone in.", 90, 212, 1740, 60, 1.3f, MUTED, Align.topLeft,
                 PixelFonts.Face.SANS).setWrap(true);
         if (requests.isEmpty()) {
-            text("When a student asks to join one of your classes, they appear here.", 90, 330, 1740, 60, 1.6f, MUTED,
+            text("Join requests appear here.", 90, 330, 1740, 60, 1.6f, MUTED,
                     Align.left, PixelFonts.Face.SANS);
             return;
         }

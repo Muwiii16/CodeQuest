@@ -136,7 +136,7 @@ public class ClassTestResultScreen extends StudentScreen {
                         890, 1180, 36, 1.5f, MUTED, Align.center);
             }
         }
-        text("Class tests do not give rewards. Your points and ranking are what count.", 90, 960, 1180, 30, 1.3f, MUTED,
+        text("No rewards for class tests.", 90, 960, 1180, 30, 1.3f, MUTED,
                 Align.center);
 
         // everyone else

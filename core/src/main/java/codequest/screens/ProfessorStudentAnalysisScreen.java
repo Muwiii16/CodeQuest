@@ -111,8 +111,7 @@ public class ProfessorStudentAnalysisScreen extends ProfessorScreen {
             boolean done = p != null && p.completed();
             float y = 358 + (i - from) * 50;
             rect(90, y, 1740, 46, ROW);
-            int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
-            int grade = done ? Grades.percent(p.score(), max) : -1;
+            int grade = done ? Grades.percent(p.score(), p.max(l.number())) : -1;
             String[] cells = { String.valueOf(l.number()), l.title(), l.periodEnum().label(),
                     done ? "Completed" : p == null ? "Not started" : "In progress", done && p.rank() != null ? p.rank() : "-",
                     grade < 0 ? "-" : grade + "%", p == null ? "-" : String.valueOf(p.attempts()),
@@ -178,9 +177,8 @@ public class ProfessorStudentAnalysisScreen extends ProfessorScreen {
             row.put("period", l.periodEnum().label());
             row.put("status", done ? "Completed" : p == null ? "Not started" : "In progress");
             if (done) {
-                int max = Grades.maxScore(DefaultStages.forNumber(DefaultStages.layoutFor(l.number())).towerCount());
                 row.put("rank", p.rank());
-                row.put("gradePercent", Grades.percent(p.score(), max));
+                row.put("gradePercent", Grades.percent(p.score(), p.max(l.number())));
             }
             row.put("attempts", p == null ? 0 : p.attempts());
             lessonRows.add(row);

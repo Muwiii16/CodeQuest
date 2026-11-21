@@ -75,7 +75,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
 
     /** The join code: what students type to enroll themselves, with Copy and a new code if it was shared too widely. */
     private void drawJoinCode() {
-        text("Join code  -  students type it to ask to join; you approve them on the dashboard", 1110, 148, 720, 26, 1.1f, MUTED, Align.left,
+        text("Join code", 1110, 148, 720, 26, 1.1f, MUTED, Align.left,
                 PixelFonts.Face.SANS);
         boolean has = cls.joinCode() != null && !cls.joinCode().isBlank();
         text(has ? JoinCode.display(cls.joinCode()) : "...", 1110, 176, 330, 60, 3.2f, new Color(1f, 0.82f, 0.3f, 1f), Align.left,
@@ -94,7 +94,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     private void newCode() {
         if (!codeArmed) {
             codeArmed = true;
-            toast("Press the button again to replace the code. The old code stops working; enrolled students stay enrolled.",
+            toast("A new code replaces the old one.",
                     true);
             refresh();
             return;
@@ -102,7 +102,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         codeArmed = false;
         load("Making a new code...", () -> data.regenerateJoinCode(cls.id()), code -> {
             if (code == null) {
-                showError("Could not make a new code", "Check your internet connection and try again. The old code still works.");
+                showError("Could not make a new code", "Check your connection. The old code still works.");
                 refresh();
                 return;
             }
@@ -121,7 +121,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         drawJoinCode();
         text(students.size() + (students.size() == 1 ? " student" : " students") + " in this class", 90, 250, 400, 40, 1.8f,
                 AMBER, Align.left);
-        text("Dropping a student removes them from this class only; progress and certificates are kept.", 520, 240, 500, 50,
+        text("Dropping keeps progress and certificates.", 520, 240, 500, 50,
                 1.05f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
         solidButton(ended ? "ENDED  -  past subjects (tap to reopen)"
                 : "Running  -  tap when finished", 1030, 245, 520, 46, ended ? new Color(0.5f, 0.33f, 0.1f, 1f) : GOOD,
@@ -155,7 +155,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         solidButton(deleteArmed ? "Click again: delete the whole class" : "Delete class", 1290, 860, 540, 64,
                 deleteArmed ? new Color(0.7f, 0.15f, 0.15f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), this::deleteClass);
         if (deleteArmed) {
-            text("This deletes the class, its lessons and questions, and the students' results for them.", 1290, 930, 540,
+            text("Deletes the class, its lessons, questions and results.", 1290, 930, 540,
                     60, 1.2f, new Color(1f, 0.6f, 0.55f, 1f), Align.topLeft).setWrap(true);
         }
     }
@@ -232,7 +232,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
             }
             setCls(cls.withPacing(next));
             toast(ClassInfo.MANUAL.equals(next)
-                    ? "Manual: students see each lesson locked until you press Unlock in the section."
+                    ? "Manual: lessons stay locked until you unlock them."
                     : "Self-paced: lessons open as students finish the one before.", true);
             refresh();
         });
