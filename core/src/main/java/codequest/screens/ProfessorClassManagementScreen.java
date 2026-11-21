@@ -31,10 +31,18 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     private boolean codeArmed;
     private boolean deleteArmed;
 
+    /** The class as it is now, shared with the Back button so the section screen opens with the saved changes. */
+    private final ClassInfo[] current;
+
     public ProfessorClassManagementScreen(Main game, String username, ClassInfo cls) {
-        super(game, username, "Class management  -  " + cls.sectionName(),
-                () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
-        this.cls = cls;
+        this(game, username, new ClassInfo[] { cls });
+    }
+
+    private ProfessorClassManagementScreen(Main game, String username, ClassInfo[] box) {
+        super(game, username, "Class management  -  " + box[0].sectionName(),
+                () -> game.setScreen(new ProfessorSectionScreen(game, username, box[0])));
+        this.current = box;
+        this.cls = box[0];
 
         card(60, 140, 1800, 880);
         addField = textField("Student username to add", false, 90, 165, 700, 64);
@@ -59,7 +67,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
             // a class opened from somewhere that did not load the code: ask for it
             long classId = cls.id();
             load("Loading the join code...", () -> data.joinCode(classId), code -> {
-                this.cls = this.cls.withJoinCode(code);
+                setCls(this.cls.withJoinCode(code));
                 refresh();
             });
         }
@@ -98,7 +106,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
                 refresh();
                 return;
             }
-            cls = cls.withJoinCode(code);
+            setCls(cls.withJoinCode(code));
             refresh();
             toast("New join code: " + JoinCode.display(code), true);
         });
@@ -115,13 +123,16 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
                 AMBER, Align.left);
         text("Dropping a student removes them from this class only; progress and certificates are kept.", 520, 240, 500, 50,
                 1.05f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
-        solidButton(ended ? "ENDED  -  students see it under past subjects (tap to reopen)"
-                : "Running  -  tap when the subject is finished", 1030, 245, 800, 46, ended ? new Color(0.5f, 0.33f, 0.1f, 1f) : GOOD,
+        solidButton(ended ? "ENDED  -  past subjects (tap to reopen)"
+                : "Running  -  tap when finished", 1030, 245, 520, 46, ended ? new Color(0.5f, 0.33f, 0.1f, 1f) : GOOD,
                 () -> {
                     ended = !ended;
                     toast(ended ? "Marked as ended. Press Save to keep it." : "Marked as running. Press Save to keep it.", true);
                     refresh();
                 });
+        // how lessons open: saved at once (it is not part of the details Save)
+        solidButton(cls.manual() ? "Lessons: manual unlock" : "Lessons: self-paced", 1560, 245, 270, 46,
+                cls.manual() ? new Color(0.5f, 0.33f, 0.1f, 1f) : BUTTON, this::togglePacing);
         if (students.isEmpty()) {
             text("Nobody is enrolled yet. Add students by their username.", 90, 305, 1700, 40, 1.6f, MUTED, Align.left);
         }
@@ -194,12 +205,33 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         boolean nowEnded = ended;
         load("Saving...", () -> data.updateClass(cls.id(), section, finalCourse, subject, term, nowEnded), ok -> {
             if (ok) {
-                cls = new ClassInfo(cls.id(), finalCourse, section, cls.language(), cls.studentCount(), cls.lessonCount(),
-                        subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, nowEnded, cls.joinCode());
+                setCls(new ClassInfo(cls.id(), finalCourse, section, cls.language(), cls.studentCount(), cls.lessonCount(),
+                        subject.isEmpty() ? null : subject, term.isEmpty() ? null : term, nowEnded, cls.joinCode(), cls.pacing()));
                 toast("Class details saved.", true);
             } else {
                 toast("Could not save. Check your connection.", false);
             }
+        });
+    }
+
+    private void setCls(ClassInfo updated) {
+        cls = updated;
+        current[0] = updated;
+    }
+
+    /** Switches between self-paced lessons and lessons the professor unlocks one by one. */
+    private void togglePacing() {
+        String next = cls.manual() ? ClassInfo.SELF_PACED : ClassInfo.MANUAL;
+        load("Saving...", () -> data.updatePacing(cls.id(), next), ok -> {
+            if (!ok) {
+                toast("Could not change how lessons open. Check your connection.", false);
+                return;
+            }
+            setCls(cls.withPacing(next));
+            toast(ClassInfo.MANUAL.equals(next)
+                    ? "Manual: students see each lesson locked until you press Unlock in the section."
+                    : "Self-paced: lessons open as students finish the one before.", true);
+            refresh();
         });
     }
 

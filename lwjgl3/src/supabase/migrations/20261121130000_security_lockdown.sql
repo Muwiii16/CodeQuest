@@ -35,6 +35,10 @@ drop function if exists join_class(text, text);
 revoke insert, update, delete, truncate, references, trigger on cosmetics, dictionary_entries from anon, authenticated;
 revoke truncate, references, trigger on all tables in schema public from anon, authenticated;
 
+-- 3b. Real names (full_name, from the Google account) are no longer readable by every signed-in person: the game asks
+--     app_full_names(), which answers only for the person themselves and for a professor's own students.
+revoke select (full_name) on profiles from anon, authenticated;
+
 -- 4. The Edge Functions (generate-lesson, ai-feedback) start requiring a valid session, and professors only for lessons.
 insert into app_secrets (key, value) values ('enforce_sessions', 'on')
 on conflict (key) do update set value = 'on';

@@ -8,7 +8,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 
-/** The student's main menu: Campaign, Class Test, Cosmetics, Certificates, Dictionary. */
+/** The student's main menu: Campaign, Class Test, Cosmetics, Certificates. (The dictionary opens from a class in the campaign.) */
 public class MainMenuScreen extends BaseScreen {
 
     public MainMenuScreen(Main game, String username) {
@@ -33,9 +33,6 @@ public class MainMenuScreen extends BaseScreen {
                 () -> game.setScreen(new CosmeticsScreen(game, username)));
         menuButton("certificates", "Certificates", btnX, startY + spacing * 3, btnWidth, btnHeight,
                 () -> game.setScreen(new CertificatesScreen(game, username)));
-        // C is the only language so far; every class teaching it shares this dictionary
-        menuButton("dictionary", "Dictionary", btnX, startY + spacing * 4, btnWidth, btnHeight,
-                () -> game.setScreen(new DictionaryScreen(game, username, "C")));
 
         outlinedText("Student:  " + username, VIRTUAL_WIDTH - 620, 28, 380, 40, 1.5f, new Color(0.8f, 0.87f, 1f, 1f), Align.right);
         solidButton("Log out", VIRTUAL_WIDTH - 220, 20, 180, 56, new Color(0.2f, 0.26f, 0.5f, 1f),

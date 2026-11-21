@@ -339,3 +339,19 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - Verified: `tests/security_dry_run.sql` simulates phase B inside a transaction that always rolls back, as the `anon` role with the header, with throwaway professors and students that log in through the real `login_user`: **85 of 85 checks pass** (nobody signed out sees data; a student cannot edit stages or questions, enroll, grade or give cosmetics to another student, or start a test; a professor cannot touch another professor's class; 10 wrong join codes lock joining; 8 wrong passwords lock sign-in; a token stops working after log out). Also checked live through the real REST API: token issued, `app_me()` returns the caller, nothing for no token or after log out. Unit tests pass. The full game with phase B on was not played by hand yet: do that before applying phase B (log in as a professor and a student, create a class, join with the code, play a lesson, run a class test).
 - Still open: students can read the correct answers of their lessons (the game grades on the laptop), and a student can give themselves cosmetics (`student_cosmetics` is written by the game); a session token is stolen if someone copies the laptop's memory; no password reset; the app key is still in the game files (that is normal, it only opens what the policies allow).
 - ERD: new tables `sessions` and `login_attempts` (internal, not for the game).
+
+## Round 29: sign in with the school Google account (@ub.edu.ph)
+- Built: "Continue with school Google account" on the login screen (browser sign-in, PKCE, loopback), Edge Function `google-login`, SQL `app_google_login` / `app_email_role` / `app_full_names`, table `account_emails`.
+- Rule: digits before the @ = student (2102122@ub.edu.ph), a name = professor (rhuelizatordecilla@ub.edu.ph), anything else or another domain = refused. Decided in SQL, not in the game.
+- Game name = first name from the Google profile (a number is added when taken); the full name is stored in `profiles.full_name` and shown only to the person and to the professor of their class (via `app_full_names`). The email lives in `account_emails`, closed to the app.
+- Password login and the old accounts (muwiii, muwiiiprof, ruiprof) stay as a fallback.
+- Owner must do (secrets are never pasted in chat): create a Google OAuth client (Desktop app) and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Supabase > Edge Functions > Secrets.
+- Phase B file now also revokes direct read of `profiles.full_name`.
+- ERD: new table `account_emails(profile_id, email)`; `profiles.full_name` now filled by Google sign-in.
+
+## Round 30: lesson pacing (self-paced or manual unlock) + dictionary inside the class
+- Create class: the professor picks "Self-paced" (default, as before: a lesson opens when the one before is completed) or "Manual" (every lesson stays locked until the professor presses Unlock in the section). Changeable later under Class management ("Lessons: ...").
+- DB: `classes.pacing` ('self' | 'manual'), `stages.unlocked` (boolean, only used by manual classes). Migration 20261121150000_lesson_pacing.sql (applied).
+- Manual: the order does not matter (an unlocked lesson is playable even if the one before is not finished); new lessons start locked. The lock is enforced in the game, not by the database.
+- Dictionary: removed from the main menu; opens from a class in the campaign and shows only that class's language (`DictionaryData.languagesOf` / `entries(languages)` support several languages for later).
+- ERD: `classes.pacing`, `stages.unlocked`.

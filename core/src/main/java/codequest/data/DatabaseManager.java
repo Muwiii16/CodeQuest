@@ -112,6 +112,61 @@ public class DatabaseManager {
         return new LoginResult(Optional.of(new Account(id, result.getString("role", "student"))), false);
     }
 
+    /** The answer to "Continue with Google": who signed in (username is the in-game name), or a message to show. */
+    public record GoogleResult(Account account, String username, String error) {
+    }
+
+    /**
+     * Signs in with the school Google account. The browser does the Google part; the server checks the address (it must end
+     * with @ub.edu.ph; digits before the @ mean a student, a name means a professor), creates the profile the first time and
+     * returns a session token like a password login does. Blocks while the person is in the browser: call it off the render thread.
+     */
+    public GoogleResult googleLogin() {
+        SupabaseClient.setSession(null);
+        GoogleSignIn.Code code = GoogleSignIn.obtainCode();
+        if (code.error() != null) {
+            return new GoogleResult(null, null, code.error());
+        }
+        SupabaseClient.FunctionResult done = SupabaseClient.callFunction("google-login", "{\"action\":\"exchange\",\"code\":\""
+                + escape(code.code()) + "\",\"code_verifier\":\"" + escape(code.verifier()) + "\",\"redirect_uri\":\""
+                + escape(code.redirectUri()) + "\"}", 30);
+        JsonValue answer = GoogleSignIn.parse(done.body());
+        String token = answer == null ? null : answer.getString("token", null);
+        if (!done.ok() || token == null) {
+            return new GoogleResult(null, null, GoogleSignIn.messageOf(answer, "Could not sign in with Google. Try again."));
+        }
+        SupabaseClient.setSession(token);
+        String username = answer.getString("username", "?");
+        long id = answer.getLong("id");
+        profileIdCache.put(username, id);
+        return new GoogleResult(new Account(id, answer.getString("role", "student")), username, null);
+    }
+
+    /**
+     * Real names, for the people the caller may see them for: the caller's own, and (for a professor) the students in their
+     * own classes. Everyone else is simply missing from the answer. Classmates only ever see game names.
+     */
+    static Map<Long, String> fullNames(java.util.Collection<Long> profileIds) {
+        Map<Long, String> out = new java.util.HashMap<>();
+        if (profileIds.isEmpty()) {
+            return out;
+        }
+        StringBuilder ids = new StringBuilder();
+        for (Long id : profileIds) {
+            ids.append(ids.length() == 0 ? "" : ",").append(id);
+        }
+        JsonValue rows = SupabaseClient.post("rpc/app_full_names", "{\"p_ids\":[" + ids + "]}");
+        if (rows != null && rows.isArray()) {
+            for (JsonValue r : rows) {
+                String name = r.getString("full_name", null);
+                if (name != null && !name.isBlank()) {
+                    out.put(r.getLong("id"), name);
+                }
+            }
+        }
+        return out;
+    }
+
     /** Signs out: the session token is dropped here and ended on the server. */
     public void logout() {
         profileIdCache.clear();
@@ -145,13 +200,14 @@ public class DatabaseManager {
 
     public Optional<Profile> getProfile(String username) {
         JsonValue result = SupabaseClient.get("profiles?username=eq." + SupabaseClient.encode(username)
-                + "&select=id,username,full_name,section&limit=1");
+                + "&select=id,username,section&limit=1");
         if (result == null || result.size == 0) {
             return Optional.empty();
         }
         JsonValue row = result.get(0);
-        return Optional.of(new Profile(row.getLong("id"), row.getString("username", username),
-                row.getString("full_name", null), row.getString("section", null)));
+        long id = row.getLong("id");
+        return Optional.of(new Profile(id, row.getString("username", username),
+                fullNames(java.util.List.of(id)).get(id), row.getString("section", null)));
     }
 
     /** The profile id for a username, or -1 if it can't be resolved. */

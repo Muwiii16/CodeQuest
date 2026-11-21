@@ -108,9 +108,16 @@ public class CampaignScreen extends StudentScreen {
                 : classes.get(classIdx).subjectName() + "  -  " + classes.get(classIdx).sectionName()
                         + (classes.get(classIdx).termLabel().isEmpty() ? "" : "  -  " + classes.get(classIdx).termLabel())
                         + (classes.get(classIdx).ended() ? "   (ended)" : "");
-        text(context, 160, 128, 1010, 40, 1.8f, classes.isEmpty() || !classes.get(classIdx).ended() ? MUTED : GOLD, Align.left);
+        text(context, 160, 128, 800, 40, 1.8f, classes.isEmpty() || !classes.get(classIdx).ended() ? MUTED : GOLD, Align.left)
+                .setEllipsis(true);
+        // the dictionary of the language this class teaches (the built-in lessons are C)
+        final Long openClassId = classes.isEmpty() ? null : classes.get(classIdx).id();
+        final String language = classes.isEmpty() ? "C" : classes.get(classIdx).language();
+        solidButton("Dictionary", 980, 122, 220, 52, BUTTON,
+                () -> game.setScreen(new DictionaryScreen(game, username, language,
+                        () -> game.setScreen(new CampaignScreen(game, username, openClassId)))));
         // a student enrolls themselves with the code the professor gives
-        solidButton("Join a class", 1190, 122, 290, 52, GOOD,
+        solidButton("Join a class", 1220, 122, 260, 52, GOOD,
                 () -> game.setScreen(new JoinClassScreen(game, username, () -> game.setScreen(new CampaignScreen(game, username)))));
         if (classes.size() > 1) {
             solidButton("Subjects", 1500, 122, 260, 52, BUTTON, this::openSubjects);
@@ -156,7 +163,8 @@ public class CampaignScreen extends StudentScreen {
     private float drawLesson(int index, float y) {
         Lesson lesson = lessons.get(index);
         Progress p = progress.get(lesson.stageId());
-        boolean unlocked = CampaignData.isUnlocked(lessons, progress, index);
+        boolean manual = !classes.isEmpty() && classes.get(classIdx).manual();
+        boolean unlocked = CampaignData.isUnlocked(manual, lessons, progress, index);
         boolean done = p != null && p.completed();
         boolean halfPlayed = unlocked && RunCache.exists(RunCache.campaignKey(lesson.stageId()), username);
 
@@ -173,7 +181,8 @@ public class CampaignScreen extends StudentScreen {
         } else if (unlocked) {
             status = "Ready  -  starts at " + lesson.baseDifficulty().toUpperCase() + "  -  reward roll waiting";
         } else {
-            status = "Locked  -  pass lesson " + (lesson.number() - 1) + " first";
+            status = manual ? "Locked  -  your professor has not opened this lesson yet"
+                    : "Locked  -  pass lesson " + (lesson.number() - 1) + " first";
         }
         text(status, 300, y + 64, 880, 34, 1.5f, done || halfPlayed ? new Color(0.6f, 0.9f, 0.7f, 1f) : MUTED, Align.left);
 

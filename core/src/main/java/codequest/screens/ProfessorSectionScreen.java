@@ -31,7 +31,7 @@ public class ProfessorSectionScreen extends ProfessorScreen {
 
     private final ClassInfo cls;
     private final int base;
-    private List<Lesson> lessons = List.of();
+    private List<Lesson> lessons = new java.util.ArrayList<>();
     /** Stages made only for class tests: students never see them in the campaign. */
     private List<Lesson> tests = List.of();
     private boolean showTests;
@@ -55,7 +55,7 @@ public class ProfessorSectionScreen extends ProfessorScreen {
             List<ProfessorData.Student> students = data.roster(cls.id());
             return new Loaded(ls, new CampaignData().tests(cls.id()), students, data.overallProgress(students, ls), test.join());
         }, l -> {
-            lessons = l.lessons();
+            lessons = new java.util.ArrayList<>(l.lessons());
             tests = l.tests();
             roster = l.roster();
             progress = l.progress();
@@ -131,20 +131,33 @@ public class ProfessorSectionScreen extends ProfessorScreen {
                     done++;
                 }
             }
+            // in a class the professor runs by hand, every lesson has an Unlock / Lock button
+            boolean manualLesson = cls.manual() && !showTests;
             rect(90, y, 1200, 110, ROW);
             rect(90, y, 8, 110, showTests ? new Color(0.35f, 0.62f, 1f, 1f) : AMBER);
             text(showTests ? "T" + l.number() : String.valueOf(l.number()), 115, y, 70, 110, 3f, Color.WHITE, Align.center);
-            text(l.title(), 200, y + 14, 560, 44, 2.1f, Color.WHITE, Align.left);
+            text(l.title(), 200, y + 14, manualLesson ? 500 : 560, 44, 2.1f, Color.WHITE, Align.left);
             text(showTests ? l.baseDifficulty().toUpperCase() + "   -   only for class tests"
-                    : l.baseDifficulty().toUpperCase() + "   -   " + done + " / " + roster.size() + " completed", 200, y + 64,
-                    560, 34, 1.4f, MUTED, Align.left);
-            solidButton("Edit", 770, y + 25, 150, 60, BUTTON,
+                    : l.baseDifficulty().toUpperCase() + "   -   " + done + " / " + roster.size() + " completed"
+                            + (manualLesson ? "   -   " + (l.unlocked() ? "open to students" : "locked") : ""),
+                    200, y + 64, manualLesson ? 500 : 560, 34, 1.4f,
+                    manualLesson && l.unlocked() ? new Color(0.6f, 0.9f, 0.7f, 1f) : MUTED, Align.left);
+            float bx = manualLesson ? 710 : 770;
+            if (manualLesson) {
+                final int at = lessons.indexOf(l);
+                solidButton(l.unlocked() ? "Lock" : "Unlock", bx, y + 25, 130, 60,
+                        l.unlocked() ? new Color(0.5f, 0.33f, 0.1f, 1f) : GOOD, () -> toggleUnlock(at));
+                bx += 140;
+            }
+            solidButton("Edit", bx, y + 25, manualLesson ? 110 : 150, 60, BUTTON,
                     () -> game.setScreen(new ProfessorLessonScreen(game, username, cls, l)));
-            solidButton("Analysis", 930, y + 25, 170, 60, BUTTON,
+            bx += manualLesson ? 120 : 160;
+            solidButton("Analysis", bx, y + 25, manualLesson ? 150 : 170, 60, BUTTON,
                     () -> game.setScreen(new ProfessorLessonAnalysisScreen(game, username, cls, l)));
+            bx += manualLesson ? 160 : 180;
             boolean running = openTest.isPresent() && openTest.get().stageId() == l.stageId();
-            solidButton(running ? "Open lobby" : showTests ? "Start test" : "Class test", 1110, y + 25, 170, 60,
-                    running ? new Color(0.55f, 0.37f, 0.08f, 1f) : GOOD, () -> openLobby(l));
+            solidButton(running ? "Open lobby" : showTests ? "Start test" : "Class test", bx, y + 25, manualLesson ? 160 : 170,
+                    60, running ? new Color(0.55f, 0.37f, 0.08f, 1f) : GOOD, () -> openLobby(l));
             y += 124;
         }
         if (shown.size() > PAGE_SIZE) {
@@ -163,6 +176,25 @@ public class ProfessorSectionScreen extends ProfessorScreen {
                 });
             }
         }
+    }
+
+    /** Opens or locks one lesson for the students (a class the professor runs by hand). */
+    private void toggleUnlock(int index) {
+        if (index < 0 || index >= lessons.size()) {
+            return;
+        }
+        Lesson l = lessons.get(index);
+        boolean open = !l.unlocked();
+        load(open ? "Unlocking the lesson..." : "Locking the lesson...", () -> new CampaignData().setUnlocked(l.stageId(), open),
+                ok -> {
+                    if (!ok) {
+                        toast("Could not change the lesson. Check your connection.", false);
+                        return;
+                    }
+                    lessons.set(index, l.withUnlocked(open));
+                    toast("Lesson " + l.number() + (open ? " is now open to the students." : " is locked again."), true);
+                    rebuild();
+                });
     }
 
     private void openLobby(Lesson lesson) {
