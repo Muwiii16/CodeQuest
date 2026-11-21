@@ -139,8 +139,7 @@ public class LoginScreen extends BaseScreen {
 
         solidButton(registerMode ? "Create account  >" : "Log in  >", x, y + 6, w, 68, GREEN, this::submit);
         y += 90;
-        solidButton("Continue with Google  (coming later)", x, y, w, 56, Color.WHITE, INK,
-                () -> setStatus("Google sign-in is coming in a later version.", false));
+        solidButton("Continue with school Google account", x, y, w, 56, Color.WHITE, INK, this::handleGoogle);
 
         if (!statusText.isEmpty()) {
             Label status = text(statusText, x, y + 70, w, 56, 1.4f, statusOk ? GREEN : ERROR, Align.topLeft);
@@ -247,6 +246,24 @@ public class LoginScreen extends BaseScreen {
                 game.setScreen(new ProfessorDashboardScreen(game, user));
             } else {
                 game.setScreen(new MainMenuScreen(game, user));
+            }
+        });
+    }
+
+    /**
+     * Sign in with the @ub.edu.ph Google account. The browser opens; the server decides the role from the address
+     * (digits = student, a name = professor), so the student/professor toggle is not used here.
+     */
+    private void handleGoogle() {
+        load("Finish signing in in your browser...", dbManager::googleLogin, result -> {
+            if (result.error() != null) {
+                setStatus(result.error(), false);
+                return;
+            }
+            if (result.account().isProfessor()) {
+                game.setScreen(new ProfessorDashboardScreen(game, result.username()));
+            } else {
+                game.setScreen(new MainMenuScreen(game, result.username()));
             }
         });
     }

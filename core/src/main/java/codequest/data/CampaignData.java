@@ -17,22 +17,45 @@ public class CampaignData {
 
     /** A class (section) a professor handles and students belong to. */
     public record ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount,
-            int lessonCount, String subject, String term, boolean ended, String joinCode) {
+            int lessonCount, String subject, String term, boolean ended, String joinCode, String pacing) {
+
+        /** How lessons open: one after another as the student finishes them. */
+        public static final String SELF_PACED = "self";
+        /** How lessons open: each one stays locked until the professor unlocks it. */
+        public static final String MANUAL = "manual";
+
+        /** A class with a join code, lessons opening one after another. */
+        public ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount, int lessonCount,
+                String subject, String term, boolean ended, String joinCode) {
+            this(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, joinCode, SELF_PACED);
+        }
+
+        /** True when the professor opens each lesson by hand. */
+        public boolean manual() {
+            return MANUAL.equals(pacing);
+        }
+
+        /** The same class with another pacing. */
+        public ClassInfo withPacing(String newPacing) {
+            return new ClassInfo(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, joinCode,
+                    newPacing);
+        }
 
         /** A class with no subject name or term yet. */
         public ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount, int lessonCount) {
-            this(id, courseCode, sectionName, language, studentCount, lessonCount, null, null, false, "");
+            this(id, courseCode, sectionName, language, studentCount, lessonCount, null, null, false, "", SELF_PACED);
         }
 
         /** A class without its join code (the code is only loaded for a professor). */
         public ClassInfo(long id, String courseCode, String sectionName, String language, int studentCount, int lessonCount,
                 String subject, String term, boolean ended) {
-            this(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, "");
+            this(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, "", SELF_PACED);
         }
 
         /** The same class with another join code. */
         public ClassInfo withJoinCode(String code) {
-            return new ClassInfo(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, code);
+            return new ClassInfo(id, courseCode, sectionName, language, studentCount, lessonCount, subject, term, ended, code,
+                    pacing);
         }
 
         /** The subject's name, or the course code when none was given. */
@@ -77,7 +100,7 @@ public class CampaignData {
     public List<ClassInfo> studentClasses(long studentId) {
         List<ClassInfo> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("class_enrollments?student_id=eq." + studentId
-                + "&select=class:classes(id,course_code,section_name,language,subject,term,ended)&order=enrolled_at");
+                + "&select=class:classes(id,course_code,section_name,language,subject,term,ended,pacing)&order=enrolled_at");
         if (rows == null) {
             return out;
         }
@@ -86,7 +109,8 @@ public class CampaignData {
             if (c != null) {
                 out.add(new ClassInfo(c.getLong("id"), c.getString("course_code", "CC102"),
                         c.getString("section_name", "?"), c.getString("language", "C"), 0, 0,
-                        c.getString("subject", null), c.getString("term", null), c.getBoolean("ended", false)));
+                        c.getString("subject", null), c.getString("term", null), c.getBoolean("ended", false), "",
+                        c.getString("pacing", ClassInfo.SELF_PACED)));
             }
         }
         return out;
@@ -106,7 +130,7 @@ public class CampaignData {
         List<Lesson> out = new ArrayList<>();
         String filter = classId == null ? "campaign.class_id=is.null" : "campaign.class_id=eq." + classId;
         JsonValue rows = SupabaseClient.get("stages?select=id,campaign_id,order_index,title,base_difficulty,"
-                + "adaptive_enabled,prompt,program,topics,outputs,campus_background,campaign:campaigns!inner(class_id,kind)&" + filter
+                + "adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,campaign:campaigns!inner(class_id,kind)&" + filter
                 + "&campaign.kind=eq." + kind + "&order=order_index");
         if (rows == null) {
             return out;
@@ -124,7 +148,7 @@ public class CampaignData {
                 r.getString("title", test ? "Class test" : "Lesson"), r.getString("base_difficulty", "normal"),
                 r.getBoolean("adaptive_enabled", true), r.getString("prompt", null), r.getString("program", null),
                 r.getString("topics", null), r.getString("outputs", null), test,
-                r.getString("campus_background", null));
+                r.getString("campus_background", null), r.getBoolean("unlocked", false));
     }
 
     /** The student's progress rows keyed by stage id. */
@@ -141,6 +165,19 @@ public class CampaignData {
         return out;
     }
 
+    /**
+     * Whether a lesson is open to the student. In a self-paced class it opens when the lesson before it is completed; in a
+     * class the professor runs by hand it opens only when the professor unlocked it (the order does not matter then).
+     */
+    public static boolean isUnlocked(boolean manual, List<Lesson> lessons, Map<Long, Progress> progress, int index) {
+        return manual ? lessons.get(index).unlocked() : isUnlocked(lessons, progress, index);
+    }
+
+    /** Opens or locks a lesson for the students of a class the professor runs by hand. */
+    public boolean setUnlocked(long stageId, boolean unlocked) {
+        return SupabaseClient.patch("stages?id=eq." + stageId, "{\"unlocked\":" + unlocked + "}") != null;
+    }
+
     /** Lesson n is playable when it is the first one or the lesson before it has been completed. */
     public static boolean isUnlocked(List<Lesson> lessons, Map<Long, Progress> progress, int index) {
         if (index <= 0) {
@@ -152,7 +189,7 @@ public class CampaignData {
 
     public Optional<Lesson> lesson(long stageId) {
         JsonValue rows = SupabaseClient.get("stages?id=eq." + stageId
-                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,campus_background,"
+                + "&select=id,campaign_id,order_index,title,base_difficulty,adaptive_enabled,prompt,program,topics,outputs,campus_background,unlocked,"
                 + "campaign:campaigns(kind)&limit=1");
         if (rows == null || rows.size == 0) {
             return Optional.empty();

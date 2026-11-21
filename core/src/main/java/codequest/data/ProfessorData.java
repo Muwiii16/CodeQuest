@@ -53,7 +53,7 @@ public class ProfessorData {
     public List<ClassInfo> listClasses(long professorId) {
         List<ClassInfo> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("classes?professor_id=eq." + professorId
-                + "&select=id,course_code,section_name,language,subject,term,ended,join_code,class_enrollments(count),"
+                + "&select=id,course_code,section_name,language,subject,term,ended,join_code,pacing,class_enrollments(count),"
                 + "campaigns(stages(count))"
                 + "&order=created_at");
         if (rows == null) {
@@ -71,7 +71,7 @@ public class ProfessorData {
                     r.getString("section_name", "?"), r.getString("language", "C"),
                     enrolled != null && enrolled.size > 0 ? enrolled.get(0).getInt("count", 0) : 0, lessons,
                     r.getString("subject", null), r.getString("term", null), r.getBoolean("ended", false),
-                    r.getString("join_code", "")));
+                    r.getString("join_code", ""), r.getString("pacing", ClassInfo.SELF_PACED)));
         }
         return out;
     }
@@ -100,13 +100,20 @@ public class ProfessorData {
         return createClass(professorId, sectionName, courseCode, language, studentUsernames, null, null);
     }
 
-    /** Same, with the subject's name and the term (both optional). */
+    /** Same, with the subject's name and the term (both optional). Lessons open one after another. */
     public Optional<CreatedClass> createClass(long professorId, String sectionName, String courseCode,
             String language, List<String> studentUsernames, String subject, String term) {
+        return createClass(professorId, sectionName, courseCode, language, studentUsernames, subject, term,
+                ClassInfo.SELF_PACED);
+    }
+
+    /** Same, and how lessons open: SELF_PACED, or MANUAL (the professor unlocks each lesson). */
+    public Optional<CreatedClass> createClass(long professorId, String sectionName, String courseCode,
+            String language, List<String> studentUsernames, String subject, String term, String pacing) {
         String body = "{\"professor_id\":" + professorId + ",\"section_name\":\"" + CampaignData.escape(sectionName)
                 + "\",\"course_code\":\"" + CampaignData.escape(courseCode) + "\",\"language\":\""
                 + CampaignData.escape(language) + "\",\"subject\":" + jsonOrNull(subject) + ",\"term\":" + jsonOrNull(term)
-                + "}";
+                + ",\"pacing\":\"" + (ClassInfo.MANUAL.equals(pacing) ? ClassInfo.MANUAL : ClassInfo.SELF_PACED) + "\"}";
         JsonValue inserted = SupabaseClient.post("classes", body);
         if (inserted == null || inserted.size == 0) {
             return Optional.empty();
@@ -133,6 +140,12 @@ public class ProfessorData {
         return SupabaseClient.patch("classes?id=eq." + classId, "{\"section_name\":\"" + CampaignData.escape(sectionName)
                 + "\",\"course_code\":\"" + CampaignData.escape(courseCode) + "\",\"subject\":" + jsonOrNull(subject)
                 + ",\"term\":" + jsonOrNull(term) + ",\"ended\":" + ended + "}") != null;
+    }
+
+    /** Changes how a class's lessons open for students (one after another, or the professor unlocks each one). */
+    public boolean updatePacing(long classId, String pacing) {
+        return SupabaseClient.patch("classes?id=eq." + classId, "{\"pacing\":\""
+                + (ClassInfo.MANUAL.equals(pacing) ? ClassInfo.MANUAL : ClassInfo.SELF_PACED) + "\"}") != null;
     }
 
     /** Renames a class (section name and course code). */
@@ -190,14 +203,23 @@ public class ProfessorData {
     public List<Student> roster(long classId) {
         List<Student> out = new ArrayList<>();
         JsonValue rows = SupabaseClient.get("class_enrollments?class_id=eq." + classId
-                + "&select=student:profiles(id,username,full_name)&order=enrolled_at");
+                + "&select=student:profiles(id,username)&order=enrolled_at");
         if (rows == null) {
             return out;
         }
+        List<Long> ids = new ArrayList<>();
         for (JsonValue r : rows) {
             JsonValue s = r.get("student");
             if (s != null) {
-                out.add(new Student(s.getLong("id"), s.getString("username", "?"), s.getString("full_name", null)));
+                ids.add(s.getLong("id"));
+            }
+        }
+        // real names come from the server only for the professor who owns the class
+        java.util.Map<Long, String> names = DatabaseManager.fullNames(ids);
+        for (JsonValue r : rows) {
+            JsonValue s = r.get("student");
+            if (s != null) {
+                out.add(new Student(s.getLong("id"), s.getString("username", "?"), names.get(s.getLong("id"))));
             }
         }
         out.sort((a, b) -> a.username().compareToIgnoreCase(b.username()));
