@@ -2,6 +2,7 @@ package codequest.screens;
 
 import codequest.Main;
 import codequest.data.CampaignData.ClassInfo;
+import codequest.data.ClassTestData;
 import codequest.data.ClassTestData.Participant;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Align;
@@ -11,8 +12,8 @@ import java.util.List;
 /** The final results of a class test: the podium for the top three and the whole ranking beside it. */
 public class ProfessorTestResultsScreen extends ProfessorScreen {
 
-    public ProfessorTestResultsScreen(Main game, String username, ClassInfo cls, String lessonTitle, String stageLabel,
-            List<Participant> ranked) {
+    public ProfessorTestResultsScreen(Main game, String username, ClassInfo cls, ClassTestData.Session session,
+            String lessonTitle, String stageLabel, List<Participant> ranked) {
         super(game, username, "Class test results  -  " + cls.sectionName() + "  -  " + stageLabel,
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
         card(60, 140, 1800, 880);
@@ -38,7 +39,10 @@ public class ProfessorTestResultsScreen extends ProfessorScreen {
         if (ranked.size() > 9) {
             text("+ " + (ranked.size() - 9) + " more", 1180, 890, 640, 30, 1.3f, MUTED, Align.right);
         }
-        solidButton("Back to section", 1180, 940, 640, 60, BUTTON,
+        solidButton("Analysis", 1180, 940, 310, 60, new Color(0.2f, 0.42f, 0.78f, 1f),
+                () -> game.setScreen(new ProfessorTestAnalysisScreen(game, username, cls, session,
+                        () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)))));
+        solidButton("Back to section", 1510, 940, 310, 60, BUTTON,
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
     }
 }

@@ -68,7 +68,7 @@ public class ProfessorTestLobbyScreen extends ProfessorScreen {
             if (live != null && "completed".equals(live.status())) {
                 if (!leaving) {
                     leaving = true;
-                    game.setScreen(new ProfessorTestResultsScreen(game, username, cls, lesson.title(), lesson.label(),
+                    game.setScreen(new ProfessorTestResultsScreen(game, username, cls, session, lesson.title(), lesson.label(),
                             live.participants()));
                 }
                 return; // the results screen has taken over and this one is disposed: do not draw it

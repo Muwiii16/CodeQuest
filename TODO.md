@@ -409,3 +409,8 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - The per-lesson analysis (the Analysis button on each lesson of the section) already existed (student table, weakest topics, AI). Now it also shows the lesson's grading period, the questions the class missed most (from the answer log, per question: percent right and number of answers), the student names open that student's analysis, and the AI analysis gets the per-question numbers too.
 - The five levels of analysis: lesson (button on each lesson), period (Period analysis), student (click a name or Analysis in Class management), whole class (Class analysis), and the Overall class performance grid.
 - No database change.
+
+## Round 40: class test analysis
+- New screen "Class test analysis" for one finished class test: how many students took it / finished / left early / did not join, score average, middle, highest and lowest, class accuracy and average answer time, a table of every participant (place, score, correct answers, accuracy, average time, finished or left early; click a name to open that student's analysis), the weakest topics and the questions most missed in the test, and a written AI analysis (names never sent).
+- Opened from Class test history (Analysis button) and from the class test results screen (Analysis button).
+- Read from `class_test_participants` and the answer log (`submissions` with the session id); no database change. `TestAnalysis` does the arithmetic and is unit-tested.

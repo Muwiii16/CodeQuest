@@ -163,4 +163,32 @@ class CampaignDataTest {
         assertTrue(stats.get(2).label().equals("What does printf do?") && stats.get(2).rate() == 1.0);
         assertTrue(ProfessorData.questionStats(null).isEmpty());
     }
+
+    @Test
+    void aClassTestAnalysisAddsUpScoresAccuracyAndSpeed() {
+        List<ClassTestData.Participant> ranked = List.of(
+                new ClassTestData.Participant(1, "a", true, 2000, true),
+                new ClassTestData.Participant(2, "b", true, 600, false),
+                new ClassTestData.Participant(3, "c", true, 0, true));
+        com.badlogic.gdx.utils.JsonValue rows = new com.badlogic.gdx.utils.JsonReader().parse(
+                "[{\"student_id\":1,\"topic\":\"POINTERS\",\"is_correct\":true,\"time_taken_ms\":4000,\"challenge_id\":9},"
+                + "{\"student_id\":1,\"topic\":\"LOOPS\",\"is_correct\":true,\"time_taken_ms\":2000,\"challenge_id\":10},"
+                + "{\"student_id\":2,\"topic\":\"POINTERS\",\"is_correct\":false,\"time_taken_ms\":6000,\"challenge_id\":9},"
+                + "{\"student_id\":2,\"topic\":\"LOOPS\",\"is_correct\":true,\"time_taken_ms\":8000,\"challenge_id\":10}]");
+        TestAnalysis t = TestAnalysis.of(ranked, 5, rows);
+        assertTrue(t.joined() == 3 && t.finished() == 2 && t.leftEarly() == 1 && t.absent() == 2);
+        assertTrue(t.average() == 867 && t.median() == 600 && t.highest() == 2000 && t.lowest() == 0);
+        assertTrue(t.totalAnswers() == 4 && t.accuracyPercent() == 75 && t.averageSeconds() == 5);
+        assertTrue(t.students().get(0).rank() == 1 && t.students().get(0).correct() == 2 && t.students().get(0).averageSeconds() == 3);
+        assertTrue(t.students().get(1).accuracyPercent() == 50);
+        assertTrue(t.students().get(2).answered() == 0 && t.students().get(2).averageSeconds() == 0); // joined, answered nothing
+        assertTrue(t.topics().get("POINTERS")[0] == 1 && t.topics().get("POINTERS")[1] == 2);
+        assertTrue(t.questions().size() == 2 && t.questions().get(0).rate() == 0.5); // question 9 was missed by one of two
+    }
+
+    @Test
+    void aClassTestNobodyTookHasNoNumbers() {
+        TestAnalysis t = TestAnalysis.of(List.of(), 4, null);
+        assertTrue(t.joined() == 0 && t.average() == 0 && t.students().isEmpty() && t.absent() == 4);
+    }
 }

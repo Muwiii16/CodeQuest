@@ -39,6 +39,9 @@ public class ProfessorTestHistoryScreen extends ProfessorScreen {
             text(s.label() + ": " + s.lessonTitle(), 120, y + 10, 1000, 36, 1.9f, Color.WHITE, Align.left);
             String when = s.endedAt() == null ? "" : s.endedAt().substring(0, Math.min(16, s.endedAt().length())).replace('T', ' ');
             text(when.isEmpty() ? "ended" : "ended " + when, 120, y + 48, 800, 28, 1.3f, MUTED, Align.left);
+            solidButton("Analysis", 1210, y + 14, 290, 56, new Color(0.2f, 0.42f, 0.78f, 1f),
+                    () -> game.setScreen(new ProfessorTestAnalysisScreen(game, username, cls, s,
+                            () -> game.setScreen(new ProfessorTestHistoryScreen(game, username, cls)))));
             solidButton("View results", 1520, y + 14, 290, 56, BUTTON, () -> open(s));
             y += 94;
         }
@@ -46,6 +49,6 @@ public class ProfessorTestHistoryScreen extends ProfessorScreen {
 
     private void open(Session s) {
         load("Loading the results...", () -> tests.participants(s.id()), (List<Participant> ps) -> game.setScreen(
-                new ProfessorTestResultsScreen(game, username, cls, s.lessonTitle(), s.label(), ps)));
+                new ProfessorTestResultsScreen(game, username, cls, s, s.lessonTitle(), s.label(), ps)));
     }
 }

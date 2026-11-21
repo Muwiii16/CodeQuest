@@ -158,6 +158,13 @@ public class ClassTestData {
         return sorted;
     }
 
+    /** The answer log of one test session (every answer of every student), or null when it could not be read. */
+    public JsonValue answers(long sessionId) {
+        return SupabaseClient.get("submissions?session_id=eq." + sessionId
+                + "&select=student_id,topic,is_correct,time_taken_ms,challenge_id,challenge_key,"
+                + "challenge:challenges(sequence_index,prompt)&limit=5000");
+    }
+
     /** Finished tests of a class, newest first. */
     public List<Session> history(long classId, int limit) {
         List<Session> out = new ArrayList<>();

@@ -148,7 +148,7 @@ public class DatabaseManager {
      * Real names, for the people the caller may see them for: the caller's own, and (for a professor) the students in their
      * own classes. Everyone else is simply missing from the answer. Classmates only ever see game names.
      */
-    static Map<Long, String> fullNames(java.util.Collection<Long> profileIds) {
+    public static Map<Long, String> fullNames(java.util.Collection<Long> profileIds) {
         Map<Long, String> out = new java.util.HashMap<>();
         if (profileIds.isEmpty()) {
             return out;
