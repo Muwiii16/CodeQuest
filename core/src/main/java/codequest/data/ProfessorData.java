@@ -409,6 +409,30 @@ public class ProfessorData {
         return out;
     }
 
+    /** How many certificates the class has earned: per grading period and for the whole subject (only the ones that exist). */
+    public java.util.Map<String, Integer> classCertificateCounts(long classId) {
+        java.util.Map<String, Integer> out = new java.util.LinkedHashMap<>();
+        JsonValue rows = SupabaseClient.get("certifications?class_id=eq." + classId + "&kind=in.(period,subject)&select=kind,period");
+        if (rows == null) {
+            return out;
+        }
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        for (JsonValue r : rows) {
+            String key = "subject".equals(r.getString("kind", "")) ? "Whole subject"
+                    : Period.fromKey(r.getString("period", null)).label();
+            counts.merge(key, 1, Integer::sum);
+        }
+        for (Period p : Period.values()) { // in the order of the semester, the whole subject last
+            if (counts.containsKey(p.label())) {
+                out.put(p.label(), counts.get(p.label()));
+            }
+        }
+        if (counts.containsKey("Whole subject")) {
+            out.put("Whole subject", counts.get("Whole subject"));
+        }
+        return out;
+    }
+
     /** What the answer log says about some lessons together: per topic for the whole class, and per student and topic. */
     public record TopicStats(Map<String, int[]> classTopics, Map<Long, Map<String, int[]>> byStudent) {
     }

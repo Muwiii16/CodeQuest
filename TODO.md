@@ -399,3 +399,8 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - New screen "Student" (professor): the student's result on every lesson (rank, grade, attempts, last played, grouped by period), how each of the four periods went, the student's average next to the class average, the topics they got wrong most, the certificates they earned (read from the server), and a written AI analysis of that student (no name sent: S1, the name is put back in the answer).
 - Opened from: Class management (Analysis button on each student), Overall class performance (click the name), Period analysis (click the name).
 - No database change.
+
+## Round 38: whole-class analysis
+- New screen "Class analysis" (section tools, third button): four numbers (work completed, class average grade, students who have not played, students who need attention), a bar per grading period (completion and average), the topics the class got wrong most, the lessons with the lowest grade and the least completed, the students who need attention (click one to open the student analysis), certificates earned per period / whole subject, and a written AI analysis of the whole class.
+- The section tools column now holds six buttons (the buttons are slightly smaller). `ClassStats` does the arithmetic and is unit-tested.
+- No database change.

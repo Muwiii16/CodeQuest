@@ -125,4 +125,25 @@ class CampaignDataTest {
         assertTrue(PeriodSummary.classAverage(List.of(new PeriodSummary(3, 0, -1, 0, null))) == -1);
         assertTrue(PeriodSummary.classAverage(List.of()) == -1);
     }
+
+    @Test
+    void theClassNumbersAddUpAcrossStudentsPeriodsAndLessons() {
+        List<Lesson> lessons = List.of(lesson(10, 1), lesson(11, 2).withPeriod(Period.MIDTERMS));
+        ProfessorData.Student a = new ProfessorData.Student(1, "a", null);
+        ProfessorData.Student b = new ProfessorData.Student(2, "b", null);
+        ProfessorData.Student c = new ProfessorData.Student(3, "c", null);
+        // a completed both (grade 100 on each: 100 points at most 100), b completed only lesson 1 with 0 points, c played nothing
+        Map<Long, Map<Long, Progress>> progress = Map.of(
+                1L, Map.of(10L, new Progress("completed", 10000, "S", 1, null), 11L, new Progress("completed", 10000, "S", 1, null)),
+                2L, Map.of(10L, new Progress("completed", 0, "F", 3, null)));
+        ClassStats st = ClassStats.of(lessons, List.of(a, b, c), progress);
+        assertTrue(st.students() == 3 && st.lessons() == 2);
+        assertTrue(st.completionPercent() == 50); // 3 of 6 lesson results
+        assertTrue(st.noActivity() == 1);
+        // b (0%) and c (nothing completed) need attention, b first
+        assertTrue(st.attention().size() == 2 && st.attention().get(0).student().id() == 2);
+        assertTrue(st.periods().size() == 2 && st.periods().get(0).completionPercent() == 67);
+        assertTrue(st.leastCompleted(1).get(0).lesson().number() == 2);
+        assertTrue(st.lowestGrade(1).get(0).lesson().number() == 1); // lesson 1 averages (100 + 0) / 2
+    }
 }
