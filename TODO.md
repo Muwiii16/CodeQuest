@@ -414,3 +414,8 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - New screen "Class test analysis" for one finished class test: how many students took it / finished / left early / did not join, score average, middle, highest and lowest, class accuracy and average answer time, a table of every participant (place, score, correct answers, accuracy, average time, finished or left early; click a name to open that student's analysis), the weakest topics and the questions most missed in the test, and a written AI analysis (names never sent).
 - Opened from Class test history (Analysis button) and from the class test results screen (Analysis button).
 - Read from `class_test_participants` and the answer log (`submissions` with the session id); no database change. `TestAnalysis` does the arithmetic and is unit-tested.
+
+## Round 41: whole-subject analysis
+- New screen "Subject analysis" (professor dashboard, next to Join requests). A subject is every section (class) of the professor that has the same subject name (or the same course code when no name is set), so "Programming 1" taught to BSCS 1-1 and CS 1-1 is one subject. Tabs pick the subject.
+- Shows: four pooled numbers (students over all sections, work completed, average grade, students needing attention), the sections side by side (students, completion, average, attention; Open goes to that section class analysis; * marks the best average), the grading periods pooled, the weakest topics and the lowest graded lessons over all sections, and a written AI analysis comparing the sections (the AI sees Section 1, 2, ... and the real section names are put back; no student names are sent).
+- `SubjectStats` does the arithmetic and is unit-tested. No database change.

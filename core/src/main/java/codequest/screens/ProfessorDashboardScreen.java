@@ -40,6 +40,9 @@ public class ProfessorDashboardScreen extends ProfessorScreen {
     private void rebuild() {
         clearFrom(base);
         text(classes.size() + (classes.size() == 1 ? " section" : " sections"), 60, 140, 600, 56, 1.8f, MUTED, Align.left);
+        // the analysis of a whole subject: all the sections that teach it, together and side by side
+        solidButton("Subject analysis", 500, 135, 440, 66, new Color(0.2f, 0.42f, 0.78f, 1f),
+                () -> game.setScreen(new ProfessorSubjectAnalysisScreen(game, username)));
         // students who typed a join code wait here for the professor's approval
         solidButton(pending == 0 ? "Join requests" : "Join requests  (" + pending + ")", 960, 135, 440, 66,
                 pending == 0 ? BUTTON : new Color(0.7f, 0.45f, 0.08f, 1f),

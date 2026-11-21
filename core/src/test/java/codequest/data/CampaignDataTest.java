@@ -191,4 +191,46 @@ class CampaignDataTest {
         TestAnalysis t = TestAnalysis.of(List.of(), 4, null);
         assertTrue(t.joined() == 0 && t.average() == 0 && t.students().isEmpty() && t.absent() == 4);
     }
+
+    private static CampaignData.ClassInfo section(long id, String name, String subject) {
+        return new CampaignData.ClassInfo(id, "CC102", name, "C", 0, 0, subject, null, false);
+    }
+
+    @Test
+    void sectionsTeachingTheSameSubjectAreGroupedTogether() {
+        Map<String, List<CampaignData.ClassInfo>> g = SubjectStats.group(List.of(section(1, "BSCS 1-1", "Programming 1"),
+                section(2, "CS 1-1", " programming 1 "), section(3, "CS 4-1", "Data Structures")));
+        assertTrue(g.size() == 2);
+        assertTrue(g.get("programming 1").size() == 2 && g.get("data structures").size() == 1);
+        // a class with no subject name is named by its course code
+        assertTrue(SubjectStats.key(section(4, "X", null)).equals("cc102"));
+    }
+
+    @Test
+    void aSubjectPoolsItsSectionsAndComparesThem() {
+        List<Lesson> l1 = List.of(lesson(10, 1), lesson(11, 2).withPeriod(Period.MIDTERMS));
+        List<Lesson> l2 = List.of(lesson(20, 1));
+        ProfessorData.Student a = new ProfessorData.Student(1, "a", null);
+        ProfessorData.Student b = new ProfessorData.Student(2, "b", null);
+        Map<Long, Map<Long, Progress>> p1 = Map.of(1L, Map.of(10L, new Progress("completed", 10000, "S", 1, null),
+                11L, new Progress("completed", 10000, "S", 1, null)));
+        Map<Long, Map<Long, Progress>> p2 = Map.of(2L, Map.of(20L, new Progress("completed", 0, "F", 2, null)));
+        SubjectStats st = SubjectStats.of("Programming 1", List.of(
+                new SubjectStats.SectionInput(section(1, "A", "Programming 1"), l1, List.of(a), p1),
+                new SubjectStats.SectionInput(section(2, "B", "Programming 1"), l2, List.of(b), p2)));
+        assertTrue(st.students() == 2 && st.lessons() == 3);
+        assertTrue(st.completionPercent() == 100); // 3 of 3 lesson results
+        assertTrue(st.averageGrade() == 50); // (100 + 0) / 2 students
+        assertTrue(st.attention() == 1); // b averages 0%
+        assertTrue(st.bestSection().cls().id() == 1);
+        assertTrue(st.periods().size() == 2 && st.periods().get(0).lessons() == 2); // prelims: lesson 1 of each section
+        assertTrue(st.lowestGrade(1).get(0).cls().id() == 2);
+    }
+
+    @Test
+    void topicCountsOfSeveralSectionsAreAddedTogether() {
+        Map<String, int[]> merged = SubjectStats.mergeTopics(List.of(Map.of("LOOPS", new int[] { 1, 2 }),
+                Map.of("LOOPS", new int[] { 3, 4 }, "POINTERS", new int[] { 0, 1 })));
+        assertTrue(merged.get("LOOPS")[0] == 4 && merged.get("LOOPS")[1] == 6 && merged.get("POINTERS")[1] == 1);
+    }
 }
