@@ -39,6 +39,12 @@ public record PeriodSummary(int total, int done, int averageGrade, int attempts,
         return new PeriodSummary(lessons.size(), done, done == 0 ? -1 : Math.round(sum / (float) done), attempts, last);
     }
 
+    /** The average of the students' average grades (those who completed something), or -1 when nobody did. */
+    public static int classAverage(List<PeriodSummary> students) {
+        return (int) Math.round(students.stream().filter(s -> s.averageGrade() >= 0).mapToInt(PeriodSummary::averageGrade)
+                .average().orElse(-1));
+    }
+
     /** A short note for the professor: who has not started, who is behind, who is doing badly. */
     public String note() {
         if (total == 0) {

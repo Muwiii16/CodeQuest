@@ -394,3 +394,8 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - Only the server writes them: `issue_period_certificate()` and `issue_subject_certificate()` check the completed lessons. Migration 20261121190000_period_certificates.sql (applied): `certifications.period`, kind 'period' added, one per student, class and period.
 - Result screen after a lesson: if the lesson finished its period -> "Get certificate" (period one); if it finished the subject -> the grand one (the period one stays under Achievements). Achievements > Certificates lists, per subject, the grand certificate and one row per period that has lessons.
 - ERD: `certifications.period` (and kind now: lesson | period | subject).
+
+## Round 37: student analysis
+- New screen "Student" (professor): the student's result on every lesson (rank, grade, attempts, last played, grouped by period), how each of the four periods went, the student's average next to the class average, the topics they got wrong most, the certificates they earned (read from the server), and a written AI analysis of that student (no name sent: S1, the name is put back in the answer).
+- Opened from: Class management (Analysis button on each student), Overall class performance (click the name), Period analysis (click the name).
+- No database change.

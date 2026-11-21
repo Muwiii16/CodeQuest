@@ -381,6 +381,34 @@ public class ProfessorData {
         return out;
     }
 
+    /** The certificates a student earned in a class, as readable names: each grading period, and the whole subject. */
+    public List<String> studentCertificates(long classId, long studentId) {
+        List<String> out = new ArrayList<>();
+        JsonValue rows = SupabaseClient.get("certifications?student_id=eq." + studentId + "&class_id=eq." + classId
+                + "&kind=in.(period,subject)&select=kind,period");
+        if (rows == null) {
+            return out;
+        }
+        boolean whole = false;
+        List<Period> periods = new ArrayList<>();
+        for (JsonValue r : rows) {
+            if ("subject".equals(r.getString("kind", ""))) {
+                whole = true;
+            } else {
+                periods.add(Period.fromKey(r.getString("period", null)));
+            }
+        }
+        for (Period p : Period.values()) { // in the order of the semester
+            if (periods.contains(p)) {
+                out.add(p.label());
+            }
+        }
+        if (whole) {
+            out.add("Whole subject");
+        }
+        return out;
+    }
+
     /** What the answer log says about some lessons together: per topic for the whole class, and per student and topic. */
     public record TopicStats(Map<String, int[]> classTopics, Map<Long, Map<String, int[]>> byStudent) {
     }

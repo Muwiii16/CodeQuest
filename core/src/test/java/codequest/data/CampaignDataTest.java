@@ -116,4 +116,13 @@ class CampaignDataTest {
         // a lesson the student never touched, in an empty period
         assertTrue("-".equals(PeriodSummary.of(List.of(), Map.of()).note()));
     }
+
+    @Test
+    void theClassAverageSkipsStudentsWhoCompletedNothing() {
+        List<PeriodSummary> students = List.of(new PeriodSummary(3, 3, 80, 4, null), new PeriodSummary(3, 1, 60, 2, null),
+                new PeriodSummary(3, 0, -1, 0, null));
+        assertTrue(PeriodSummary.classAverage(students) == 70);
+        assertTrue(PeriodSummary.classAverage(List.of(new PeriodSummary(3, 0, -1, 0, null))) == -1);
+        assertTrue(PeriodSummary.classAverage(List.of()) == -1);
+    }
 }

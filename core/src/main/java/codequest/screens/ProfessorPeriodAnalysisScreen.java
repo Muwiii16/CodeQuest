@@ -119,7 +119,12 @@ public class ProfessorPeriodAnalysisScreen extends ProfessorScreen {
             boolean flag = "Needs attention".equals(note) || "Not started".equals(note);
             String[] cells = { students.get(i).username(), sum.done() + " / " + sum.total(),
                     sum.averageGrade() < 0 ? "-" : sum.averageGrade() + "%", String.valueOf(sum.attempts()), last, note };
-            for (int c = 0; c < cells.length; c++) {
+            ProfessorData.Student student = students.get(i);
+            // the name opens that student's own analysis
+            solidButton(student.username(), 100, y + 2, 350, 44, ROW, Color.WHITE,
+                    () -> game.setScreen(new ProfessorStudentAnalysisScreen(game, username, cls, student,
+                            () -> game.setScreen(new ProfessorPeriodAnalysisScreen(game, username, cls)))));
+            for (int c = 1; c < cells.length; c++) {
                 Color color = c == 5 ? (flag ? LOW : MUTED) : c == 2 && sum.averageGrade() >= 0
                         && sum.averageGrade() < PeriodSummary.LOW_GRADE ? LOW : Color.WHITE;
                 text(cells[c], COL_X[c], y, 340, 48, 1.4f, color, Align.left);

@@ -141,7 +141,10 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
             float y = 295 + i * 62;
             rect(90, y, 1740, 54, ROW);
             text(s.username(), 110, y, 500, 54, 1.7f, Color.WHITE, Align.left);
-            text(s.fullName() == null ? "" : s.fullName(), 640, y, 700, 54, 1.5f, MUTED, Align.left);
+            text(s.fullName() == null ? "" : s.fullName(), 640, y, 620, 54, 1.5f, MUTED, Align.left).setEllipsis(true);
+            solidButton("Analysis", 1290, y + 4, 170, 46, new Color(0.2f, 0.42f, 0.78f, 1f),
+                    () -> game.setScreen(new ProfessorStudentAnalysisScreen(game, username, cls, s,
+                            () -> game.setScreen(new ProfessorClassManagementScreen(game, username, cls)))));
             boolean armed = dropArmed == s.id();
             solidButton(armed ? "Click again to drop" : "Drop", 1480, y + 4, 330, 46,
                     armed ? new Color(0.6f, 0.2f, 0.2f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), () -> drop(s, students));

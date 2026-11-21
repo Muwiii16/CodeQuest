@@ -30,6 +30,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
     }
 
     /** Every lesson of the class, and the ones in the chosen grading period (all of them when no period is chosen). */
+    private final ClassInfo cls;
     private List<Lesson> allLessons = List.of();
     private List<Lesson> lessons = List.of();
     private codequest.data.Period scope; // null = every period
@@ -41,6 +42,7 @@ public class ProfessorOverallScreen extends ProfessorScreen {
     public ProfessorOverallScreen(Main game, String username, ClassInfo cls) {
         super(game, username, "Overall performance  -  " + cls.sectionName(),
                 () -> game.setScreen(new ProfessorSectionScreen(game, username, cls)));
+        this.cls = cls;
         card(60, 140, 1800, 650);
         card(60, 810, 1800, 210);
         text("AI analysis", 90, 825, 700, 36, 1.8f, AMBER, Align.left);
@@ -173,7 +175,10 @@ public class ProfessorOverallScreen extends ProfessorScreen {
             ProfessorData.Student s = students.get(r);
             float y = 275 + r * 58;
             rect(90, y, 1740, 52, ROW);
-            text(s.username(), 110, y, nameW - 20, 52, 1.5f, Color.WHITE, Align.left);
+            // the name opens that student's own analysis
+            solidButton(s.username(), 100, y + 2, nameW - 20, 48, ROW, Color.WHITE,
+                    () -> game.setScreen(new ProfessorStudentAnalysisScreen(game, username, cls, s,
+                            () -> game.setScreen(new ProfessorOverallScreen(game, username, cls)))));
             Map<Long, Progress> mine = progress.getOrDefault(s.id(), Map.of());
             for (int i = from; i < to; i++) {
                 Progress p = mine.get(lessons.get(i).stageId());
