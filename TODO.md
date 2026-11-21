@@ -404,3 +404,8 @@ Now: sign-in gives a random **session token** (only its SHA-256 is stored, table
 - New screen "Class analysis" (section tools, third button): four numbers (work completed, class average grade, students who have not played, students who need attention), a bar per grading period (completion and average), the topics the class got wrong most, the lessons with the lowest grade and the least completed, the students who need attention (click one to open the student analysis), certificates earned per period / whole subject, and a written AI analysis of the whole class.
 - The section tools column now holds six buttons (the buttons are slightly smaller). `ClassStats` does the arithmetic and is unit-tested.
 - No database change.
+
+## Round 39: lesson analysis brought up to the same level
+- The per-lesson analysis (the Analysis button on each lesson of the section) already existed (student table, weakest topics, AI). Now it also shows the lesson's grading period, the questions the class missed most (from the answer log, per question: percent right and number of answers), the student names open that student's analysis, and the AI analysis gets the per-question numbers too.
+- The five levels of analysis: lesson (button on each lesson), period (Period analysis), student (click a name or Analysis in Class management), whole class (Class analysis), and the Overall class performance grid.
+- No database change.

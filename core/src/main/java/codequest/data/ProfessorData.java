@@ -409,6 +409,62 @@ public class ProfessorData {
         return out;
     }
 
+    /** One question of a lesson: how many of the class answers to it were right. */
+    public record QuestionStat(String id, int number, String label, int right, int total) {
+        public double rate() {
+            return total == 0 ? 0 : (double) right / total;
+        }
+    }
+
+    /**
+     * Groups answer-log rows (challenge_id, challenge_key, is_correct and the embedded challenge) by question. A question
+     * made by the professor is a row (challenge_id); a built-in one has only a key. The weakest question comes first.
+     */
+    public static List<QuestionStat> questionStats(JsonValue rows) {
+        java.util.Map<String, int[]> counts = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> labels = new HashMap<>();
+        java.util.Map<String, Integer> numbers = new HashMap<>();
+        if (rows != null) {
+            for (JsonValue r : rows) {
+                JsonValue ch = r.get("challenge");
+                String key;
+                if (r.get("challenge_id") != null && !r.get("challenge_id").isNull()) {
+                    key = "c" + r.getLong("challenge_id");
+                    if (ch != null) {
+                        String prompt = ch.getString("prompt", "").replaceAll("\\s+", " ").trim();
+                        labels.put(key, prompt.length() > 70 ? prompt.substring(0, 67) + "..." : prompt);
+                        numbers.put(key, ch.getInt("sequence_index", 0));
+                    }
+                } else if (r.getString("challenge_key", null) != null) {
+                    key = "k" + r.getString("challenge_key");
+                    labels.put(key, r.getString("challenge_key"));
+                } else {
+                    continue;
+                }
+                int[] c = counts.computeIfAbsent(key, k -> new int[2]);
+                c[1]++;
+                if (r.getBoolean("is_correct", false)) {
+                    c[0]++;
+                }
+            }
+        }
+        List<QuestionStat> out = new ArrayList<>();
+        counts.forEach((key, c) -> out.add(new QuestionStat(key, numbers.getOrDefault(key, 0), labels.getOrDefault(key, key),
+                c[0], c[1])));
+        out.sort(java.util.Comparator.comparingDouble(QuestionStat::rate).thenComparing(q -> -q.total()));
+        return out;
+    }
+
+    /** The questions of a lesson with how the class answered them (weakest first), from the answer log. */
+    public List<QuestionStat> questionAccuracy(long classId, long stageId) {
+        List<Student> students = roster(classId);
+        if (students.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return questionStats(SupabaseClient.get("submissions?stage_id=eq." + stageId + "&student_id=in.(" + idList(students)
+                + ")&select=challenge_id,challenge_key,is_correct,challenge:challenges(sequence_index,prompt)&limit=5000"));
+    }
+
     /** How many certificates the class has earned: per grading period and for the whole subject (only the ones that exist). */
     public java.util.Map<String, Integer> classCertificateCounts(long classId) {
         java.util.Map<String, Integer> out = new java.util.LinkedHashMap<>();

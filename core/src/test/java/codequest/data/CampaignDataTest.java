@@ -146,4 +146,21 @@ class CampaignDataTest {
         assertTrue(st.leastCompleted(1).get(0).lesson().number() == 2);
         assertTrue(st.lowestGrade(1).get(0).lesson().number() == 1); // lesson 1 averages (100 + 0) / 2
     }
+
+    @Test
+    void questionStatsGroupTheAnswerLogByQuestionWeakestFirst() {
+        com.badlogic.gdx.utils.JsonValue rows = new com.badlogic.gdx.utils.JsonReader().parse(
+                "[{\"challenge_id\":1,\"is_correct\":true,\"challenge\":{\"sequence_index\":1,\"prompt\":\"What does  printf do?\"}},"
+                + "{\"challenge_id\":1,\"is_correct\":true,\"challenge\":{\"sequence_index\":1,\"prompt\":\"What does  printf do?\"}},"
+                + "{\"challenge_id\":2,\"is_correct\":false,\"challenge\":{\"sequence_index\":2,\"prompt\":\"Fix the loop\"}},"
+                + "{\"challenge_id\":2,\"is_correct\":true,\"challenge\":{\"sequence_index\":2,\"prompt\":\"Fix the loop\"}},"
+                + "{\"challenge_id\":null,\"challenge_key\":\"builtin-7\",\"is_correct\":false},"
+                + "{\"is_correct\":true}]");
+        List<ProfessorData.QuestionStat> stats = ProfessorData.questionStats(rows);
+        assertTrue(stats.size() == 3); // the row with no question at all is skipped
+        assertTrue(stats.get(0).label().equals("builtin-7") && stats.get(0).rate() == 0);
+        assertTrue(stats.get(1).number() == 2 && stats.get(1).right() == 1 && stats.get(1).total() == 2);
+        assertTrue(stats.get(2).label().equals("What does printf do?") && stats.get(2).rate() == 1.0);
+        assertTrue(ProfessorData.questionStats(null).isEmpty());
+    }
 }

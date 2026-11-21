@@ -30,7 +30,7 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
     private static final float[] COL_X = { 110, 430, 650, 790, 950, 1090, 1260, 1520 };
 
     private record Loaded(List<ProfessorData.LessonRow> rows, Map<String, int[]> topics,
-            Map<Long, Map<String, int[]>> byStudent) {
+            Map<Long, Map<String, int[]>> byStudent, List<ProfessorData.QuestionStat> questions) {
     }
 
     private final ClassInfo cls;
@@ -52,7 +52,8 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
             List<ProfessorData.LessonRow> rows = data.lessonAnalysis(cls.id(), lesson.stageId());
             List<ProfessorData.Student> students = new ArrayList<>();
             rows.forEach(r -> students.add(r.student()));
-            return new Loaded(rows, topics.join(), data.studentTopicAccuracy(students, lesson.stageId()));
+            return new Loaded(rows, topics.join(), data.studentTopicAccuracy(students, lesson.stageId()),
+                    data.questionAccuracy(cls.id(), lesson.stageId()));
         }, this::rebuild);
     }
 
@@ -65,7 +66,8 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
         double avg = rows.stream().filter(r -> r.progress() != null && r.progress().completed())
                 .mapToInt(r -> Grades.percent(r.progress().score(), maxScore)).average().orElse(0);
 
-        text(cls.sectionName() + "   -   " + done + " of " + rows.size() + " completed   -   average grade "
+        text(cls.sectionName() + "   -   " + lesson.periodEnum().label() + "   -   " + done + " of " + rows.size()
+                + " completed   -   average grade "
                 + (done == 0 ? "n/a" : String.format(Locale.ROOT, "%.0f%%", avg)), 90, 158, 1700, 40, 1.8f, AMBER,
                 Align.left);
 
@@ -92,7 +94,11 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
                     r.classTestScore() == null ? "-" : r.classTestScore() + " pts",
                     p == null || p.lastPlayed() == null ? "-" : p.lastPlayed().substring(0, Math.min(10, p.lastPlayed().length()))
             };
-            for (int c = 0; c < cells.length; c++) {
+            // the name opens that student own analysis
+            solidButton(r.student().username(), 100, y + 2, 310, 48, ROW, Color.WHITE,
+                    () -> game.setScreen(new ProfessorStudentAnalysisScreen(game, username, cls, r.student(),
+                            () -> game.setScreen(new ProfessorLessonAnalysisScreen(game, username, cls, lesson)))));
+            for (int c = 1; c < cells.length; c++) {
                 Color color = c == 1 ? (completed ? new Color(0.55f, 0.9f, 0.65f, 1f) : MUTED)
                         : c == 2 ? AMBER : Color.WHITE;
                 text(cells[c], COL_X[c], y, 300, 52, 1.4f, color, Align.left);
@@ -102,25 +108,37 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
             text("+ " + (rows.size() - 9) + " more students not shown", 110, 775, 800, 30, 1.2f, MUTED, Align.left);
         }
 
-        // ── where students struggled (from the answer log) ──
-        text("Where students struggled", 90, 825, 800, 36, 1.7f, AMBER, Align.left);
+        // ── where students struggled (from the answer log): topics, then the questions most missed ──
+        text("Weakest topics", 90, 825, 500, 36, 1.6f, AMBER, Align.left);
         List<Map.Entry<String, int[]>> weakest = new ArrayList<>(loaded.topics().entrySet());
         weakest.sort((a, b) -> Double.compare(rate(a.getValue()), rate(b.getValue())));
         if (weakest.isEmpty()) {
-            text("No answers recorded for this lesson yet.", 90, 875, 800, 30, 1.4f, MUTED, Align.left);
+            text("No answers recorded for this lesson yet.", 90, 875, 500, 30, 1.3f, MUTED, Align.left);
         }
         for (int i = 0; i < Math.min(4, weakest.size()); i++) {
             Map.Entry<String, int[]> e = weakest.get(i);
             int[] c = e.getValue();
-            text(label(e.getKey()), 90, 872 + i * 35, 300, 32, 1.4f, Color.WHITE, Align.left);
-            text(Math.round(rate(c) * 100) + "% right   (" + c[0] + " of " + c[1] + " answers)", 380, 872 + i * 35, 520, 32,
-                    1.4f, rate(c) < 0.5 ? new Color(1f, 0.6f, 0.55f, 1f) : MUTED, Align.left);
+            text(label(e.getKey()), 90, 868 + i * 34, 250, 32, 1.3f, Color.WHITE, Align.left);
+            text(Math.round(rate(c) * 100) + "% right  (" + c[1] + ")", 340, 868 + i * 34, 280, 32, 1.3f,
+                    rate(c) < 0.5 ? new Color(1f, 0.6f, 0.55f, 1f) : MUTED, Align.left);
         }
 
-        text("AI analysis", 960, 825, 800, 36, 1.7f, AMBER, Align.left);
-        text("A written summary of where this class struggled and who needs attention. Only statistics are sent to the AI, "
-                + "never names.", 960, 868, 860, 70, 1.2f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
-        solidButton("Write AI analysis", 960, 950, 520, 60, new Color(0.45f, 0.3f, 0.7f, 1f),
+        text("Questions most missed", 650, 825, 600, 36, 1.6f, AMBER, Align.left);
+        if (loaded.questions().isEmpty()) {
+            text("No question-level answers recorded yet.", 650, 875, 640, 30, 1.3f, MUTED, Align.left);
+        }
+        for (int i = 0; i < Math.min(4, loaded.questions().size()); i++) {
+            ProfessorData.QuestionStat q = loaded.questions().get(i);
+            text((q.number() > 0 ? "Q" + q.number() + "  " : "") + q.label(), 650, 868 + i * 34, 470, 32, 1.15f, Color.WHITE,
+                    Align.left, PixelFonts.Face.SANS).setEllipsis(true);
+            text(Math.round(q.rate() * 100) + "% right  (" + q.right() + " of " + q.total() + ")", 1130, 868 + i * 34, 220, 32,
+                    1.15f, q.rate() < 0.5 ? new Color(1f, 0.6f, 0.55f, 1f) : MUTED, Align.left, PixelFonts.Face.SANS);
+        }
+
+        text("AI analysis", 1390, 825, 440, 36, 1.6f, AMBER, Align.left);
+        text("A written summary of where the class struggled and who needs attention. Only statistics are sent, never names.",
+                1390, 868, 440, 70, 1.15f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+        solidButton("Write AI analysis", 1390, 950, 440, 56, new Color(0.45f, 0.3f, 0.7f, 1f),
                 () -> showAiAnalysis("Writing the analysis...", () -> analyse(loaded, maxScore)));
     }
 
@@ -159,6 +177,15 @@ public class ProfessorLessonAnalysisScreen extends ProfessorScreen {
         data.put("scope", "one lesson");
         data.put("lesson", lesson.label() + ": " + lesson.title());
         data.put("topics", topics);
+        List<Object> questions = new ArrayList<>();
+        for (ProfessorData.QuestionStat q : loaded.questions()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("question", (q.number() > 0 ? "Q" + q.number() + ": " : "") + q.label());
+            m.put("rightPercent", Math.round(q.rate() * 100));
+            m.put("answers", q.total());
+            questions.add(m);
+        }
+        data.put("questionsWeakestFirst", questions);
         data.put("students", students);
         return new AiFeedback().forClass(data, names);
     }
