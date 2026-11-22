@@ -37,6 +37,7 @@ public class MainMenuScreen extends BaseScreen {
         menuButton("achievements", btnX, startY + spacing * 3, btnWidth, btnHeight,
                 () -> game.setScreen(new CertificatesScreen(game, username)));
 
+        exitOnEscape();
         // who is signed in: a dark chip with a cyan outline, then the log out button
         Image chip = new Image(UiKit.CHIP.drawable());
         placeTopLeft(chip, VIRTUAL_WIDTH - 670, 12, 430, 74);

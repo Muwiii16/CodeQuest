@@ -487,6 +487,30 @@ public abstract class BaseScreen implements Screen {
         });
     }
 
+    /** Pressing Esc on this screen asks whether to exit (unless a pop-up already used the key). */
+    protected void exitOnEscape() {
+        stage.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (keycode != com.badlogic.gdx.Input.Keys.ESCAPE || event.isHandled() || errorPopup != null) {
+                    return false;
+                }
+                confirmExit();
+                return true;
+            }
+        });
+    }
+
+    /** Asks before closing the game. */
+    protected void confirmExit() {
+        showChoice("Exit CodeQuest?", "Your progress is already saved.", new String[] { "Stay", "Exit game" },
+                choice -> {
+                    if (choice == 1) {
+                        Gdx.app.exit();
+                    }
+                });
+    }
+
     protected void closeErrorPopup() {
         if (errorPopup != null) {
             errorPopup.remove();

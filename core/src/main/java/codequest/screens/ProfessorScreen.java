@@ -46,6 +46,7 @@ public abstract class ProfessorScreen extends BaseScreen {
         if (backTarget != null) {
             solidButton("Back", VIRTUAL_WIDTH - 330, 22, 280, 66, BUTTON, backTarget);
         } else {
+            exitOnEscape();
             solidButton("Log out", VIRTUAL_WIDTH - 330, 22, 280, 66, new Color(0.45f, 0.18f, 0.18f, 1f),
                     () -> {
                         new codequest.data.DatabaseManager().logout();
@@ -75,8 +76,7 @@ public abstract class ProfessorScreen extends BaseScreen {
     protected void showAiAnalysis(String message, java.util.function.Supplier<codequest.data.AiFeedback.Result> work) {
         load(message, work, result -> {
             int panel = mark();
-            rect(60, 130, 1800, 900, new Color(0.07f, 0.08f, 0.13f, 1f));
-            rect(60, 130, 1800, 6, AMBER);
+            picture(UiKit.analytics("analytics_main_panel", 26, 26), 60, 130, 1800, 900);
             text("AI analysis", 100, 148, 1000, 50, 2.2f, AMBER, Align.left);
             codequest.data.AiReport report = result.ok() ? codequest.data.AiReport.parse(result.text()) : null;
             if (report != null) {
@@ -89,82 +89,91 @@ public abstract class ProfessorScreen extends BaseScreen {
                         codequest.screens.PixelFonts.Face.SANS).setWrap(true);
             }
             text("Written by AI from statistics only. It can make mistakes.",
-                    100, 932, 1720, 26, 1.1f, MUTED, Align.left, codequest.screens.PixelFonts.Face.SANS);
-            solidButton("Close", 760, 962, 400, 56, BUTTON, () -> clearFrom(panel));
+                    100, 938, 1720, 26, 1.1f, MUTED, Align.left, codequest.screens.PixelFonts.Face.SANS);
+            stateButton("ui/analytics/close_button_idle.png", "ui/analytics/close_button_hover.png",
+                    "ui/analytics/close_button_pressed.png", 760, 962, 400, 60, () -> clearFrom(panel));
         });
     }
 
     private static final Color RED = new Color(1f, 0.45f, 0.42f, 1f);
     private static final Color TEAL = new Color(0.3f, 0.85f, 0.75f, 1f);
-    private static final Color TILE = new Color(0.12f, 0.15f, 0.22f, 1f);
+
+    /** A picture (the analytics kit) at a position and size; it never takes the mouse. */
+    private Image picture(UiKit.Patch patch, float x, float y, float w, float h) {
+        Image image = new Image(patch.drawable());
+        placeTopLeft(image, x, y, w, h);
+        stage.addActor(image);
+        image.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+        return image;
+    }
 
     private void drawReport(codequest.data.AiReport r) {
         PixelFonts.Face sans = PixelFonts.Face.SANS;
         // summary
-        rect(100, 205, 1720, 100, TILE);
-        rect(100, 205, 6, 100, AMBER);
-        text("SUMMARY", 125, 210, 400, 22, 1.0f, MUTED, Align.left, sans);
-        text(r.summary(), 125, 234, 1670, 66, 1.55f, Color.WHITE, Align.topLeft, sans).setWrap(true);
+        picture(UiKit.analytics("summary_panel", 24, 24), 100, 205, 1720, 100);
+        text("SUMMARY", 130, 214, 400, 22, 1.0f, MUTED, Align.left, sans);
+        text(r.summary(), 130, 238, 1660, 62, 1.55f, Color.WHITE, Align.topLeft, sans).setWrap(true);
         float y = 318;
         // number tiles
         if (!r.tiles().isEmpty()) {
             float w = (1720 - 20 * 3) / 4f;
             for (int i = 0; i < r.tiles().size(); i++) {
                 float x = 100 + i * (w + 20);
-                rect(x, y, w, 80, TILE);
-                text(r.tiles().get(i).label(), x + 18, y + 6, w - 30, 26, 1.1f, MUTED, Align.left, sans).setEllipsis(true);
-                text(r.tiles().get(i).value(), x + 18, y + 30, w - 30, 46, 2.3f, i == 0 ? Color.WHITE : AMBER, Align.left);
+                picture(UiKit.analytics("stat_card", 24, 24), x, y, w, 80);
+                text(r.tiles().get(i).label(), x + 22, y + 8, w - 40, 26, 1.1f, MUTED, Align.left, sans).setEllipsis(true);
+                text(r.tiles().get(i).value(), x + 22, y + 32, w - 40, 44, 2.3f, i == 0 ? Color.WHITE : AMBER, Align.left);
             }
-            y += 96;
+            y += 94;
         }
         // who needs attention / to watch / doing well
         float cw = (1720 - 40) / 3f;
-        noteCard(100, y, cw, "Needs attention", RED, r.attention());
-        noteCard(100 + cw + 20, y, cw, "Watch", AMBER, r.watch());
-        noteCard(100 + 2 * (cw + 20), y, cw, "Doing well", TEAL, r.doingWell());
+        noteCard(100, y, cw, "Needs attention", "student_card_attention", "status_attention", 230, RED, r.attention());
+        noteCard(100 + cw + 20, y, cw, "Watch", "student_card_watch", "status_watch", 150, AMBER, r.watch());
+        noteCard(100 + 2 * (cw + 20), y, cw, "Doing well", "student_card_success", "status_success", 190, TEAL, r.doingWell());
         y += 392;
         // next steps, then what the group struggled with and what the data cannot tell
-        rect(100, y, 1000, 126, TILE);
-        text("Next steps", 124, y + 6, 600, 30, 1.4f, AMBER, Align.left);
+        picture(UiKit.analytics("next_steps_panel", 24, 24), 100, y, 1000, 134);
+        text("Next steps", 128, y + 8, 600, 30, 1.4f, AMBER, Align.left);
         for (int i = 0; i < r.nextSteps().size(); i++) {
-            rect(126, y + 46 + i * 29, 16, 16, BUTTON);
-            text(r.nextSteps().get(i), 154, y + 40 + i * 29, 920, 28, 1.15f, Color.WHITE, Align.left, sans).setEllipsis(true);
+            picture(UiKit.analytics("analytics_checkbox", 6, 6), 130, y + 46 + i * 28, 20, 20);
+            text(r.nextSteps().get(i), 162, y + 42 + i * 28, 910, 28, 1.15f, Color.WHITE, Align.left, sans).setEllipsis(true);
         }
-        rect(1120, y, 700, 126, TILE);
-        text("Struggles and gaps", 1144, y + 6, 600, 30, 1.4f, AMBER, Align.left);
+        picture(UiKit.analytics("learning_gaps_panel", 24, 24), 1120, y, 700, 134);
+        text("Struggles and gaps", 1148, y + 8, 600, 30, 1.4f, AMBER, Align.left);
         int line = 0;
         for (String st : r.struggles()) {
-            text(st, 1144, y + 40 + line++ * 27, 660, 26, 1.1f, Color.WHITE, Align.left, sans).setEllipsis(true);
+            text(st, 1148, y + 42 + line++ * 27, 650, 26, 1.1f, Color.WHITE, Align.left, sans).setEllipsis(true);
         }
         for (String g : r.dataGaps()) {
             if (line < 3 || r.struggles().isEmpty()) {
-                text("? " + g, 1144, y + 40 + line++ * 27, 660, 26, 1.1f, MUTED, Align.left, sans).setEllipsis(true);
+                text("? " + g, 1148, y + 42 + line++ * 27, 650, 26, 1.1f, MUTED, Align.left, sans).setEllipsis(true);
             }
         }
     }
 
-    private void noteCard(float x, float y, float w, String title, Color accent, java.util.List<codequest.data.AiReport.Note> notes) {
+    private void noteCard(float x, float y, float w, String title, String card, String status, float pillW, Color accent,
+            java.util.List<codequest.data.AiReport.Note> notes) {
         PixelFonts.Face sans = PixelFonts.Face.SANS;
-        rect(x, y, w, 380, TILE);
-        rect(x, y, w, 5, accent);
-        text(title, x + 20, y + 14, w - 40, 34, 1.5f, accent, Align.left);
+        picture(UiKit.analytics(card, 24, 24), x, y, w, 380);
+        picture(UiKit.analytics(status, 20, 0), x + 22, y + 16, pillW, 42);
+        text(title, x + 22, y + 22, pillW, 30, 1.3f, Color.WHITE, Align.center);
         if (notes.isEmpty()) {
-            text("Nothing to report.", x + 20, y + 62, w - 40, 30, 1.2f, MUTED, Align.left, sans);
+            text("Nothing to report.", x + 24, y + 80, w - 48, 30, 1.2f, MUTED, Align.left, sans);
             return;
         }
         for (int i = 0; i < notes.size(); i++) {
             codequest.data.AiReport.Note n = notes.get(i);
-            float ey = y + 58 + i * 160;
+            float ey = y + 72 + i * 150;
             float fy = ey;
             if (!n.who().isBlank()) {
-                float chip = Math.min(w - 40, 40 + n.who().length() * 14);
-                rect(x + 20, ey, chip, 32, BUTTON);
-                text(n.who(), x + 20, ey, chip, 32, 1.2f, Color.WHITE, Align.center, sans).setEllipsis(true);
-                fy = ey + 38;
+                picture(UiKit.analytics("student_name_tag", 20, 0), x + 22, ey, Math.min(w - 44, 40 + n.who().length() * 14), 40);
+                text(n.who(), x + 22, ey + 4, Math.min(w - 44, 40 + n.who().length() * 14), 32, 1.2f, Color.WHITE, Align.center,
+                        sans).setEllipsis(true);
+                fy = ey + 46;
             }
-            text(n.finding(), x + 20, fy, w - 40, 62, 1.2f, Color.WHITE, Align.topLeft, sans).setWrap(true);
+            text(n.finding(), x + 24, fy, w - 48, 52, 1.2f, Color.WHITE, Align.topLeft, sans).setWrap(true);
             if (!n.next().isBlank()) {
-                text("Next: " + n.next(), x + 20, fy + 64, w - 40, 50, 1.05f, MUTED, Align.topLeft, sans).setWrap(true);
+                text("Next: " + n.next(), x + 24, fy + 54, w - 48, 46, 1.05f, MUTED, Align.topLeft, sans).setWrap(true);
             }
         }
     }

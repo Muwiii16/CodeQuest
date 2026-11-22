@@ -46,6 +46,11 @@ final class UiKit {
         return new Patch("ui/hud/" + name + ".png", leftRight, leftRight, topBottom, topBottom);
     }
 
+    /** A picture of the professor analytics kit (assets/ui/analytics). */
+    static Patch analytics(String name, int leftRight, int topBottom) {
+        return new Patch("ui/analytics/" + name + ".png", leftRight, leftRight, topBottom, topBottom);
+    }
+
     /** A professor button picture: color is blue, green, red, purple, gold or dark_grey_navy; state is idle, hover or pressed. */
     static Patch proButton(String color, String state) {
         return new Patch("ui/pro/btn_" + color + "_" + state + ".png", 28, 28, 0, 0);

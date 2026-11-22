@@ -88,6 +88,10 @@ public class LoginScreen extends BaseScreen {
                     submit();
                     return true;
                 }
+                if (keycode == Input.Keys.ESCAPE && !event.isHandled()) {
+                    confirmExit();
+                    return true;
+                }
                 return false;
             }
         });
