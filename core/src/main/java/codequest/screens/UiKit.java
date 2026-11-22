@@ -51,6 +51,11 @@ final class UiKit {
         return new Patch("ui/b3/" + name + ".png", leftRight, leftRight, 0, 0);
     }
 
+    /** The path of an icon of batch 4 (assets/ui/icons, 128x128, e.g. "trophy", "bell", "arrow_left"). */
+    static String glyph(String name) {
+        return "ui/icons/" + name + ".png";
+    }
+
     /** A picture of the professor analytics kit (assets/ui/analytics). */
     static Patch analytics(String name, int leftRight, int topBottom) {
         return new Patch("ui/analytics/" + name + ".png", leftRight, leftRight, topBottom, topBottom);
