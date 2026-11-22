@@ -120,7 +120,7 @@ public class CertificatesScreen extends StudentScreen {
         List<Entry> all = entries();
         if (all.isEmpty()) {
             card(160, 220, 1600, 200);
-            text("No certificates yet.\nFinish a grading period to earn one.", 200, 220, 1520, 200, 2f, MUTED, Align.center);
+            text("No certificates yet.\nFinish a period your professor has closed.", 200, 220, 1520, 200, 2f, MUTED, Align.center);
             return;
         }
         int from = page * PAGE_SIZE;

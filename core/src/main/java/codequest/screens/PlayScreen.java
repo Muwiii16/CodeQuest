@@ -103,6 +103,8 @@ public class PlayScreen extends InputAdapter implements Screen {
     private static final float TRIGGER_AHEAD = 140f;
     private static final float LEAD_IN = 220f;
     private static final float PANEL_H = 440f;
+    /** The question panel is laid out at full size (PANEL_H high, 1280 wide) and drawn smaller, so the map stays in view. */
+    private static final float PANEL_SCALE = 0.78f;
 
     private static final Rect QUIT_BTN = new Rect(SIDEBAR_X + 20, 980, 480, 60);
     private static final Color GOLD_TEXT = new Color(1f, 0.82f, 0.3f, 1f);
@@ -174,6 +176,23 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     private final OrthographicCamera camera = new OrthographicCamera();
     private final Viewport viewport = new FitViewport(W, H, camera);
+    /** Looks at the map only (the panels and the sidebar keep {@link #camera}): it zooms in and shakes during a question. */
+    private final OrthographicCamera worldCamera = new OrthographicCamera(W, H);
+    private float camZoom = 1f;
+    private float camX = W / 2f;
+    /** The middle of the world view, measured from the top of the map. */
+    private float camTop = H / 2f;
+    private float shakeAmp;
+    private float shakeKick;
+    private float shakeClock;
+    /** The anime speed lines that rush toward the middle of the action: 0 = none, they fade in slowly as the timer runs down. */
+    private float lineFade;
+    /** 0 = the sidebar is in place, 1 = it has slid off to the right (during a question). */
+    private float sidebarSlide;
+    private float lineClock;
+    /** The middle between the projectile and the hero, in map coordinates measured from the top. */
+    private float focusMapX = MAP_WIDTH / 2f;
+    private float focusMapTop = H / 2f;
     private final SpriteBatch batch = new SpriteBatch();
     private final ShapeRenderer sr = new ShapeRenderer();
     private final GlyphLayout layout = new GlyphLayout();
@@ -202,6 +221,9 @@ public class PlayScreen extends InputAdapter implements Screen {
     private float panelTop;
 
     private String feedback = "";
+    /** The verdict as a pop-up over the hero: it rises and fades about two seconds after an answer. */
+    private float popAge = 99f;
+    private String popText = "";
     private Color feedbackColor = Color.WHITE;
     private float feedbackTimer;
     // after an answer: the explanation panel (what was asked, the right answer and why)
@@ -209,6 +231,9 @@ public class PlayScreen extends InputAdapter implements Screen {
     private String explainToken;
     private boolean explainCorrect;
     private float explainTop;
+    /** The explanation panel sits at the top of the map when the hero is low on the screen, else at the bottom. */
+    private boolean explainOnTop;
+    private static final float EXPLAIN_SCALE = 0.72f;
     private float explainAge;
     private boolean saved;
 
@@ -475,11 +500,67 @@ public class PlayScreen extends InputAdapter implements Screen {
     @Override
     public void render(float delta) {
         update(Math.min(delta, 0.1f));
+        updateCamera(Math.min(delta, 0.1f));
         draw();
+    }
+
+    /**
+     * While a question is open the map zooms in on the projectile and the hero together and shakes a little, more and more as
+     * the projectile gets closer, so the timer feels like it is running out. It eases back out when the question ends.
+     */
+    private void updateCamera(float dt) {
+        boolean tense = phase == Phase.ENCOUNTER && active != null && flightTime > 0f;
+        float targetZoom = 1f;
+        float targetX = W / 2f;
+        float targetTop = H / 2f;
+        float targetAmp = 0f;
+        float progress = 0f;
+        if (tense) {
+            progress = Math.max(0f, Math.min(1f, 1f - timeLeft / flightTime));
+            Vector2 shot = projectilePos();
+            Vector2 hero = pointAt(distance);
+            // the hero sits in the middle of the free part of the screen (the question panel takes the rest)
+            boolean panelBelow = panelTop > H / 2f;
+            float bandTop = panelBelow ? 0f : 96f + PANEL_H * PANEL_SCALE + 20f;
+            float bandBottom = panelBelow ? H - 30f - PANEL_H * PANEL_SCALE - 20f : H;
+            // zoom just enough to keep the projectile in view; it gets closer, so the zoom tightens
+            float needX = (Math.abs(shot.x - hero.x) + 170f) / (W / 2f);
+            float needY = (Math.abs(shot.y - hero.y) + 170f) / ((bandBottom - bandTop) / 2f);
+            targetZoom = Math.max(0.4f, Math.min(0.62f, Math.max(needX, needY)));
+            targetX = hero.x;
+            targetTop = hero.y - ((bandTop + bandBottom) / 2f - H / 2f) * targetZoom;
+            targetAmp = 1.2f + 11f * progress * progress;
+            focusMapX = hero.x;
+            focusMapTop = hero.y;
+        }
+        // the speed lines: nothing at first, then slowly stronger; they leave faster than they came
+        float lineTarget = tense ? (float) Math.pow(Math.max(0f, Math.min(1f, (progress - 0.02f) / 0.6f)), 1.2) * 0.85f : 0f;
+        lineFade += (lineTarget - lineFade) * (1f - (float) Math.exp(-(lineTarget > lineFade ? 2.2f : 8f) * dt));
+        lineClock += dt;
+        float k = 1f - (float) Math.exp(-(tense ? 5f : 9f) * dt);
+        // the sidebar slides out to the right while a question is open and back in after the answer
+        sidebarSlide += ((tense ? 1f : 0f) - sidebarSlide) * (1f - (float) Math.exp(-(tense ? 6f : 7f) * dt));
+        camZoom += (targetZoom - camZoom) * k;
+        camX += (targetX - camX) * k;
+        camTop += (targetTop - camTop) * k;
+        if (targetAmp > shakeAmp) {
+            shakeAmp += (targetAmp - shakeAmp) * k;
+        } else {
+            shakeAmp *= (float) Math.exp(-8f * dt);
+        }
+        shakeKick *= (float) Math.exp(-7f * dt);
+        shakeClock += dt * (28f + 22f * progress);
+        float power = shakeAmp + shakeKick;
+        float ox = (float) (Math.sin(shakeClock) * 0.6 + Math.sin(shakeClock * 2.3 + 1.7) * 0.4) * power;
+        float oy = (float) (Math.cos(shakeClock * 1.3 + 0.4) * 0.6 + Math.sin(shakeClock * 2.9) * 0.4) * power * 0.8f;
+        worldCamera.zoom = camZoom;
+        worldCamera.position.set(camX + ox, H - camTop - oy, 0f);
+        worldCamera.update();
     }
 
     private void update(float dt) {
         animTime += dt;
+        popAge += dt;
         Vector2 avatarNow = pointAt(distance);
         rig.update(dt, avatarNow.x, avatarNow.y, phase == Phase.WALKING ? -10f : 0f);
         updateFx(dt, avatarNow);
@@ -617,6 +698,10 @@ public class PlayScreen extends InputAdapter implements Screen {
             }
         }
         feedback = sb.toString();
+        // the pop-up over the hero: a right answer keeps its text; a wrong one shows only the damage
+        popText = o.correct() ? feedback
+                : classTest ? (token == null ? "Too slow!" : "Wrong") : "-" + o.damage() + " HP";
+        popAge = 0f;
         feedbackTimer = closed != null ? 2.8f : 1.5f;
         explainChallenge = answered != null && !answered.explanationText().isEmpty() ? answered : null;
         if (explainChallenge != null) {
@@ -625,7 +710,8 @@ public class PlayScreen extends InputAdapter implements Screen {
             explainAge = 0f;
             // the explanation sits on the other side of the map from where the question was; a campaign lesson waits for
             // the student to press Continue, a class test moves on by itself after a while
-            explainTop = panelTop < 300f ? 620f : 200f;
+            explainTop = 200f; // its own layout; it is drawn smaller and away from the hero, see explainMatrix()
+            explainOnTop = pointAt(distance).y > H / 2f;
             feedbackTimer = classTest ? 9f : 3600f;
         }
         phase = Phase.FEEDBACK;
@@ -715,6 +801,9 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     /** Starts the weapon's strike (right answer) or stumble (wrong answer) and the matching fate for the projectile. */
     private void startAnswerFx(boolean correct, Vector2 pp, TowerSpot source) {
+        if (!correct) {
+            shakeKick = 14f; // the hit lands: one hard shake that dies away
+        }
         fxFromX = pp.x;
         fxFromY = pp.y;
         fxX = pp.x;
@@ -795,22 +884,24 @@ public class PlayScreen extends InputAdapter implements Screen {
             }
             return true;
         }
-        if (QUIT_BTN.contains(mx, my)) {
+        if (sidebarSlide < 0.5f && QUIT_BTN.contains(mx, my)) {
             leave();
             return true;
         }
+        float[] inExplain = toExplain(mx, my);
         if (phase == Phase.FEEDBACK && explainChallenge != null && explainAge > 0.4f
-                && explainContinueButton().contains(mx, my)) {
+                && explainContinueButton().contains(inExplain[0], inExplain[1])) {
             feedbackTimer = 0f;
             return true;
         }
         if (phase == Phase.ENCOUNTER) {
-            if (!classTest && !hintShown && hintButton().contains(mx, my)) {
+            float[] inPanel = toPanel(mx, my); // the panel is drawn smaller than it is laid out
+            if (!classTest && !hintShown && hintButton().contains(inPanel[0], inPanel[1])) {
                 hintShown = true;
                 run.useHint();
                 return true;
             }
-            tapEncounter(mx, my);
+            tapEncounter(inPanel[0], inPanel[1]);
         }
         return true;
     }
@@ -1131,6 +1222,10 @@ public class PlayScreen extends InputAdapter implements Screen {
     /** A button's fill: raised over a soft shadow while the mouse is over it (its label must use the same {@link #lift}). */
     private void buttonFill(Rect r, Color color, boolean enabled, float amount) {
         float up = lift(r, enabled, amount);
+        if (collectingPanelButtons) {
+            panelButtons.add(new PanelButton(r, color, up, enabled));
+            return;
+        }
         if (up > 0f) {
             fill(r.x + 5, r.y + 8, r.w - 10, r.h, new Color(0f, 0f, 0f, 0.55f));
         }
@@ -1149,32 +1244,44 @@ public class PlayScreen extends InputAdapter implements Screen {
         Vector2 pointer = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
         mouseX = pointer.x;
         mouseY = H - pointer.y;
-        batch.setProjectionMatrix(camera.combined);
         sr.setProjectionMatrix(camera.combined);
 
+        batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
         batch.setColor(Color.WHITE); // the last frame's weapon glow or spark must not tint the map
         map.draw(batch);
-        drawWorldSprites();
         batch.end();
+        drawMapEdges();
+        batch.begin();
+        drawWorldSprites();
+        drawVerdictPopup();
+        batch.end();
+        batch.setProjectionMatrix(camera.combined);
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        drawSpeedLines();
+        drawTimerBar();
         sr.begin(ShapeRenderer.ShapeType.Filled);
         drawWorldShapes();
+        sr.end();
+        // the sidebar, shifted to the right while it slides away
+        sr.setProjectionMatrix(sidebarMatrix());
+        sr.begin(ShapeRenderer.ShapeType.Filled);
         drawSidebarShapes();
+        sr.end();
+        batch.setProjectionMatrix(sidebarMatrix());
+        drawSidebarPictures();
+        batch.setProjectionMatrix(camera.combined);
+        sr.setProjectionMatrix(camera.combined);
         if (phase == Phase.ENCOUNTER) {
-            drawEncounterShapes();
-        } else if (phase == Phase.FEEDBACK) {
-            fill(60, 30, 1280, 150, new Color(0.04f, 0.06f, 0.15f, 0.92f));
-            if (explainChallenge != null) {
-                fill(60, explainTop, 1280, 410, new Color(0.05f, 0.07f, 0.17f, 0.96f));
-                fill(60, explainTop, 1280, 8, explainCorrect ? new Color(0.3f, 0.8f, 0.3f, 1f) : new Color(0.9f, 0.3f, 0.25f, 1f));
-                Rect go = explainContinueButton();
-                Color base = new Color(0.12f, 0.3f, 0.12f, 1f);
-                buttonFill(go, explainAge > 0.4f ? base : new Color(0.14f, 0.16f, 0.22f, 1f), explainAge > 0.4f, LIFT);
-            }
-        } else if (phase == Phase.RESULT) {
+            drawEncounterLayers();
+        }
+        if (phase == Phase.FEEDBACK && explainChallenge != null) {
+            drawExplainPictures();
+        }
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        if (phase == Phase.RESULT) {
             fill(0, 0, W, H, new Color(0f, 0f, 0f, 0.82f));
             if (aiOpen) {
                 fill(180, 90, W - 360, 900, new Color(0.05f, 0.07f, 0.17f, 1f));
@@ -1198,16 +1305,21 @@ public class PlayScreen extends InputAdapter implements Screen {
 
         batch.begin();
         if (!(phase == Phase.RESULT && aiOpen)) {
+            batch.setProjectionMatrix(sidebarMatrix());
             drawSidebarText(); // the feedback panel covers the sidebar: its text must not show through
+            batch.setProjectionMatrix(camera.combined);
         }
         if (phase == Phase.WALKING) {
             text("Section " + run.currentSectionNumber() + " / " + run.sectionCount(), 30, 20, 1.5f, Color.WHITE);
         } else if (phase == Phase.ENCOUNTER) {
+            batch.setProjectionMatrix(panelMatrix());
             drawEncounterText();
+            batch.setProjectionMatrix(camera.combined);
         } else if (phase == Phase.FEEDBACK) {
-            drawCentered(Face.SANS, feedback, MAP_WIDTH / 2f, 46, 2.0f, feedbackColor);
             if (explainChallenge != null) {
+                batch.setProjectionMatrix(explainMatrix());
                 drawExplanation();
+                batch.setProjectionMatrix(camera.combined);
             }
         } else if (phase == Phase.RESULT) {
             drawResultText();
@@ -1344,40 +1456,323 @@ public class PlayScreen extends InputAdapter implements Screen {
                 sprite("game/ring.png"));
     }
 
+    /**
+     * Manga-style speed lines: thin wedges that start away from the middle of the action and widen toward the edges,
+     * redrawn at random every fraction of a second so they flicker. Drawn over the map, under the panels.
+     */
+    private void drawSpeedLines() {
+        if (lineFade < 0.005f) {
+            return;
+        }
+        float progress = flightTime > 0f ? Math.max(0f, Math.min(1f, 1f - timeLeft / flightTime)) : 0f;
+        // where the action appears on the screen (the world camera is zoomed and moved)
+        float cx = W / 2f + (focusMapX - camX) / camZoom;
+        float cy = H / 2f + (focusMapTop - camTop) / camZoom;
+        int count = 34 + Math.round(60f * progress);
+        Random random = new Random((long) (lineClock / 0.07f) * 7919L + 13L);
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        for (int i = 0; i < count; i++) {
+            float angle = random.nextFloat() * (float) (Math.PI * 2);
+            float inner = 330f + random.nextFloat() * 420f;
+            float outer = 1900f;
+            float half = (0.008f + random.nextFloat() * 0.02f) * (1f + progress);
+            float dx = (float) Math.cos(angle);
+            float dy = (float) Math.sin(angle);
+            float px = -dy;
+            float py = dx;
+            float baseHalf = outer * (float) Math.tan(half);
+            float tipX = cx + dx * inner;
+            float tipY = H - (cy + dy * inner);
+            float bx = cx + dx * outer;
+            float by = cy + dy * outer;
+            float alpha = Math.min(1f, lineFade * (0.7f + random.nextFloat() * 0.5f));
+            sr.triangle(tipX, tipY,
+                    bx + px * baseHalf, H - (by + py * baseHalf),
+                    bx - px * baseHalf, H - (by - py * baseHalf),
+                    new Color(0f, 0f, 0f, 0f), new Color(0f, 0f, 0f, alpha), new Color(0f, 0f, 0f, alpha));
+        }
+        sr.end();
+    }
+
     private void drawWorldShapes() {
     }
 
-    private void drawSidebarShapes() {
-        fill(SIDEBAR_X, 0, W - SIDEBAR_X, H, new Color(0.05f, 0.07f, 0.17f, 0.96f));
-        if (run.buildsProgram()) {
-            fill(SIDEBAR_X + 10, 680, W - SIDEBAR_X - 20, 290, new Color(0.01f, 0.02f, 0.06f, 1f)); // the terminal
+    /** Where the (smaller) question panel sits on the screen: centred, at the top or the bottom. */
+    private float panelScreenX() {
+        return (W - 1280f * PANEL_SCALE) / 2f;
+    }
+
+    private float panelScreenTop() {
+        return panelTop < 300f ? 96f : H - 30f - PANEL_H * PANEL_SCALE;
+    }
+
+    /** Draws in the panel's own coordinates (the layout the question screens were built with) but scaled and moved. */
+    private com.badlogic.gdx.math.Matrix4 panelMatrix() {
+        float tx = panelScreenX() - 60f * PANEL_SCALE;
+        float ty = (H - panelScreenTop()) - (H - panelTop) * PANEL_SCALE;
+        return camera.combined.cpy().translate(tx, ty, 0f).scale(PANEL_SCALE, PANEL_SCALE, 1f);
+    }
+
+    /** A point on the screen (top-left origin) in the panel's layout coordinates. */
+    private float[] toPanel(float screenX, float screenTop) {
+        return new float[] { 60f + (screenX - panelScreenX()) / PANEL_SCALE,
+                panelTop + (screenTop - panelScreenTop()) / PANEL_SCALE };
+    }
+
+    private float explainScreenX() {
+        return (MAP_WIDTH - 1280f * EXPLAIN_SCALE) / 2f;
+    }
+
+    private float explainScreenTop() {
+        return explainOnTop ? 100f : H - 30f - 410f * EXPLAIN_SCALE;
+    }
+
+    private com.badlogic.gdx.math.Matrix4 explainMatrix() {
+        float tx = explainScreenX() - 60f * EXPLAIN_SCALE;
+        float ty = (H - explainScreenTop()) - (H - explainTop) * EXPLAIN_SCALE;
+        return camera.combined.cpy().translate(tx, ty, 0f).scale(EXPLAIN_SCALE, EXPLAIN_SCALE, 1f);
+    }
+
+    private float[] toExplain(float screenX, float screenTop) {
+        return new float[] { 60f + (screenX - explainScreenX()) / EXPLAIN_SCALE,
+                explainTop + (screenTop - explainScreenTop()) / EXPLAIN_SCALE };
+    }
+
+    /** Puts the mouse position in the panel's layout coordinates, so every hit test and hover below keeps working. */
+    private void mouseToPanel() {
+        Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
+        float[] p = toPanel(m.x, H - m.y);
+        mouseX = p[0];
+        mouseY = p[1];
+    }
+
+    private static boolean sameColor(Color c, float r, float g, float b) {
+        return Math.abs(c.r - r) < 0.01f && Math.abs(c.g - g) < 0.01f && Math.abs(c.b - b) < 0.01f;
+    }
+
+    /** Which picture of the question kit a button's flat colour stands for. */
+    private static String pictureKind(Color c) {
+        if (sameColor(c, 0.85f, 0.6f, 0.1f)) {
+            return "hint";
+        } else if (sameColor(c, 0.75f, 0.15f, 0.18f)) {
+            return "clear";
+        } else if (sameColor(c, 0.15f, 0.6f, 0.28f)) {
+            return "check";
+        } else if (sameColor(c, 0.15f, 0.55f, 0.3f)) {
+            return "token_selected";
+        } else if (sameColor(c, 0.5f, 0.31f, 0.08f)) {
+            return "row_selected";
+        } else if (sameColor(c, 0.09f, 0.12f, 0.21f)) {
+            return "row_idle";
         }
-        float ratio = classTest ? 0f : run.hp() / (float) StageRun.MAX_HP;
-        if (!classTest) {
-            fill(SIDEBAR_X + 20, 150, 480, 26, new Color(0.25f, 0.05f, 0.05f, 1f));
+        return "token";
+    }
+
+    private static UiKit.Patch panelPatch(String kind, String state) {
+        return switch (kind) {
+            case "hint", "clear", "check" -> UiKit.q(kind + "_" + state, 34, 0);
+            case "token_selected" -> UiKit.q("token_selected", 34, 0);
+            case "row_selected" -> UiKit.q("code_row_selected", 30, 0);
+            case "row_idle" -> UiKit.q("code_row_idle", 30, 0);
+            default -> UiKit.q("token_" + state, 34, 0);
+        };
+    }
+
+    private record PanelButton(Rect rect, Color color, float up, boolean enabled) {
+    }
+
+    private final List<PanelButton> panelButtons = new ArrayList<>();
+    private boolean collectingPanelButtons;
+    private final java.util.Map<String, com.badlogic.gdx.scenes.scene2d.utils.Drawable> panelPictures = new java.util.HashMap<>();
+
+    private com.badlogic.gdx.scenes.scene2d.utils.Drawable panelPicture(String key, UiKit.Patch patch) {
+        return panelPictures.computeIfAbsent(key, k -> patch.drawable());
+    }
+
+    /** The question panel in three layers: its frame, the flat shapes inside, then the picture buttons (text comes last). */
+    private void drawEncounterLayers() {
+        com.badlogic.gdx.math.Matrix4 pm = panelMatrix();
+        batch.setProjectionMatrix(pm);
+        batch.begin();
+        batch.setColor(Color.WHITE);
+        panelPicture("frame", UiKit.q("question_frame", 34, 34)).draw(batch, 60f - 12f, H - (panelTop - 12f) - (PANEL_H + 24f),
+                1280f + 24f, PANEL_H + 24f);
+        // where the answer goes
+        if (active != null) {
+            Rect slot = switch (active.kind()) {
+                case FILL_BLANK -> answerBox();
+                case ARRANGE -> new Rect(90, builtY() - 8, ROW_WIDTH, CHIP_H + 16);
+                default -> null;
+            };
+            if (slot != null) {
+                panelPicture("slot", UiKit.q("answer_slot", 24, 0)).draw(batch, slot.x, H - (slot.y + slot.h), slot.w, slot.h);
+            }
         }
-        Color hpColor = ratio > 0.5f ? new Color(0.2f, 0.75f, 0.2f, 1f)
-                : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.1f, 1f) : new Color(0.8f, 0.15f, 0.15f, 1f);
-        if (!classTest) {
-            fill(SIDEBAR_X + 20, 150, 480 * ratio, 26, hpColor);
+        // the "code" badge on the panel's corner
+        batch.draw(sprite("ui/q/question_tab_icon.png"), 24f, H - (panelTop - 24f) - 64f, 64f, 64f);
+        batch.end();
+
+        sr.setProjectionMatrix(pm);
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        panelButtons.clear();
+        collectingPanelButtons = true;
+        drawEncounterShapes();
+        collectingPanelButtons = false;
+        sr.end();
+
+        batch.begin();
+        for (PanelButton b : panelButtons) {
+            Rect rc = b.rect();
+            boolean pressed = b.enabled() && Gdx.input.isTouched() && rc.contains(mouseX, mouseY);
+            String kind = pictureKind(b.color());
+            String state = !b.enabled() ? "idle" : pressed ? "pressed" : b.up() > 0f ? "hover" : "idle";
+            float drop = pressed ? 3f : 0f;
+            panelPicture(kind + state, panelPatch(kind, state)).draw(batch, rc.x - 5f,
+                    H - (rc.y - b.up() + drop + rc.h) - 5f, rc.w + 10f, rc.h + 10f);
         }
-        if (phase != Phase.RESULT) {
-            buttonFill(QUIT_BTN, new Color(0.3f, 0.1f, 0.1f, 1f));
+        batch.end();
+        batch.setProjectionMatrix(camera.combined);
+        sr.setProjectionMatrix(camera.combined);
+    }
+
+    /** The map picture ends in a hard edge; a soft fade into the background colour hides it, at any zoom. */
+    private void drawMapEdges() {
+        float mapW = MAP_WIDTH;
+        float mapH = MAP_WIDTH * 902f / 1640f;
+        float bottom = (H - mapH) / 2f;
+        float top = bottom + mapH;
+        float fade = 64f;
+        Color solid = new Color(0.04f, 0.06f, 0.15f, 1f);
+        Color clear = new Color(0.04f, 0.06f, 0.15f, 0f);
+        sr.setProjectionMatrix(worldCamera.combined);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.rect(0, bottom, fade, mapH, solid, clear, clear, solid);                   // left
+        sr.rect(mapW - fade, bottom, fade, mapH, clear, solid, solid, clear);         // right
+        sr.rect(0, bottom, mapW, fade, solid, solid, clear, clear);                   // bottom
+        sr.rect(0, top - fade, mapW, fade, clear, clear, solid, solid);               // top
+        sr.end();
+        sr.setProjectionMatrix(camera.combined);
+    }
+
+    /** "Deflected! +10" (or the hit) floats up from the hero, then fades. */
+    private void drawVerdictPopup() {
+        if (popAge > 2.2f || popText.isEmpty() || (phase != Phase.FEEDBACK && phase != Phase.WALKING)) {
+            return;
+        }
+        Vector2 hero = pointAt(distance);
+        float alpha = popAge < 1.6f ? 1f : Math.max(0f, 1f - (popAge - 1.6f) / 0.6f);
+        float rise = Math.min(46f, popAge * 90f);
+        float pulse = 1.25f - 0.25f * Math.min(1f, popAge * 6f);
+        String[] lines = popText.split("\n");
+        float y = hero.y - 120f - rise;
+        Color main = new Color(feedbackColor.r, feedbackColor.g, feedbackColor.b, alpha);
+        drawCentered(Face.SANS, lines[0], hero.x, y, 2.2f * pulse, new Color(0f, 0f, 0f, alpha * 0.55f));
+        drawCentered(Face.SANS, lines[0], hero.x - 2f, y - 2f, 2.2f * pulse, main);
+        for (int i = 1; i < lines.length; i++) {
+            drawCentered(Face.SANS, lines[i], hero.x, y + 46f * i, 1.3f, new Color(1f, 1f, 1f, alpha));
         }
     }
 
+    /** The time left for the open question: a bar with an hourglass across the top of the map, green, then yellow, then red. */
+    private void drawTimerBar() {
+        if (phase != Phase.ENCOUNTER || active == null || flightTime <= 0f) {
+            return;
+        }
+        float x = 60f;
+        float y = 10f;
+        float ratio = Math.max(0f, Math.min(1f, timeLeft / flightTime));
+        batch.begin();
+        batch.setColor(Color.WHITE);
+        panelPicture("timerbar", UiKit.hud("hud_timer_bar", 96, 0)).draw(batch, x, H - y - 70f, 1280f, 70f);
+        if (ratio > 0.01f) {
+            String fill = ratio > 0.5f ? "hud_timer_fill_green" : ratio > 0.25f ? "hud_timer_fill_yellow" : "hud_timer_fill_red";
+            panelPicture(fill, UiKit.hud(fill, 16, 0)).draw(batch, x + 125f, H - (y + 20f) - 30f, Math.max(24f, 1015f * ratio), 30f);
+        }
+        batch.end();
+    }
+
+    private void drawSidebarPictures() {
+        float sx = SIDEBAR_X;
+        boolean program = run.buildsProgram();
+        batch.begin();
+        batch.setColor(Color.WHITE);
+        panelPicture("hdr", UiKit.hud("side_header_panel", 44, 36)).draw(batch, sx + 8, H - 8 - 108, 504, 108);
+        batch.draw(sprite("ui/hud/cap_icon.png"), sx + 22, H - 22 - 72, 72, 72);
+        float statsH = program ? 540f : 836f;
+        panelPicture("stats" + program, UiKit.hud("side_stats_panel", 44, 36)).draw(batch, sx + 8, H - 124 - statsH, 504, statsH);
+        String pill = switch (run.difficulty()) {
+            case EASY -> "pill_easy";
+            case NORMAL -> "pill_normal";
+            case HARD -> "pill_hard";
+        };
+        panelPicture(pill, UiKit.hud(pill, 30, 0)).draw(batch, sx + 362, H - 138 - 44, 130, 44);
+        if (!classTest) {
+            float ratio = Math.max(0f, Math.min(1f, run.hp() / (float) StageRun.MAX_HP));
+            panelPicture("hptrack", UiKit.hud("hp_track", 16, 0)).draw(batch, sx + 30, H - 222 - 34, 440, 34);
+            if (ratio > 0.01f) {
+                String fill = ratio > 0.5f ? "hp_fill_green" : ratio > 0.25f ? "hp_fill_yellow" : "hp_fill_red";
+                panelPicture(fill, UiKit.hud(fill, 14, 0)).draw(batch, sx + 30, H - 222 - 34, Math.max(28f, 440f * ratio), 34);
+            }
+            batch.draw(sprite("ui/hud/star_icon.png"), sx + 26, H - 270 - 40, 40, 40);
+        }
+        panelPicture("div", UiKit.hud("side_divider", 20, 0)).draw(batch, sx + 32, H - (classTest ? 340f : 324f) - 6, 440, 6);
+        if (program) {
+            panelPicture("term", UiKit.hud("side_terminal_panel", 44, 36)).draw(batch, sx + 8, H - 672 - 296, 504, 296);
+            batch.draw(sprite("ui/hud/terminal_icon.png"), sx + 26, H - 684 - 38, 38, 38);
+        }
+        if (phase != Phase.RESULT) {
+            boolean pressed = Gdx.input.isTouched() && QUIT_BTN.contains(mouseX, mouseY);
+            String state = pressed ? "pressed" : QUIT_BTN.contains(mouseX, mouseY) ? "hover" : "idle";
+            panelPicture("quit" + state, UiKit.hud("quit_button_" + state, 40, 0)).draw(batch, QUIT_BTN.x - 4,
+                    H - (QUIT_BTN.y + QUIT_BTN.h) - 4 - (pressed ? 3f : 0f), QUIT_BTN.w + 8, QUIT_BTN.h + 8);
+        }
+        batch.end();
+    }
+
+    /** The explanation panel after an answer, with its green play button. */
+    private void drawExplainPictures() {
+        mouseToExplain();
+        batch.setProjectionMatrix(explainMatrix());
+        batch.begin();
+        batch.setColor(Color.WHITE);
+        panelPicture("explain", UiKit.hud("explain_panel", 50, 40)).draw(batch, 60, H - explainTop - 410, 1280, 410);
+        Rect go = explainContinueButton();
+        boolean ready = explainAge > 0.4f;
+        float up = lift(go, ready, LIFT);
+        boolean pressed = ready && Gdx.input.isTouched() && go.contains(mouseX, mouseY);
+        String state = !ready ? "idle" : pressed ? "pressed" : up > 0f ? "hover" : "idle";
+        panelPicture("play" + state, UiKit.hud("play_button_" + state, 34, 0)).draw(batch, go.x - 5,
+                H - (go.y - up + go.h) - 5, go.w + 10, go.h + 10);
+        batch.end();
+        batch.setProjectionMatrix(camera.combined);
+    }
+
+    private void mouseToExplain() {
+        Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
+        float[] p = toExplain(m.x, H - m.y);
+        mouseX = p[0];
+        mouseY = p[1];
+    }
+
+    /** The screen matrix moved right by how far the sidebar has slid out. */
+    private com.badlogic.gdx.math.Matrix4 sidebarMatrix() {
+        float s = Math.max(0f, Math.min(1f, sidebarSlide));
+        float eased = s * s * (3f - 2f * s);
+        return camera.combined.cpy().translate((W - SIDEBAR_X + 30f) * eased, 0f, 0f);
+    }
+
+    private void drawSidebarShapes() {
+        fill(SIDEBAR_X, 0, W - SIDEBAR_X, H, new Color(0.03f, 0.05f, 0.13f, 1f));
+    }
+
     private void drawEncounterShapes() {
-        fill(60, panelTop, 1280, PANEL_H, new Color(0.05f, 0.07f, 0.17f, 0.95f));
-        float ratio = Math.max(0f, timeLeft / flightTime);
-        fill(60, panelTop, 1280 * ratio, 10, ratio > 0.4f ? new Color(0.3f, 0.8f, 0.3f, 1f)
-                : new Color(0.9f, 0.25f, 0.2f, 1f));
         if (!hintShown && !classTest) {
             Rect h = hintButton();
-            buttonFill(h, new Color(0.35f, 0.28f, 0.08f, 1f));
+            buttonFill(h, new Color(0.85f, 0.6f, 0.1f, 1f));
         }
-        Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
-        mouseX = m.x;
-        mouseY = H - m.y;
+        mouseToPanel();
         Color idle = new Color(0.14f, 0.18f, 0.28f, 1f);
         switch (active.kind()) {
             case CHOICE, TRUE_FALSE -> {
@@ -1391,101 +1786,97 @@ public class PlayScreen extends InputAdapter implements Screen {
                     Rect r = lineRect(i);
                     boolean picked = i == pickedLine;
                     float up = lift(r, true, ROW_LIFT);
-                    if (up > 0f) {
-                        fill(r.x + 5, r.y + 6, r.w - 10, r.h, new Color(0f, 0f, 0f, 0.55f));
-                    }
-                    fill(r.x, r.y - up, r.w, r.h, picked ? new Color(0.5f, 0.31f, 0.08f, 1f) : new Color(0.09f, 0.12f, 0.21f, 1f));
-                    fill(r.x, r.y - up, 50, r.h, picked ? new Color(0.8f, 0.5f, 0.12f, 1f) : new Color(0.16f, 0.2f, 0.32f, 1f));
+                    panelButtons.add(new PanelButton(r, picked ? new Color(0.5f, 0.31f, 0.08f, 1f)
+                            : new Color(0.09f, 0.12f, 0.21f, 1f), up, true));
                 }
                 Rect check = bugCheckButton();
-                buttonFill(check, pickedLine < 0 ? new Color(0.14f, 0.16f, 0.22f, 1f) : new Color(0.12f, 0.3f, 0.12f, 1f),
+                buttonFill(check, pickedLine < 0 ? new Color(0.14f, 0.16f, 0.22f, 1f) : new Color(0.15f, 0.6f, 0.28f, 1f),
                         pickedLine >= 0, LIFT);
             }
             case FILL_BLANK -> {
-                Rect box = answerBox();
-                fill(box.x, box.y, box.w, box.h, new Color(0.02f, 0.03f, 0.09f, 1f));
-                fill(box.x, box.y + box.h - 4, box.w, 4, new Color(0.45f, 0.6f, 0.9f, 1f));
                 Rect go = submitButton();
-                buttonFill(go, new Color(0.12f, 0.3f, 0.12f, 1f));
+                buttonFill(go, new Color(0.15f, 0.6f, 0.28f, 1f));
             }
             case ARRANGE -> {
-                fill(90, builtY() - 8, ROW_WIDTH, CHIP_H + 16, new Color(0.02f, 0.03f, 0.09f, 1f));
                 float scale = chipScale();
                 for (Rect r : chipRects(labels(placed), builtY(), scale)) {
-                    buttonFill(r, new Color(0.16f, 0.32f, 0.2f, 1f), true, ROW_LIFT);
+                    buttonFill(r, new Color(0.15f, 0.55f, 0.3f, 1f), true, ROW_LIFT);
                 }
                 for (Rect r : chipRects(labels(remaining()), bankY(), scale)) {
                     buttonFill(r, idle, true, ROW_LIFT);
                 }
                 Rect check = checkButton();
-                buttonFill(check, new Color(0.12f, 0.3f, 0.12f, 1f));
+                buttonFill(check, new Color(0.15f, 0.6f, 0.28f, 1f));
                 Rect clear = clearButton();
-                buttonFill(clear, new Color(0.3f, 0.1f, 0.1f, 1f));
+                buttonFill(clear, new Color(0.75f, 0.15f, 0.18f, 1f));
             }
         }
     }
 
     private void drawSidebarText() {
-        float x = SIDEBAR_X + 20;
-        text(classTest ? "CLASS TEST" : "LESSON " + lesson.number(), x, 30, 2f, new Color(0.9f, 0.75f, 0.3f, 1f));
-        text(lesson.title(), x, 62, 1.2f, new Color(0.75f, 0.8f, 0.95f, 1f));
-        text("Section " + run.currentSectionNumber() + "/" + run.sectionCount()
-                + "    " + run.difficulty(), x, 100, 1.4f, Color.LIGHT_GRAY);
+        float x = SIDEBAR_X + 30;
+        text(classTest ? "CLASS TEST" : "LESSON " + lesson.number(), SIDEBAR_X + 104, 28, 2f, Color.WHITE);
+        text(shorten(lesson.title(), 24), SIDEBAR_X + 104, 72, 1.2f, new Color(0.75f, 0.8f, 0.95f, 1f));
+        text("Section " + run.currentSectionNumber() + "/" + run.sectionCount(), x, 148, 1.5f, Color.WHITE);
+        drawCentered(Face.SANS, run.difficulty().name(), SIDEBAR_X + 362 + 65, 148, 1.2f, Color.WHITE);
+        float codeHeader = classTest ? 356f : 340f;
         if (classTest) {
             updateStanding();
-            text(liveTotal > 0 ? "Rank #" + liveRank + " of " + liveTotal : "Rank --", x, 140, 2.2f, GOLD_TEXT);
+            text(liveTotal > 0 ? "Rank #" + liveRank + " of " + liveTotal : "Rank --", x, 196, 2.2f, GOLD_TEXT);
             text(pointsBehind > 0 ? pointsBehind + " pts behind the next player"
-                    : liveRank == 1 && liveTotal > 1 ? "You are in the lead!" : "", x, 188, 1.3f, Color.LIGHT_GRAY);
-            text("Points " + run.score(), x, 222, 1.7f, new Color(0.7f, 0.9f, 0.55f, 1f));
-            text(run.streak() >= 2 ? "Streak x" + run.streak() : "", x, 256, 1.4f, new Color(1f, 0.6f, 0.2f, 1f));
+                    : liveRank == 1 && liveTotal > 1 ? "You are in the lead!" : "", x, 246, 1.3f, Color.LIGHT_GRAY);
+            text("Points " + run.score(), x, 280, 1.7f, new Color(0.7f, 0.9f, 0.55f, 1f));
+            text(run.streak() >= 2 ? "Streak x" + run.streak() : "", x, 316, 1.4f, new Color(1f, 0.6f, 0.2f, 1f));
         } else {
             text("HP " + run.hp() + "/" + StageRun.MAX_HP, x, 188, 1.3f, Color.WHITE);
-            text("Score " + run.score(), x, 230, 1.5f, new Color(0.7f, 0.9f, 0.55f, 1f));
+            text("Score " + run.score(), x + 50, 280, 1.5f, new Color(0.7f, 0.9f, 0.55f, 1f));
         }
 
         int blocks = run.layout() == null ? 1 : run.layout().blocks();
-        text("CODE BLOCK", x, 290, 1.4f, Color.LIGHT_GRAY);
+        text("CODE BLOCK", x, codeHeader, 1.4f, Color.WHITE);
         if (run.buildsProgram() && blocks > 1) {
-            text("Program " + (run.displayBlock() + 1) + " of " + blocks, x + 250, 292, 1.2f, GOLD_TEXT);
+            text("Program " + (run.displayBlock() + 1) + " of " + blocks, x + 240, codeHeader + 2, 1.2f, GOLD_TEXT);
         }
+        float body = codeHeader + 44f;
         if (run.buildsProgram()) {
             // the program being built: every answered question added its lines, green if right and red if wrong
             List<CodeBlock.Line> lines = run.codeBlock().lines(run.displayBlock());
             if (lines.isEmpty()) {
-                text("(empty)", x, 335, 1.3f, Color.GRAY);
+                text("(empty)", x, body + 3, 1.3f, Color.GRAY);
             }
-            int firstLine = Math.max(0, lines.size() - 14);
+            int firstLine = Math.max(0, lines.size() - 10);
             for (int i = firstLine; i < lines.size(); i++) {
                 CodeBlock.Line l = lines.get(i);
-                float ly = 332 + (i - firstLine) * 24f;
+                float ly = body + (i - firstLine) * 24f;
                 text(Face.MONO, String.valueOf(l.number()), x, ly, 1.0f, new Color(0.45f, 0.5f, 0.65f, 1f));
                 text(Face.MONO, l.text(), x + 34, ly, 1.1f,
                         l.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
             }
-            drawTerminal(x, 690, 965);
+            drawTerminal(x, 694, 960);
         } else {
             List<CodeBlock.Token> tokens = run.codeBlock().tokens();
             if (tokens.isEmpty()) {
-                text("(empty)", x, 335, 1.3f, Color.GRAY);
+                text("(empty)", x, body + 3, 1.3f, Color.GRAY);
             }
-            int first = Math.max(0, tokens.size() - 16);
+            int first = Math.max(0, tokens.size() - 14);
             for (int i = first; i < tokens.size(); i++) {
                 CodeBlock.Token t = tokens.get(i);
-                text(Face.MONO, (t.correct() ? "+ " : "x ") + t.text(), x, 335 + (i - first) * 36f, 1.45f,
+                text(Face.MONO, (t.correct() ? "+ " : "x ") + t.text(), x, body + (i - first) * 36f, 1.45f,
                         t.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
             }
         }
         if (phase != Phase.RESULT) {
-            drawCentered(classTest ? "Leave (you can resume)" : "Quit (progress is saved)", QUIT_BTN.x + QUIT_BTN.w / 2f,
-                    QUIT_BTN.y + 18 - lift(QUIT_BTN), 1.4f, Color.WHITE);
+            boolean over = QUIT_BTN.contains(mouseX, mouseY);
+            drawCentered(classTest ? "Leave (you can resume)" : "Quit (progress is saved)", QUIT_BTN.x + QUIT_BTN.w / 2f + 26f,
+                    QUIT_BTN.y + 17 - (over ? LIFT : 0f), 1.4f, Color.WHITE);
         }
     }
 
     /** The terminal under the code block: what the finished program prints, or the compiler's messages for the mistakes in it. */
     private void drawTerminal(float x, float top, float bottom) {
-        text("TERMINAL", x, top, 1.4f, Color.LIGHT_GRAY);
+        text("TERMINAL", x + 40, top, 1.4f, Color.WHITE);
         List<Terminal.Row> rows = run.terminal();
-        float width = 470f;
+        float width = 440f;
         if (rows.isEmpty()) {
             drawWrapped(Face.SANS, "Finish a program to see its output here.", x, top + 40, 1.1f, new Color(0.55f, 0.6f, 0.78f, 1f), width);
             return;
@@ -1527,7 +1918,7 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     private void drawEncounterText() {
-        text("Tower: " + active.topic().name().replace('_', ' '), 90, panelTop + 25, 1.4f,
+        text("Tower: " + active.topic().name().replace('_', ' '), 110, panelTop + 38, 1.8f,
                 topicColor(active.topic()));
         AnswerKind kind = active.kind();
         Color muted = new Color(0.75f, 0.8f, 0.95f, 1f);
@@ -1537,29 +1928,29 @@ public class PlayScreen extends InputAdapter implements Screen {
             text(Face.SANS, "One line has a mistake. Tap it, then Check.", 735, panelTop + 22, 1.2f,
                     new Color(1f, 0.82f, 0.55f, 1f));
         } else {
-            text(Face.SANS, kind.label() + "  -  " + kind.instruction(), 520, panelTop + 22, 1.2f, muted);
+            text(Face.SANS, kind.label() + "  -  " + kind.instruction(), 470, panelTop + 42, 1.5f, muted);
         }
         int lines = active.prompt().split("\n", -1).length;
         if (active.context() != null) {
             // what the code is for, so a blank like  if (age ___ 18)  has exactly one right answer
-            text(Face.SANS, "Goal: " + shorten(active.context(), 105), 90, panelTop + 46, 1.2f, new Color(0.65f, 0.9f, 1f, 1f));
+            text(Face.SANS, "Goal: " + shorten(active.context(), 80), 90, panelTop + 72, 1.5f, new Color(0.65f, 0.9f, 1f, 1f));
         }
         if (kind != AnswerKind.FIND_BUG) {
-            drawWrapped(faceFor(active), active.prompt(), 90, panelTop + 76, lines <= 5 ? 1.9f : 1.5f, Color.WHITE, 1060f);
+            drawWrapped(faceFor(active), active.prompt(), 90, panelTop + 112, lines <= 3 ? 2.2f : lines <= 5 ? 1.9f : 1.5f, Color.WHITE, 1160f);
         }
         Color gold = new Color(0.95f, 0.85f, 0.45f, 1f);
         if (classTest) {
             // no hints in a class test
         } else if (!hintShown) {
             Rect h = hintButton();
-            drawCentered("Hint", h.x + h.w / 2f, h.y + 13 - lift(h), 1.7f, Color.WHITE);
+            drawCentered("Hint", h.x + h.w / 2f, h.y + 11 - lift(h), 2.0f, Color.WHITE);
         } else if (active.hint() != null) {
             if (kind == AnswerKind.FIND_BUG || kind == AnswerKind.ARRANGE) {
                 // their rows fill the lower panel: arrange has room under its sentence, find the bug under its code lines
                 float hintY = kind == AnswerKind.ARRANGE ? panelTop + 146 : panelTop + 80 + lines * 42f + 10f;
-                text(Face.SANS, "Hint: " + shorten(active.hint(), 100), 90, hintY, 1.15f, gold);
+                text(Face.SANS, "Hint: " + shorten(active.hint(), 90), 90, hintY, 1.4f, gold);
             } else {
-                drawWrapped(Face.SANS, "Hint: " + active.hint(), 90, panelTop + 285, 1.4f, gold, 1160f);
+                drawWrapped(Face.SANS, "Hint: " + active.hint(), 90, panelTop + 280, 1.6f, gold, 1160f);
             }
         }
         switch (kind) {
@@ -1606,14 +1997,14 @@ public class PlayScreen extends InputAdapter implements Screen {
                     // an easy typed answer shows its shape: how it starts and how long it is
                     String shape = "Starts with \"" + active.correctToken().charAt(0) + "\"  -  " + active.correctToken().length()
                             + (active.correctToken().length() == 1 ? " character" : " characters");
-                    text(Face.SANS, shape, box.x, box.y - 26, 1.15f, new Color(0.65f, 0.9f, 1f, 1f));
+                    text(Face.SANS, shape, box.x, box.y - 30, 1.45f, new Color(0.65f, 0.9f, 1f, 1f));
                 }
             }
             case ARRANGE -> {
                 float scale = chipScale();
-                text(Face.SANS, "Your line  (tap a token to take it back)", 90, panelTop + 178, 1.1f,
+                text(Face.SANS, "Your line  (tap a token to take it back)", 90, panelTop + 176, 1.4f,
                         new Color(0.65f, 0.72f, 0.9f, 1f));
-                text(Face.SANS, "Tokens", 90, panelTop + 290, 1.1f, new Color(0.65f, 0.72f, 0.9f, 1f));
+                text(Face.SANS, "Tokens", 90, panelTop + 288, 1.4f, new Color(0.65f, 0.72f, 0.9f, 1f));
                 drawChips(chipRects(labels(placed), builtY(), scale), labels(placed), scale);
                 List<String> left = labels(remaining());
                 drawChips(chipRects(left, bankY(), scale), left, scale);
@@ -1637,12 +2028,10 @@ public class PlayScreen extends InputAdapter implements Screen {
     private void drawExplanation() {
         Challenge c = explainChallenge;
         float y = explainTop;
-        Vector2 m = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
-        mouseX = m.x;
-        mouseY = H - m.y;
+        mouseToExplain();
         boolean timedOut = explainToken == null;
         Color verdict = explainCorrect ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.55f, 0.5f, 1f);
-        text(Face.SANS, explainCorrect ? "Correct!" : timedOut ? "Time ran out" : "Not quite", 90, y + 22, 2.1f, verdict);
+        text(Face.SANS, explainCorrect ? "Correct!" : timedOut ? "Time ran out" : "Not quite", 90, y + 22, 2.7f, verdict);
 
         String right = switch (c.kind()) {
             case FIND_BUG -> {
@@ -1657,23 +2046,23 @@ public class PlayScreen extends InputAdapter implements Screen {
             case ARRANGE -> c.codeChunk() != null ? c.codeChunk() : c.correctToken();
             default -> c.correctToken();
         };
-        text(Face.SANS, "Right answer", 90, y + 76, 1.15f, new Color(0.65f, 0.72f, 0.9f, 1f));
-        text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, right, 90, y + 98, 1.8f, Color.WHITE);
+        text(Face.SANS, "Right answer", 90, y + 84, 1.5f, new Color(0.65f, 0.72f, 0.9f, 1f));
+        text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, right, 90, y + 112, 2.2f, Color.WHITE);
 
-        float next = y + 150;
+        float next = y + 176;
         if (!explainCorrect && !timedOut) {
             String yours = c.kind() == AnswerKind.FIND_BUG ? "line " + explainToken : explainToken;
-            text(Face.SANS, "You answered", 90, next, 1.15f, new Color(0.65f, 0.72f, 0.9f, 1f));
-            text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, shorten(yours, 70), 90, next + 22, 1.6f, verdict);
-            next += 62;
+            text(Face.SANS, "You answered", 90, next, 1.5f, new Color(0.65f, 0.72f, 0.9f, 1f));
+            text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, shorten(yours, 60), 90, next + 28, 1.9f, verdict);
+            next += 76;
         }
-        text(Face.SANS, "Why", 90, next, 1.15f, GOLD_TEXT);
-        drawWrapped(Face.SANS, c.explanationText(), 90, next + 24, 1.5f, Color.WHITE, 1160f);
+        text(Face.SANS, "Why", 90, next, 1.5f, GOLD_TEXT);
+        drawWrapped(Face.SANS, c.explanationText(), 90, next + 32, 1.8f, Color.WHITE, 1160f);
 
-        Rect go = explainContinueButton();
-        drawCentered(Face.SANS, explainAge > 0.4f ? "Continue  (Enter)" : "...", go.x + go.w / 2f,
-                go.y + 15 - lift(go, explainAge > 0.4f, LIFT), 1.6f,
-                explainAge > 0.4f ? Color.WHITE : Color.GRAY);
+        if (explainAge <= 0.4f) {
+            Rect go = explainContinueButton();
+            drawCentered(Face.SANS, "...", go.x + go.w / 2f, go.y + 15, 1.6f, Color.GRAY);
+        }
     }
 
     private static String shorten(String s, int max) {

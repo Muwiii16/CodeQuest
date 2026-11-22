@@ -36,6 +36,16 @@ final class UiKit {
     private UiKit() {
     }
 
+    /** A picture of the question panel kit (assets/ui/q): left/right and top/bottom pixels that stay unstretched. */
+    static Patch q(String name, int leftRight, int topBottom) {
+        return new Patch("ui/q/" + name + ".png", leftRight, leftRight, topBottom, topBottom);
+    }
+
+    /** A picture of the game HUD kit (assets/ui/hud). */
+    static Patch hud(String name, int leftRight, int topBottom) {
+        return new Patch("ui/hud/" + name + ".png", leftRight, leftRight, topBottom, topBottom);
+    }
+
     /** A professor button picture: color is blue, green, red, purple, gold or dark_grey_navy; state is idle, hover or pressed. */
     static Patch proButton(String color, String state) {
         return new Patch("ui/pro/btn_" + color + "_" + state + ".png", 28, 28, 0, 0);

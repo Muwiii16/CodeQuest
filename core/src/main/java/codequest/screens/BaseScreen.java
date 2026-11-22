@@ -441,6 +441,52 @@ public abstract class BaseScreen implements Screen {
         });
     }
 
+    /**
+     * A question with up to three answers: the screen is dimmed until one is pressed (Esc closes it without answering).
+     * {@code onChoice} runs with the index of the pressed answer.
+     */
+    protected void showChoice(String title, String message, String[] answers, java.util.function.IntConsumer onChoice) {
+        closeErrorPopup();
+        Group popup = region();
+        errorPopup = popup;
+        Color accent = new Color(0.95f, 0.65f, 0.15f, 1f);
+        fill(popup, () -> {
+            float w = 1240f;
+            float h = 460f;
+            float x = (VIRTUAL_WIDTH - w) / 2f;
+            float y = (VIRTUAL_HEIGHT - h) / 2f;
+            Image dim = rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, new Color(0f, 0f, 0f, 0.65f));
+            rect(x - 4, y - 4, w + 8, h + 8, new Color(accent.r * 0.6f, accent.g * 0.6f, accent.b * 0.6f, 1f));
+            rect(x, y, w, h, new Color(0.1f, 0.12f, 0.2f, 1f));
+            rect(x, y, w, 10, accent);
+            text(title, x + 44, y + 36, w - 88, 52, 2.1f, Color.WHITE, Align.left).setTouchable(Touchable.disabled);
+            text(message, x + 44, y + 110, w - 88, 170, 1.45f, new Color(0.88f, 0.9f, 0.97f, 1f), Align.topLeft,
+                    PixelFonts.Face.SANS).setWrap(true);
+            float bw = (w - 88 - 24 * (answers.length - 1)) / answers.length;
+            for (int i = 0; i < answers.length; i++) {
+                int index = i;
+                solidButton(answers[i], x + 44 + i * (bw + 24), y + h - 110, bw, 70,
+                        i == 0 ? new Color(0.2f, 0.42f, 0.78f, 1f) : i == 1 ? new Color(0.16f, 0.5f, 0.3f, 1f)
+                                : new Color(0.55f, 0.3f, 0.9f, 1f),
+                        () -> {
+                            closeErrorPopup();
+                            onChoice.accept(index);
+                        });
+            }
+            dim.addListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+                @Override
+                public boolean keyDown(InputEvent event, int keycode) {
+                    if (keycode == com.badlogic.gdx.Input.Keys.ESCAPE) {
+                        closeErrorPopup();
+                        return true;
+                    }
+                    return false;
+                }
+            });
+            stage.setKeyboardFocus(dim);
+        });
+    }
+
     protected void closeErrorPopup() {
         if (errorPopup != null) {
             errorPopup.remove();

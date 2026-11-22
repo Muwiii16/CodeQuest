@@ -30,6 +30,7 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     private long dropArmed = -1;
     private boolean codeArmed;
     private boolean deleteArmed;
+    private volatile ProfessorData.Closure closure = new ProfessorData.Closure(java.util.Set.of(), false);
 
     /** The class as it is now, shared with the Back button so the section screen opens with the saved changes. */
     private final ClassInfo[] current;
@@ -62,7 +63,10 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         termField.setText(cls.term() == null ? "" : cls.term());
         solidButton("Save", 1180, 860, 100, 64, GOOD, this::saveDetails);
         base = mark();
-        load("Loading the class...", () -> data.roster(cls.id()), students -> rebuild(students));
+        load("Loading the class...", () -> {
+            closure = data.closure(cls.id());
+            return data.roster(cls.id());
+        }, students -> rebuild(students));
         if (cls.joinCode() == null || cls.joinCode().isBlank()) {
             // a class opened from somewhere that did not load the code: ask for it
             long classId = cls.id();
@@ -113,7 +117,10 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     }
 
     private void refresh() {
-        load("Updating...", () -> data.roster(cls.id()), this::rebuild);
+        load("Updating...", () -> {
+            closure = data.closure(cls.id());
+            return data.roster(cls.id());
+        }, this::rebuild);
     }
 
     private void rebuild(List<ProfessorData.Student> students) {
@@ -152,6 +159,18 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         if (students.size() > MAX_ROWS) {
             text("+ " + (students.size() - MAX_ROWS) + " more not shown", 90, 780, 1700, 30, 1.3f, MUTED, Align.left);
         }
+        // which grading periods (and the subject) are confirmed complete: certificates wait for this
+        text("Certificates are given only for periods marked Done.", 90, 826, 1100, 30, 1.2f, MUTED, Align.left,
+                PixelFonts.Face.SANS);
+        float bx = 90;
+        for (codequest.data.Period p : codequest.data.Period.values()) {
+            boolean done = closure.isClosed(p);
+            solidButton(p.label() + (done ? ": Done" : ": Open"), bx, 862, 210, 60,
+                    done ? GOOD : BUTTON, () -> toggleClosure(p));
+            bx += 222;
+        }
+        solidButton(closure.subject() ? "Subject: Done" : "Subject: Open", bx, 862, 250, 60,
+                closure.subject() ? GOOD : BUTTON, () -> toggleClosure(null));
         solidButton(deleteArmed ? "Click again: delete the whole class" : "Delete class", 1290, 860, 540, 64,
                 deleteArmed ? new Color(0.7f, 0.15f, 0.15f, 1f) : new Color(0.35f, 0.18f, 0.18f, 1f), this::deleteClass);
         if (deleteArmed) {
@@ -223,6 +242,28 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
     }
 
     /** Switches between self-paced lessons and lessons the professor unlocks one by one. */
+    /** Marks a grading period (null: the whole subject) as complete or open again; certificates wait for it. */
+    private void toggleClosure(codequest.data.Period period) {
+        ProfessorData.Closure now = closure;
+        java.util.Set<codequest.data.Period> periods = new java.util.LinkedHashSet<>(now.periods());
+        boolean subject = now.subject();
+        if (period == null) {
+            subject = !subject;
+        } else if (!periods.remove(period)) {
+            periods.add(period);
+        }
+        ProfessorData.Closure next = new ProfessorData.Closure(periods, subject);
+        load("Saving...", () -> data.saveClosure(cls.id(), next), ok -> {
+            if (!ok) {
+                toast("Could not save. Check your connection.", false);
+                return;
+            }
+            toast(period == null ? (next.subject() ? "Subject marked Done." : "Subject open again.")
+                    : period.label() + (next.isClosed(period) ? " marked Done." : " open again."), true);
+            refresh();
+        });
+    }
+
     private void togglePacing() {
         String next = cls.manual() ? ClassInfo.SELF_PACED : ClassInfo.MANUAL;
         load("Saving...", () -> data.updatePacing(cls.id(), next), ok -> {

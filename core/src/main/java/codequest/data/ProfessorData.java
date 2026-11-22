@@ -142,6 +142,60 @@ public class ProfessorData {
                 + ",\"term\":" + jsonOrNull(term) + ",\"ended\":" + ended + "}") != null;
     }
 
+    /** The professor's answer when making a lesson: is it the last one of its grading period, or of the whole subject? */
+    public enum LastLesson { NOT_LAST, LAST_OF_PERIOD, LAST_OF_SUBJECT }
+
+    /** Which grading periods the professor confirmed as complete, and whether the subject is. Certificates wait for these. */
+    public record Closure(java.util.Set<Period> periods, boolean subject) {
+        public boolean isClosed(Period p) {
+            return periods.contains(p);
+        }
+    }
+
+    /** The class's confirmed-complete periods and subject (nothing is closed when it cannot be read). */
+    public Closure closure(long classId) {
+        java.util.Set<Period> periods = new java.util.LinkedHashSet<>();
+        boolean subject = false;
+        JsonValue rows = SupabaseClient.get("classes?id=eq." + classId + "&select=closed_periods,subject_closed");
+        if (rows != null && rows.size > 0) {
+            JsonValue r = rows.get(0);
+            JsonValue list = r.get("closed_periods");
+            if (list != null && list.isArray()) {
+                for (JsonValue v = list.child; v != null; v = v.next) {
+                    periods.add(Period.fromKey(v.asString()));
+                }
+            }
+            subject = r.getBoolean("subject_closed", false);
+        }
+        return new Closure(periods, subject);
+    }
+
+    /** Saves which periods (and the subject) are confirmed complete. */
+    public boolean saveClosure(long classId, Closure closure) {
+        StringBuilder list = new StringBuilder();
+        for (Period p : Period.values()) {
+            if (closure.isClosed(p)) {
+                list.append(list.length() == 0 ? "" : ",").append('"').append(p.key()).append('"');
+            }
+        }
+        return SupabaseClient.patch("classes?id=eq." + classId,
+                "{\"closed_periods\":[" + list + "],\"subject_closed\":" + closure.subject() + "}") != null;
+    }
+
+    /**
+     * Applies the answer to "is this the last lesson?" for a lesson just made in {@code period}. A lesson added to a
+     * closed period reopens it (and the subject) unless the professor says again that it is the last.
+     */
+    public boolean applyLastLesson(long classId, Period period, LastLesson answer) {
+        Closure now = closure(classId);
+        java.util.Set<Period> periods = new java.util.LinkedHashSet<>(now.periods());
+        periods.remove(period);
+        if (answer != LastLesson.NOT_LAST) {
+            periods.add(period);
+        }
+        return saveClosure(classId, new Closure(periods, answer == LastLesson.LAST_OF_SUBJECT));
+    }
+
     /** Changes how a class's lessons open for students (one after another, or the professor unlocks each one). */
     public boolean updatePacing(long classId, String pacing) {
         return SupabaseClient.patch("classes?id=eq." + classId, "{\"pacing\":\""

@@ -383,6 +383,20 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                     : "Give the lesson a title in the Title box, then save again.");
             return;
         }
+        if (asTest) {
+            saveNow(title, codequest.data.ProfessorData.LastLesson.NOT_LAST);
+            return;
+        }
+        // students get a certificate only once the professor says the period (or subject) is complete
+        showChoice("Is this the last lesson of " + period.label() + "?",
+                "Students earn a badge for every lesson. The " + period.label() + " certificate is given only after you "
+                        + "confirm the last lesson. Not sure yet? Pick the first answer: you can close the period later in "
+                        + "Class management.",
+                new String[] { "Not the last", "Last of " + period.label(), "Last of the subject" },
+                choice -> saveNow(title, codequest.data.ProfessorData.LastLesson.values()[choice]));
+    }
+
+    private void saveNow(String title, codequest.data.ProfessorData.LastLesson lastAnswer) {
         String difficulty = DIFFICULTIES[difficultyIdx];
         String prompt = fullPrompt != null && generated != null ? fullPrompt : promptBox.getText();
         GeneratedLesson draft = generated;
@@ -390,9 +404,13 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         MapTheme look = theme;
         codequest.data.Period savedPeriod = period;
         Set<CTopic> savedTopics = draft != null ? usedTopics : scopeFor(prompt);
+        java.util.concurrent.atomic.AtomicBoolean closureFailed = new java.util.concurrent.atomic.AtomicBoolean();
         load("Saving the lesson...", () -> {
             Optional<Lesson> saved = campaigns.createStage(cls.id(), cls.sectionName(), title, difficulty, adaptive && !test, prompt,
                     savedTopics, test, look, savedPeriod);
+            if (saved.isPresent() && !test && !new codequest.data.ProfessorData().applyLastLesson(cls.id(), savedPeriod, lastAnswer)) {
+                closureFailed.set(true);
+            }
             if (saved.isEmpty() || draft == null) {
                 return saved.map(l -> Map.entry(l, 0)).orElse(null);
             }
@@ -412,6 +430,9 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
             if (saved == null) {
                 toast("Could not save it. Check your connection.", false);
                 return;
+            }
+            if (closureFailed.get()) {
+                toast("The lesson was saved, but its period status was not. Set it in Class management.", false);
             }
             if (draft != null && saved.getValue() < draft.questions().size()) {
                 toast("The lesson was saved, but only " + Math.max(0, saved.getValue()) + " of "
