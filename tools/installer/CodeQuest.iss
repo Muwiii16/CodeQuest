@@ -27,6 +27,9 @@ UninstallDisplayIcon={app}\CodeQuest.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+; the wolf on the welcome and finish pages, the shield in the small header picture (several sizes for sharp display scaling)
+WizardImageFile=wizard_164.bmp,wizard_192.bmp,wizard_246.bmp,wizard_328.bmp
+WizardSmallImageFile=wizard_small_55.bmp,wizard_small_64.bmp,wizard_small_80.bmp,wizard_small_110.bmp
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
