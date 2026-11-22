@@ -734,11 +734,11 @@ public abstract class BaseScreen implements Screen {
         Image focusPicture = null;
         if (kitStyle) {
             // the input box picture; the brighter outline shows while the box has the keyboard
-            Image picture = new Image(UiKit.INPUT.drawable());
+            Image picture = new Image((proKit ? UiKit.b3("input_idle", 40) : UiKit.INPUT).drawable());
             placeTopLeft(picture, x - 6, yFromTop - 4, w + 12, h + 8);
             put(picture);
             picture.setTouchable(Touchable.disabled);
-            focusPicture = new Image(UiKit.INPUT_FOCUS.drawable());
+            focusPicture = new Image((proKit ? UiKit.b3("input_focus", 40) : UiKit.INPUT_FOCUS).drawable());
             placeTopLeft(focusPicture, x - 6, yFromTop - 4, w + 12, h + 8);
             focusPicture.setVisible(false);
             put(focusPicture);

@@ -55,6 +55,36 @@ public abstract class ProfessorScreen extends BaseScreen {
         }
     }
 
+    private static final Color HEADER_ROW = new Color(0.2f, 0.16f, 0.06f, 1f);
+
+    /** Table rows and table headers (drawn as flat rectangles by the screens) become the picture rows of the kit. */
+    @Override
+    protected Image rect(float x, float yFromTop, float w, float h, Color color) {
+        boolean row = color.equals(ROW);
+        if ((row || color.equals(HEADER_ROW)) && w >= 300 && h >= 36 && h <= 120) {
+            Image image = new Image(UiKit.b3(row ? "table_row" : "table_header_row", 40).drawable());
+            placeTopLeft(image, x - 2, yFromTop - 2, w + 4, h + 4);
+            stage.addActor(image);
+            return image;
+        }
+        return super.rect(x, yFromTop, w, h, color);
+    }
+
+    /** A number tile of the kit, tinted by the colour of its value (red, green, gold or blue). */
+    protected Image statTile(float x, float y, float w, float h, Color value) {
+        String tint = switch (UiKit.proColorFor(value)) {
+            case "red" -> "red";
+            case "green" -> "green";
+            case "gold" -> "gold";
+            default -> "blue";
+        };
+        Image image = new Image(UiKit.b3("stat_tile_" + tint, 44).drawable());
+        placeTopLeft(image, x, y, w, h);
+        stage.addActor(image);
+        image.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+        return image;
+    }
+
     protected Image card(float x, float y, float w, float h) {
         if (h < 56 || w < 100) {
             return rect(x, y, w, h, CARD);

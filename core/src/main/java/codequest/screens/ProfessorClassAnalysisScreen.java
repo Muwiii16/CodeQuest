@@ -162,9 +162,9 @@ public class ProfessorClassAnalysisScreen extends ProfessorScreen {
 
     private void kpi(int slot, String caption, String value, Color color, float w) {
         float x = 60 + slot * (w + 20);
-        card(x, 145, w, 105);
-        text(caption, x + 24, 152, w - 40, 30, 1.2f, MUTED, Align.left, PixelFonts.Face.SANS);
-        text(value, x + 24, 184, w - 40, 60, 2.8f, color, Align.left);
+        statTile(x, 145, w, 105, color);
+        text(caption, x + 30, 162, w - 50, 30, 1.2f, MUTED, Align.left, PixelFonts.Face.SANS);
+        text(value, x + 30, 192, w - 50, 54, 2.7f, color, Align.left);
     }
 
     /** The class's numbers for the AI: statistics only, students as S1, S2, ... (names stay here and are put back). */

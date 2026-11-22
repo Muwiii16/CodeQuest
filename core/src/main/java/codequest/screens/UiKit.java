@@ -46,6 +46,11 @@ final class UiKit {
         return new Patch("ui/hud/" + name + ".png", leftRight, leftRight, topBottom, topBottom);
     }
 
+    /** A picture of batch 3 (assets/ui/b3): table rows, input boxes, stat tiles. */
+    static Patch b3(String name, int leftRight) {
+        return new Patch("ui/b3/" + name + ".png", leftRight, leftRight, 0, 0);
+    }
+
     /** A picture of the professor analytics kit (assets/ui/analytics). */
     static Patch analytics(String name, int leftRight, int topBottom) {
         return new Patch("ui/analytics/" + name + ".png", leftRight, leftRight, topBottom, topBottom);

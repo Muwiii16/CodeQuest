@@ -187,9 +187,9 @@ public class ProfessorSubjectAnalysisScreen extends ProfessorScreen {
     private void kpi(int slot, String caption, String value, Color color) {
         float w = 435;
         float x = 60 + slot * (w + 20);
-        card(x, 190, w, 90);
-        text(caption, x + 24, 194, w - 40, 28, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
-        text(value, x + 24, 222, w - 40, 54, 2.6f, color, Align.left);
+        statTile(x, 190, w, 90, color);
+        text(caption, x + 30, 204, w - 50, 28, 1.15f, MUTED, Align.left, PixelFonts.Face.SANS);
+        text(value, x + 30, 230, w - 50, 50, 2.5f, color, Align.left);
     }
 
     /** The subject numbers for the AI: statistics only; the sections are Section 1, 2, ... so no class name is sent. */
