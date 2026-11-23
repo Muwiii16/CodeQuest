@@ -1078,8 +1078,9 @@ public class PlayScreen extends InputAdapter implements Screen {
         return resultButton((feedbackAvailable() ? 1 : 0) + (certificateEligible() ? 1 : 0));
     }
 
+    /** The pill button built into the feedback panel's picture (panel at {@link #AI_X}, {@link #AI_Y}). */
     private Rect aiCloseButton() {
-        return new Rect(W / 2f - 200f, 880, 400, 80);
+        return new Rect(AI_X + 600f, AI_Y + 797f, 440f, 88f);
     }
 
     /** Asks the AI for feedback on this run (once; the answer is kept for the rest of the result screen). */
@@ -1267,12 +1268,14 @@ public class PlayScreen extends InputAdapter implements Screen {
         drawWorldShapes();
         sr.end();
         // the sidebar, shifted to the right while it slides away
-        sr.setProjectionMatrix(sidebarMatrix());
-        sr.begin(ShapeRenderer.ShapeType.Filled);
-        drawSidebarShapes();
-        sr.end();
-        batch.setProjectionMatrix(sidebarMatrix());
-        drawSidebarPictures();
+        if (phase != Phase.RESULT) { // the result screen is a screen of its own: no lesson sidebar behind it
+            sr.setProjectionMatrix(sidebarMatrix());
+            sr.begin(ShapeRenderer.ShapeType.Filled);
+            drawSidebarShapes();
+            sr.end();
+            batch.setProjectionMatrix(sidebarMatrix());
+            drawSidebarPictures();
+        }
         batch.setProjectionMatrix(camera.combined);
         sr.setProjectionMatrix(camera.combined);
         if (phase == Phase.ENCOUNTER) {
@@ -1284,12 +1287,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         sr.begin(ShapeRenderer.ShapeType.Filled);
         if (phase == Phase.RESULT) {
             fill(0, 0, W, H, new Color(0f, 0f, 0f, 0.82f));
-            if (aiOpen) {
-                fill(180, 90, W - 360, 900, new Color(0.05f, 0.07f, 0.17f, 1f));
-                fill(180, 90, W - 360, 8, new Color(0.45f, 0.35f, 0.8f, 1f));
-                Rect close = aiCloseButton();
-                buttonFill(close, new Color(0.3f, 0.1f, 0.1f, 1f));
-            } else {
+            if (!aiOpen) {
                 Rect cont = continueButton();
                 buttonFill(cont, new Color(0.3f, 0.1f, 0.1f, 1f), saveDone, LIFT);
                 if (certificateEligible()) {
@@ -1304,10 +1302,13 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
         sr.end();
 
+        if (phase == Phase.RESULT && aiOpen) {
+            drawAiLayers();
+        }
         batch.begin();
-        if (!(phase == Phase.RESULT && aiOpen)) {
+        if (phase != Phase.RESULT) {
             batch.setProjectionMatrix(sidebarMatrix());
-            drawSidebarText(); // the feedback panel covers the sidebar: its text must not show through
+            drawSidebarText();
             batch.setProjectionMatrix(camera.combined);
         }
         if (phase == Phase.WALKING) {
@@ -2079,18 +2080,167 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     /** The AI's written feedback for this run, in a panel over the result screen. */
     private void drawAiFeedback() {
-        drawCentered("Feedback from your AI tutor", W / 2f, 130, 2.4f, new Color(0.75f, 0.68f, 1f, 1f));
-        if (aiLoading) {
-            drawCentered(Face.SANS, "Writing your feedback...", W / 2f, 420, 2.0f, Color.LIGHT_GRAY);
-        } else if (aiError != null) {
-            drawWrapped(Face.SANS, aiError, 260, 260, 1.7f, new Color(1f, 0.55f, 0.5f, 1f), W - 520);
-        } else if (aiText != null) {
-            drawWrapped(Face.SANS, aiText, 260, 230, 1.7f, Color.WHITE, W - 520);
+        Color cyan = new Color(0.55f, 0.85f, 1f, 1f);
+        drawCentered(Face.SANS, "Feedback from your AI tutor", AI_X + 860f, AI_Y + 76f, 2.5f, Color.WHITE);
+
+        // left card: rank, accuracy, answers
+        float cx = AI_CARD_X + AI_CARD_W / 2f;
+        drawCentered(Face.SANS, shorten(lesson.title(), 26), cx, AI_BODY_Y + 36f, 1.35f, new Color(0.7f, 0.78f, 0.95f, 1f));
+        drawCentered(run.rank().name(), cx, AI_BODY_Y + 82f, 9f, new Color(1f, 0.85f, 0.35f, 1f));
+        drawCentered(Face.SANS, "RANK", cx, AI_BODY_Y + 232f, 1.3f, cyan);
+        int accuracy = (int) Math.round(run.overallAccuracy() * 100);
+        drawCentered(Face.SANS, "Accuracy  " + accuracy + "%", cx, AI_BODY_Y + 262f, 2.1f, Color.WHITE);
+        int right = 0;
+        for (AiFeedback.Item i : feedbackItems) {
+            right += i.correct() ? 1 : 0;
         }
-        drawCentered(Face.SANS, "Written by AI. It can make mistakes.", W / 2f, 825,
-                1.2f, new Color(0.6f, 0.65f, 0.8f, 1f));
+        drawCentered(Face.SANS, right + " of " + feedbackItems.size() + " answers correct", cx, AI_BODY_Y + 342f, 1.4f,
+                new Color(0.75f, 0.82f, 0.95f, 1f));
+
+        // right: what the tutor says
+        text(Face.SANS, "Tutor says", AI_TEXT_X + 58f, AI_BODY_Y + 24f, 1.9f, GOLD_TEXT);
+        if (aiLoading) {
+            String dots = ".".repeat(1 + (int) (System.currentTimeMillis() / 400 % 3));
+            drawCentered(Face.SANS, "Writing your feedback" + dots, AI_TEXT_X + AI_TEXT_W / 2f, AI_BODY_Y + 190f, 2.0f, Color.LIGHT_GRAY);
+        } else if (aiError != null) {
+            drawWrapped(Face.SANS, aiError, AI_TEXT_X + 24f, AI_BODY_Y + 100f, 1.7f, new Color(1f, 0.55f, 0.5f, 1f), AI_TEXT_W - 48f);
+        } else if (aiText != null) {
+            fitAiText();
+            drawWrapped(Face.SANS, aiFitText, AI_TEXT_X + 24f, AI_BODY_Y + 84f, aiFitScale, Color.WHITE, AI_TEXT_W - 48f);
+        }
+        for (AiChip c : aiChips()) {
+            drawCentered(Face.SANS, c.label(), c.x() + c.w() / 2f, AI_CHIP_Y + 8f, 1.3f, Color.WHITE);
+        }
+
+        text(Face.SANS, "Written by AI. It can make mistakes.", AI_X + 195f, AI_Y + 730f, 1.35f, new Color(0.55f, 0.75f, 1f, 1f));
         Rect close = aiCloseButton();
-        drawCentered("Close", close.x + close.w / 2f, close.y + 28 - lift(close), 1.8f, Color.WHITE);
+        drawCentered(Face.SANS, "Close", close.x + close.w / 2f, close.y + 28f, 2.1f, Color.WHITE);
+    }
+
+    private static final float AI_X = 140f;
+    private static final float AI_Y = 60f;
+    private static final float AI_BODY_Y = AI_Y + 205f;      // top of the dark area inside the picture
+    private static final float AI_CARD_X = AI_X + 100f;
+    private static final float AI_CARD_W = 340f;
+    private static final float AI_TEXT_X = AI_X + 480f;
+    private static final float AI_TEXT_W = 1070f;
+    private static final float AI_TEXT_H = 400f;
+    private static final float AI_CHIP_Y = AI_BODY_Y + 405f;
+    private static final int AI_DOT_COLS = 9;
+
+    private record AiChip(String label, float x, float w, boolean allRight) {
+    }
+
+    private String aiFitSource;
+    private String aiFitText = "";
+    private float aiFitScale = 1.7f;
+
+    /** The tutor's words at the biggest size that fits the text box; a very long answer is shortened with "...". */
+    private void fitAiText() {
+        String src = aiText;
+        if (src == null || src == aiFitSource) {
+            return;
+        }
+        float width = AI_TEXT_W - 48f;
+        float maxH = AI_TEXT_H - 100f;
+        for (float scale = 1.7f; scale >= 1.19f; scale -= 0.1f) {
+            layout.setText(font(Face.SANS, scale), src, Color.WHITE, width, com.badlogic.gdx.utils.Align.left, true);
+            if (layout.height <= maxH) {
+                aiFitSource = src;
+                aiFitText = src;
+                aiFitScale = scale;
+                return;
+            }
+        }
+        aiFitScale = 1.2f;
+        String s = src;
+        while (s.length() > 20) {
+            s = s.substring(0, Math.max(0, s.lastIndexOf(' '))).trim();
+            layout.setText(font(Face.SANS, aiFitScale), s + "...", Color.WHITE, width, com.badlogic.gdx.utils.Align.left, true);
+            if (layout.height <= maxH) {
+                break;
+            }
+        }
+        aiFitText = s + "...";
+        aiFitSource = src;
+    }
+
+    private static float aiDotX(int i) {
+        return AI_CARD_X + 30f + (i % AI_DOT_COLS) * 35f;
+    }
+
+    private static float aiDotY(int i) {
+        return AI_BODY_Y + 394f + (i / AI_DOT_COLS) * 34f;
+    }
+
+    /** One chip per topic of this lesson: how many of its questions were right. */
+    private List<AiChip> aiChips() {
+        java.util.Map<String, int[]> byTopic = new java.util.LinkedHashMap<>();
+        for (AiFeedback.Item i : feedbackItems) {
+            int[] n = byTopic.computeIfAbsent(i.topic(), k -> new int[2]);
+            n[0] += i.correct() ? 1 : 0;
+            n[1]++;
+        }
+        List<AiChip> chips = new ArrayList<>();
+        float x = AI_TEXT_X;
+        for (var e : byTopic.entrySet()) {
+            String name = e.getKey().isEmpty() ? "" : e.getKey().charAt(0) + e.getKey().substring(1).toLowerCase().replace('_', ' ');
+            String label = name + "  " + e.getValue()[0] + "/" + e.getValue()[1];
+            layout.setText(font(Face.SANS, 1.3f), label);
+            float w = layout.width + 44f;
+            if (x + w > AI_TEXT_X + AI_TEXT_W) {
+                break;
+            }
+            chips.add(new AiChip(label, x, w, e.getValue()[0] == e.getValue()[1]));
+            x += w + 14f;
+        }
+        return chips;
+    }
+
+    /** The feedback panel's pictures and shapes, under its text: the panel, the rank card, the accuracy bar, answer dots, chips. */
+    private void drawAiLayers() {
+        batch.begin();
+        batch.setColor(Color.WHITE);
+        batch.draw(sprite("ui/hud/ai_panel.png"), AI_X, H - AI_Y - 959f, 1639f, 959f);
+        int accuracy = (int) Math.round(run.overallAccuracy() * 100);
+        String barFill = accuracy >= 70 ? "hp_fill_green" : accuracy >= 40 ? "hp_fill_yellow" : "hp_fill_red";
+        float barX = AI_CARD_X + 30f;
+        float barY = AI_BODY_Y + 310f;
+        panelPicture("aitrack", UiKit.hud("hp_track", 16, 0)).draw(batch, barX, H - barY - 28f, 280f, 28f);
+        panelPicture("ai" + barFill, UiKit.hud(barFill, 14, 0)).draw(batch, barX, H - barY - 28f, Math.max(28f, 280f * accuracy / 100f), 28f);
+        batch.draw(sprite("ui/icons/sparkle_ai.png"), AI_TEXT_X + 12f, H - (AI_BODY_Y + 12f) - 40f, 40f, 40f);
+        batch.end();
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        // the rank card and the text box, as lighter plates on the dark area
+        fill(AI_CARD_X, AI_BODY_Y + 4f, AI_CARD_W, 470f, new Color(0.09f, 0.17f, 0.38f, 0.75f));
+        fill(AI_CARD_X, AI_BODY_Y + 4f, AI_CARD_W, 3f, new Color(0.2f, 0.75f, 1f, 1f));
+        fill(AI_TEXT_X, AI_BODY_Y + 60f, AI_TEXT_W, AI_TEXT_H - 60f, new Color(0.04f, 0.1f, 0.26f, 0.85f));
+        fill(AI_TEXT_X, AI_BODY_Y + 60f, 4f, AI_TEXT_H - 60f, new Color(1f, 0.78f, 0.2f, 1f));
+        for (AiChip c : aiChips()) {
+            Color base = c.allRight() ? new Color(0.1f, 0.45f, 0.25f, 1f) : new Color(0.55f, 0.38f, 0.08f, 1f);
+            fill(c.x(), AI_CHIP_Y, c.w(), 40f, base);
+            fill(c.x(), AI_CHIP_Y, c.w(), 3f, c.allRight() ? new Color(0.4f, 0.95f, 0.6f, 1f) : new Color(1f, 0.8f, 0.3f, 1f));
+        }
+        for (int i = 0; i < Math.min(feedbackItems.size(), AI_DOT_COLS * 3); i++) {
+            boolean ok = feedbackItems.get(i).correct();
+            float dx = aiDotX(i);
+            float dy = aiDotY(i);
+            circle(dx, dy, 14f, ok ? new Color(0.15f, 0.65f, 0.3f, 1f) : new Color(0.8f, 0.22f, 0.22f, 1f));
+            sr.setColor(Color.WHITE);
+            if (ok) {
+                sr.rectLine(dx - 6f, H - dy, dx - 2f, H - dy - 5f, 3f);
+                sr.rectLine(dx - 2f, H - dy - 5f, dx + 7f, H - dy + 6f, 3f);
+            } else {
+                sr.rectLine(dx - 6f, H - dy - 6f, dx + 6f, H - dy + 6f, 3f);
+                sr.rectLine(dx - 6f, H - dy + 6f, dx + 6f, H - dy - 6f, 3f);
+            }
+        }
+        Rect close = aiCloseButton();
+        if (close.contains(mouseX, mouseY)) {
+            fill(close.x + 14f, close.y + 8f, close.w - 28f, close.h - 16f, new Color(1f, 1f, 1f, Gdx.input.isTouched() ? 0.28f : 0.14f));
+        }
+        sr.end();
     }
 
     private void drawResultText() {
