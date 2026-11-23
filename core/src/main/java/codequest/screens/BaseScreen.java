@@ -501,6 +501,11 @@ public abstract class BaseScreen implements Screen {
         });
     }
 
+    /** A small red X button in the top-right corner (x = its left edge, top-left coordinates) that asks before closing the game. */
+    protected Image exitCornerButton(float x, float size) {
+        return solidButton("X", x, 20, size, size, new Color(0.85f, 0.15f, 0.15f, 1f), this::confirmExit);
+    }
+
     /** Asks before closing the game. */
     protected void confirmExit() {
         showChoice("Exit CodeQuest?", "Your progress is already saved.", new String[] { "Stay", "Exit game" },
@@ -637,18 +642,24 @@ public abstract class BaseScreen implements Screen {
         com.badlogic.gdx.scenes.scene2d.utils.Drawable pictureOver = spriteOver;
         com.badlogic.gdx.scenes.scene2d.utils.Drawable pictureDown = spriteDown;
         hit.setUserObject(movers);
+        // a picture button that has its own hover and pressed pictures changes picture instead of rising
+        boolean lifts = !(picture != null && pictureOver != pictureUp);
         hit.addListener(new ClickListener() {
             @Override
             public void enter(InputEvent event, float ex, float ey, int pointer, com.badlogic.gdx.scenes.scene2d.Actor from) {
                 if (!live || pointer != -1) {
                     return;
                 }
-                movers.forEach((a, restY) -> rise(a, restY + HOVER_LIFT));
+                if (lifts) {
+                    movers.forEach((a, restY) -> rise(a, restY + HOVER_LIFT));
+                }
                 if (picture != null) {
                     picture.setDrawable(pictureOver);
                 }
-                shade.clearActions();
-                shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0.55f, HOVER_SECONDS));
+                if (lifts) {
+                    shade.clearActions();
+                    shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0.55f, HOVER_SECONDS));
+                }
                 Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Hand);
             }
 
@@ -657,12 +668,16 @@ public abstract class BaseScreen implements Screen {
                 if (!live || pointer != -1) {
                     return;
                 }
-                movers.forEach((a, restY) -> rise(a, restY));
+                if (lifts) {
+                    movers.forEach((a, restY) -> rise(a, restY));
+                }
                 if (picture != null) {
                     picture.setDrawable(pictureUp);
                 }
-                shade.clearActions();
-                shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0f, HOVER_SECONDS));
+                if (lifts) {
+                    shade.clearActions();
+                    shade.addAction(com.badlogic.gdx.scenes.scene2d.actions.Actions.alpha(0f, HOVER_SECONDS));
+                }
                 Gdx.graphics.setSystemCursor(com.badlogic.gdx.graphics.Cursor.SystemCursor.Arrow);
             }
 

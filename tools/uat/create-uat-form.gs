@@ -36,8 +36,10 @@ function createUatForm() {
   // ---------- Section 2: about you ----------
   form.addPageBreakItem().setTitle("2. About you");
   form.addTextItem()
-    .setTitle("Game username (optional)")
-    .setHelpText("Only so we can match your answers to bugs we see in the game. Leave blank to stay anonymous.");
+    .setTitle("Your tester number")
+    .setHelpText("Example: zz_uat_student07. Use only the tester number your facilitator gave you, never your real name " +
+      "or password. It only lets us match your answers to what we saw in the game.")
+    .setRequired(true);
   form.addMultipleChoiceItem()
     .setTitle("Your course")
     .setChoiceValues(["BSCS", "BSIT", "BSIS", "Other"])

@@ -40,14 +40,15 @@ public class MainMenuScreen extends BaseScreen {
         exitOnEscape();
         // who is signed in: a dark chip with a cyan outline, then the log out button
         Image chip = new Image(UiKit.CHIP.drawable());
-        placeTopLeft(chip, VIRTUAL_WIDTH - 670, 12, 430, 74);
+        placeTopLeft(chip, VIRTUAL_WIDTH - 760, 12, 430, 74);
         stage.addActor(chip);
-        text("Student:  " + username, VIRTUAL_WIDTH - 660, 22, 410, 62, 1.5f, Color.WHITE, Align.center);
-        solidButton("Log out", VIRTUAL_WIDTH - 220, 20, 180, 56, new Color(0.12f, 0.42f, 0.86f, 1f),
+        text("Student:  " + username, VIRTUAL_WIDTH - 750, 22, 410, 62, 1.5f, Color.WHITE, Align.center);
+        solidButton("Log out", VIRTUAL_WIDTH - 310, 20, 180, 56, new Color(0.12f, 0.42f, 0.86f, 1f),
                 () -> {
                     new codequest.data.DatabaseManager().logout();
                     game.setScreen(new LoginScreen(game));
                 });
+        exitCornerButton(VIRTUAL_WIDTH - 106, 56);
     }
 
     /** One menu button: the picture of that name at rest, under the mouse and pressed (assets/ui/menu). */

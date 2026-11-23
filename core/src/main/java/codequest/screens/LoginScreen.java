@@ -96,6 +96,7 @@ public class LoginScreen extends BaseScreen {
             }
         });
 
+        exitCornerButton(VIRTUAL_WIDTH - 106, 56);
         base = mark();
         rebuild();
     }

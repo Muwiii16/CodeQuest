@@ -39,19 +39,22 @@ public abstract class ProfessorScreen extends BaseScreen {
         text("PROFESSOR", 50, 22, 330, 30, 1.3f, AMBER, Align.left);
         text(title, 50, 48, 1100, 50, 2.6f, Color.WHITE, Align.left);
         Image chip = new Image(UiKit.PRO_CHIP.drawable());
-        placeTopLeft(chip, VIRTUAL_WIDTH - 740, 22, 380, 66);
+        // the dashboard also has an exit button in the corner, so its name chip and log out button sit a little further left
+        float shift = backTarget == null ? 90f : 0f;
+        placeTopLeft(chip, VIRTUAL_WIDTH - 740 - shift, 22, 380, 66);
         stage.addActor(chip);
         chip.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
-        text(username, VIRTUAL_WIDTH - 730, 30, 360, 50, 1.5f, Color.WHITE, Align.center);
+        text(username, VIRTUAL_WIDTH - 730 - shift, 30, 360, 50, 1.5f, Color.WHITE, Align.center);
         if (backTarget != null) {
             solidButton("Back", VIRTUAL_WIDTH - 330, 22, 280, 66, BUTTON, backTarget);
         } else {
             exitOnEscape();
-            solidButton("Log out", VIRTUAL_WIDTH - 330, 22, 280, 66, new Color(0.45f, 0.18f, 0.18f, 1f),
+            solidButton("Log out", VIRTUAL_WIDTH - 330 - shift, 22, 280, 66, new Color(0.45f, 0.18f, 0.18f, 1f),
                     () -> {
                         new codequest.data.DatabaseManager().logout();
                         game.setScreen(new LoginScreen(game));
                     });
+            exitCornerButton(VIRTUAL_WIDTH - 116, 66);
         }
     }
 
