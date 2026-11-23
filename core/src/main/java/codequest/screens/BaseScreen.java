@@ -177,6 +177,11 @@ public abstract class BaseScreen implements Screen {
         }
     }
 
+    /** Adds a picture or actor the way the helpers do: into the region being drawn, so it stays under what is drawn after it. */
+    protected void addToScreen(com.badlogic.gdx.scenes.scene2d.Actor actor) {
+        put(actor);
+    }
+
     /** An empty group on the stage (at the origin, so layout coordinates stay absolute) to draw a part of a screen into. */
     protected Group region() {
         Group g = new Group();

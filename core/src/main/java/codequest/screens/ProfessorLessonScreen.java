@@ -212,11 +212,11 @@ public class ProfessorLessonScreen extends ProfessorScreen {
         for (int i = from; i < to; i++) {
             Question q = shown.get(i);
             drawRow(q, y);
-            y += 78;
+            y += 74;
         }
         if (!questions.isEmpty()) {
-            text("Click a question to edit it.     \"+ easy\" or \"+ normal\" adds another difficulty of the same lines.", 820, 1000,
-                    1010, 20, 1.0f, MUTED, Align.center, PixelFonts.Face.SANS);
+            text("Click a question to edit it.     \"+ easy\" or \"+ normal\" adds another difficulty of the same lines.", 820, 968,
+                    1010, 24, 1.15f, new Color(0.8f, 0.86f, 0.96f, 1f), Align.center, PixelFonts.Face.SANS);
         }
     }
 
@@ -224,10 +224,12 @@ public class ProfessorLessonScreen extends ProfessorScreen {
     private void drawRow(Question q, float y) {
         QuestionDraft d = q.draft();
         Color accent = kindColor(d.kind());
-        rect(820, y, 1010, 72, ROW);
-        rect(820, y, 8, 72, accent);
+        rect(820, y, 1010, 68, ROW);
+        rect(820, y, 8, 68, accent);
+        // a dark plate carries the text: the row picture has a bright band that made small text hard to read
+        rect(900, y + 7, 604, 54, new Color(0.02f, 0.05f, 0.16f, 0.9f));
         // the row itself is a button: a click anywhere on it (outside the small buttons) opens the question
-        Image open = rect(820, y, 1010, 72, new Color(0f, 0f, 0f, 0f));
+        Image open = rect(820, y, 1010, 68, new Color(0f, 0f, 0f, 0f));
         open.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float cx, float cy) {
@@ -248,15 +250,19 @@ public class ProfessorLessonScreen extends ProfessorScreen {
                 }
             }
         });
-        text(q.slot() > 0 ? "#" + q.slot() : "-", 836, y, 64, 72, 1.5f, Color.WHITE, Align.center);
-        text(ellipsize(d.prompt(), 40), 912, y + 6, 590, 32, 1.45f, Color.WHITE, Align.left,
-                PixelFonts.faceForPrompt(d.kind(), d.prompt())).setTouchable(Touchable.disabled);
+        text(q.slot() > 0 ? "#" + q.slot() : "-", 836, y, 64, 68, 1.5f, Color.WHITE, Align.center);
+        var promptLabel = text(d.prompt().replace('\n', ' ').strip(), 912, y + 7, 584, 30, 1.4f, Color.WHITE, Align.left,
+                PixelFonts.faceForPrompt(d.kind(), d.prompt()));
+        promptLabel.setEllipsis(true);
+        promptLabel.setTouchable(Touchable.disabled);
         String answer = d.kind() == AnswerKind.FIND_BUG ? "line " + d.correct() : d.correct();
-        text(d.kind().label(), 912, y + 40, 190, 26, 1.1f, accent, Align.left, PixelFonts.Face.SANS);
-        text(CosmeticTopic.label(d.topic()), 1100, y + 40, 100, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.SANS);
-        text(d.difficulty().name().charAt(0) + d.difficulty().name().substring(1).toLowerCase(), 1200, y + 40, 90, 26, 1.1f,
+        Color soft = new Color(0.82f, 0.87f, 0.96f, 1f);
+        text(d.kind().label(), 912, y + 37, 170, 22, 1.1f, accent, Align.left, PixelFonts.Face.SANS);
+        text(CosmeticTopic.label(d.topic()), 1088, y + 37, 100, 22, 1.1f, soft, Align.left, PixelFonts.Face.SANS);
+        text(d.difficulty().name().charAt(0) + d.difficulty().name().substring(1).toLowerCase(), 1190, y + 37, 80, 22, 1.1f,
                 difficultyColor(d.difficulty()), Align.left, PixelFonts.Face.SANS);
-        text("answer:  " + ellipsize(answer, 11), 1285, y + 40, 220, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.MONO);
+        text("answer: " + ellipsize(answer, 10), 1278, y + 37, 222, 22, 1.05f, soft, Align.left, PixelFonts.Face.MONO)
+                .setEllipsis(true);
 
         solidButton("Edit", 1514, y + 12, 96, 48, new Color(0.2f, 0.42f, 0.78f, 1f),
                 () -> game.setScreen(new ProfessorQuestionEditScreen(game, username, cls, lesson, q)));

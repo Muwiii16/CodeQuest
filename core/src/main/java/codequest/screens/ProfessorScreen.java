@@ -67,7 +67,7 @@ public abstract class ProfessorScreen extends BaseScreen {
         if ((row || color.equals(HEADER_ROW)) && w >= 300 && h >= 36 && h <= 120) {
             Image image = new Image(UiKit.b3(row ? "table_row" : "table_header_row", 40).drawable());
             placeTopLeft(image, x - 2, yFromTop - 2, w + 4, h + 4);
-            stage.addActor(image);
+            addToScreen(image);
             return image;
         }
         return super.rect(x, yFromTop, w, h, color);
@@ -83,7 +83,7 @@ public abstract class ProfessorScreen extends BaseScreen {
         };
         Image image = new Image(UiKit.b3("stat_tile_" + tint, 44).drawable());
         placeTopLeft(image, x, y, w, h);
-        stage.addActor(image);
+        addToScreen(image);
         image.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
         return image;
     }
@@ -96,7 +96,7 @@ public abstract class ProfessorScreen extends BaseScreen {
         Image panel = new Image((big ? UiKit.PRO_PANEL : UiKit.PRO_STRIP).drawable());
         float pad = big ? 6 : 4;
         placeTopLeft(panel, x - pad, y - pad, w + pad * 2, h + pad * 2);
-        stage.addActor(panel);
+        addToScreen(panel);
         return panel;
     }
 
@@ -135,7 +135,7 @@ public abstract class ProfessorScreen extends BaseScreen {
     private Image picture(UiKit.Patch patch, float x, float y, float w, float h) {
         Image image = new Image(patch.drawable());
         placeTopLeft(image, x, y, w, h);
-        stage.addActor(image);
+        addToScreen(image);
         image.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
         return image;
     }

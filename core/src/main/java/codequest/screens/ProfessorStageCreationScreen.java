@@ -20,6 +20,9 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextArea;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
@@ -163,17 +166,17 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         }
 
         // lesson or class test: what the professor is making
-        text("Use it as", 90, 575, 400, 28, 1.25f, MUTED, Align.left);
-        solidButton("Lesson", 90, 604, 340, 52, asTest ? BUTTON : new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
+        text("Use it as", 90, 566, 400, 28, 1.25f, MUTED, Align.left);
+        solidButton("Lesson", 90, 594, 340, 52, asTest ? BUTTON : new Color(0.2f, 0.42f, 0.78f, 1f), () -> {
             asTest = false;
             rebuild();
         });
-        solidButton("Class test", 450, 604, 340, 52, asTest ? new Color(0.2f, 0.42f, 0.78f, 1f) : BUTTON, () -> {
+        solidButton("Class test", 450, 594, 340, 52, asTest ? new Color(0.2f, 0.42f, 0.78f, 1f) : BUTTON, () -> {
             asTest = true;
             rebuild();
         });
         text(asTest ? "Class tests only. Hidden from the campaign."
-                : "Appears in the campaign and works as a class test.", 90, 664, 700, 28, 1.1f,
+                : "Appears in the campaign and works as a class test.", 90, 652, 700, 28, 1.1f,
                 MUTED, Align.left, PixelFonts.Face.SANS);
 
         if (!followUps.isEmpty()) {
@@ -213,39 +216,75 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
                 880, 580, 960, 115, 1.2f, MUTED, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
     }
 
-    /** The AI's draft: its program on the left, its questions (in the order the student meets them) on the right. */
+    /**
+     * The AI's draft: its program on the left, its questions (in the order the student meets them) on the right, then
+     * the note about what the AI understood. It sits in a scroll pane (mouse wheel or the bar at the right), so a long
+     * program or note never runs out of the panel.
+     */
     private void drawGenerated() {
-        text(generated.title(), 880, 205, 960, 34, 1.5f, Color.WHITE, Align.left, PixelFonts.Face.SANS);
-        text("Program the lesson builds", 880, 245, 500, 28, 1.1f, MUTED, Align.left, PixelFonts.Face.SANS);
-        float y = 275;
-        int shown = 0;
+        PixelFonts.Face sans = PixelFonts.Face.SANS;
+        Color head = new Color(0.8f, 0.86f, 0.96f, 1f);
+        Table t = new Table();
+        t.top().left();
+        t.add(readable(generated.title(), 1.9f, Color.WHITE, sans)).colspan(2).left().padBottom(12).row();
+        t.add(readable("Program the lesson builds", 1.3f, head, sans)).left().width(520).padBottom(8);
+        t.add(readable(generated.questions().size() + " questions, in order", 1.3f, head, sans)).left().width(400)
+                .padBottom(8).row();
+
+        StringBuilder code = new StringBuilder();
         for (String raw : generated.program().split("\n", -1)) {
-            if (raw.isBlank()) {
-                continue;
+            if (!raw.isBlank()) {
+                code.append(raw.stripTrailing()).append('\n');
             }
-            if (shown == 16) {
-                text("...", 880, y, 500, 22, 1.0f, MUTED, Align.left, PixelFonts.Face.MONO);
-                break;
-            }
-            text(raw.stripTrailing(), 880, y, 520, 22, 1.0f, new Color(0.75f, 0.95f, 0.75f, 1f), Align.left,
-                    PixelFonts.Face.MONO);
-            y += 22;
-            shown++;
         }
-        text(generated.questions().size() + " questions, in order", 1430, 245, 410, 28, 1.1f, MUTED, Align.left,
-                PixelFonts.Face.SANS);
-        y = 275;
+        Label codeLabel = readable(code.toString().stripTrailing(), 1.15f, new Color(0.8f, 0.97f, 0.8f, 1f),
+                PixelFonts.Face.MONO);
+        Table questions = new Table();
+        questions.top().left();
         int n = 1;
         for (QuestionDraft d : generated.questions()) {
-            text(n++ + "  " + d.kind().label() + "  (" + d.topic().name().replace('_', ' ').toLowerCase() + ")", 1430, y, 410,
-                    26, 1.0f, Color.WHITE, Align.left, PixelFonts.Face.SANS);
-            y += 28;
+            Label q = readable(n++ + "   " + d.kind().label() + "  (" + d.topic().name().replace('_', ' ').toLowerCase() + ")",
+                    1.25f, Color.WHITE, sans);
+            q.setWrap(true);
+            questions.add(q).width(390).left().padBottom(8).row();
         }
-        text("Draft. Save it, then edit questions in the editor.", 880, 632, 960, 28, 1.15f, AMBER,
-                Align.left, PixelFonts.Face.SANS);
+        t.add(codeLabel).left().top().width(520).padRight(10);
+        t.add(questions).left().top().width(400).row();
+
+        t.add(readable("Draft. Save it, then edit questions in the editor.", 1.3f, AMBER, sans)).colspan(2).left().padTop(16)
+                .row();
         if (!scopeNote.isEmpty()) {
-            text("The AI understood:  " + scopeNote, 880, 662, 960, 34, 1.05f, MUTED, Align.left, PixelFonts.Face.SANS).setWrap(true);
+            Label note = readable("The AI understood:  " + scopeNote, 1.2f, new Color(0.86f, 0.9f, 0.98f, 1f), sans);
+            note.setWrap(true);
+            t.add(note).colspan(2).left().width(920).padTop(8).padBottom(10).row();
         }
+
+        ScrollPane pane = new ScrollPane(t, scrollStyle());
+        pane.setFadeScrollBars(false);
+        pane.setScrollingDisabled(true, false);
+        pane.setFlickScroll(false);
+        pane.setOverscroll(false, false);
+        placeTopLeft(pane, 880, 205, 950, 485);
+        stage.addActor(pane);
+    }
+
+    /** A label in a smooth readable face, for use inside a table. */
+    private Label readable(String text, float scale, Color color, PixelFonts.Face face) {
+        Label label = new Label(text, new Label.LabelStyle(PixelFonts.font(face, scale), color));
+        label.setAlignment(Align.topLeft);
+        return label;
+    }
+
+    /** A slim scroll bar: a faint track and a bright knob. */
+    private ScrollPane.ScrollPaneStyle scrollStyle() {
+        ScrollPane.ScrollPaneStyle style = new ScrollPane.ScrollPaneStyle();
+        TextureRegionDrawable track = new TextureRegionDrawable(new TextureRegion(solidTexture(new Color(1f, 1f, 1f, 0.12f))));
+        track.setMinWidth(14);
+        TextureRegionDrawable knob = new TextureRegionDrawable(new TextureRegion(solidTexture(new Color(0.35f, 0.7f, 1f, 0.95f))));
+        knob.setMinWidth(14);
+        style.vScroll = track;
+        style.vScrollKnob = knob;
+        return style;
     }
 
     private void generate() {
@@ -302,7 +341,19 @@ public class ProfessorStageCreationScreen extends ProfessorScreen {
         for (int i = 0; i < followUps.size(); i++) {
             qs.append(i + 1).append(".  ").append(followUps.get(i)).append("\n\n");
         }
-        text(qs.toString().trim(), 880, 255, 940, 230, 1.4f, Color.WHITE, Align.topLeft, PixelFonts.Face.SANS).setWrap(true);
+        // long questions scroll inside their box instead of running into the answer box below
+        Label asked = readable(qs.toString().trim(), 1.4f, Color.WHITE, PixelFonts.Face.SANS);
+        asked.setWrap(true);
+        Table askedTable = new Table();
+        askedTable.top().left();
+        askedTable.add(asked).width(910).left().top();
+        ScrollPane askedPane = new ScrollPane(askedTable, scrollStyle());
+        askedPane.setFadeScrollBars(false);
+        askedPane.setScrollingDisabled(true, false);
+        askedPane.setFlickScroll(false);
+        askedPane.setOverscroll(false, false);
+        placeTopLeft(askedPane, 880, 250, 950, 235);
+        stage.addActor(askedPane);
         text("Your answers (one line per question is fine)", 880, 495, 940, 26, 1.1f, MUTED, Align.left, PixelFonts.Face.SANS);
         answersBox = textArea("e.g. 1. for and while loops   2. no "
                 + (codequest.content.Language.fromKey(cls.language()) == codequest.content.Language.CPP ? "cin" : "scanf")
