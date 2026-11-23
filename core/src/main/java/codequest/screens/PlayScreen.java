@@ -269,7 +269,8 @@ public class PlayScreen extends InputAdapter implements Screen {
         DatabaseManager db = new DatabaseManager();
         LoadingScreen.open(game, "Loading the lesson...", () -> {
             Lesson l = lesson != null ? lesson
-                    : new codequest.data.CampaignData().lesson(testSession.stageId()).orElseThrow();
+                    : new codequest.data.CampaignData().lesson(testSession.stageId()).orElseThrow(() -> new LoadingScreen.Failure(
+                            "The lesson for this test could not be found. Ask your professor to check that it still exists."));
             return Map.entry(l, PlayData.fetch(db, username, l));
         }, loaded -> game.setScreen(new PlayScreen(game, username, loaded.getKey(), testSession, resume,
                 loaded.getValue())), onFail);
