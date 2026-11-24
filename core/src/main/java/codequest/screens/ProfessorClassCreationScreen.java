@@ -58,8 +58,12 @@ public class ProfessorClassCreationScreen extends ProfessorScreen {
         // ── students ──
         card(980, 140, 880, 880);
         text("Students in this class", 1010, 155, 700, 40, 2f, AMBER, Align.left);
-        studentField = textField("Student username", false, 1010, 215, 560, 64);
+        studentField = textField("Search name or student no.", false, 1010, 215, 560, 64);
         solidButton("Add", 1590, 215, 240, 64, GOOD, this::addStudent);
+        attachSuggest(studentField, 1010, 283, 820,
+                typed -> data.searchStudents(typed).stream().map(h -> new Suggestion<>(h.title(), h.detail(),
+                        students.contains(h.username()), h)).toList(),
+                ProfessorData.StudentHit::username, hit -> { });
         base = mark();
         rebuild();
     }

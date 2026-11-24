@@ -17,7 +17,64 @@ import java.util.Optional;
  */
 public class ProfessorData {
 
-    public record Student(long id, String username, String fullName) {
+    /** A student as a professor sees them. The student number (from the school email) tells two people of the same name apart. */
+    public record Student(long id, String username, String fullName, String studentNo) {
+        public Student(long id, String username, String fullName) {
+            this(id, username, fullName, null);
+        }
+
+        /** "Maria Santos" with the student number when there is one: how the student is named in lists. */
+        public String label() {
+            String base = fullName == null || fullName.isBlank() ? username : fullName;
+            return studentNo == null || studentNo.isBlank() ? base : base + "  (" + studentNo + ")";
+        }
+    }
+
+    /** One suggestion of the add-student search. */
+    public record StudentHit(long id, String username, String fullName, String studentNo) {
+        public String title() {
+            return fullName == null || fullName.isBlank() ? username : fullName;
+        }
+
+        public String detail() {
+            return (studentNo == null || studentNo.isBlank() ? "" : studentNo + "  -  ") + "@" + username;
+        }
+    }
+
+    /** Students whose name, username or student number match what the professor typed (at most 8; needs 2 letters). */
+    public List<StudentHit> searchStudents(String typed) {
+        List<StudentHit> out = new ArrayList<>();
+        String q = typed == null ? "" : typed.trim();
+        if (q.length() < 2) {
+            return out;
+        }
+        JsonValue rows = SupabaseClient.post("rpc/app_student_search", "{\"p_q\":\"" + SupabaseClient.jsonEscape(q) + "\"}");
+        if (rows != null && rows.isArray()) {
+            for (JsonValue r : rows) {
+                out.add(new StudentHit(r.getLong("id"), r.getString("username", "?"), r.getString("full_name", null),
+                        r.getString("student_no", null)));
+            }
+        }
+        return out;
+    }
+
+    /** Student numbers of students the professor already teaches, by profile id. */
+    static Map<Long, String> studentNumbers(List<Long> ids) {
+        Map<Long, String> out = new HashMap<>();
+        if (ids.isEmpty()) {
+            return out;
+        }
+        StringBuilder list = new StringBuilder();
+        for (long id : ids) {
+            list.append(list.length() == 0 ? "" : ",").append(id);
+        }
+        JsonValue rows = SupabaseClient.post("rpc/app_student_numbers", "{\"p_ids\":[" + list + "]}");
+        if (rows != null && rows.isArray()) {
+            for (JsonValue r : rows) {
+                out.put(r.getLong("id"), r.getString("student_no", null));
+            }
+        }
+        return out;
     }
 
     /** One student's result on one lesson, with their best class-test result for it if they took one. */
@@ -319,10 +376,12 @@ public class ProfessorData {
         }
         // real names come from the server only for the professor who owns the class
         java.util.Map<Long, String> names = DatabaseManager.fullNames(ids);
+        java.util.Map<Long, String> numbers = studentNumbers(ids);
         for (JsonValue r : rows) {
             JsonValue s = r.get("student");
             if (s != null) {
-                out.add(new Student(s.getLong("id"), s.getString("username", "?"), names.get(s.getLong("id"))));
+                out.add(new Student(s.getLong("id"), s.getString("username", "?"), names.get(s.getLong("id")),
+                        numbers.get(s.getLong("id"))));
             }
         }
         out.sort((a, b) -> a.username().compareToIgnoreCase(b.username()));

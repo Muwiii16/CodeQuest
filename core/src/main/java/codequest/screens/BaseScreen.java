@@ -328,6 +328,130 @@ public abstract class BaseScreen implements Screen {
         });
     }
 
+    // ── search suggestions under a text field (a dropdown that fills in while the user types) ──
+
+    /** One line of a suggestion dropdown. {@code taken} lines are shown dimmed and cannot be picked. */
+    protected record Suggestion<T>(String title, String detail, boolean taken, T value) {
+    }
+
+    private Group suggestBox;
+    private com.badlogic.gdx.utils.Timer.Task suggestTask;
+    private int suggestSeq;
+    private boolean suggestMute;
+
+    /**
+     * Shows up to 8 suggestions under {@code field} while the user types (after a short pause, and only from 2 letters).
+     * {@code search} runs on a background thread. Picking a line puts {@code pickedText} into the field and calls
+     * {@code onPick}. The box sits at {@code x}, {@code yFromTop} and is {@code w} wide; clicking anywhere else closes it.
+     */
+    protected <T> void attachSuggest(TextField field, float x, float yFromTop, float w,
+            java.util.function.Function<String, List<Suggestion<T>>> search,
+            java.util.function.Function<T, String> pickedText, Consumer<T> onPick) {
+        field.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (suggestMute) {
+                    return;
+                }
+                String typed = field.getText().trim();
+                int seq = ++suggestSeq;
+                if (suggestTask != null) {
+                    suggestTask.cancel();
+                }
+                if (typed.length() < 2) {
+                    hideSuggest();
+                    return;
+                }
+                suggestTask = com.badlogic.gdx.utils.Timer.schedule(new com.badlogic.gdx.utils.Timer.Task() {
+                    @Override
+                    public void run() {
+                        IO.submit(() -> {
+                            List<Suggestion<T>> found;
+                            try {
+                                found = search.apply(typed);
+                            } catch (Throwable t) {
+                                found = List.of();
+                            }
+                            List<Suggestion<T>> shown = found;
+                            Gdx.app.postRunnable(() -> {
+                                if (!disposed && seq == suggestSeq) {
+                                    showSuggest(field, shown, x, yFromTop, w, pickedText, onPick);
+                                }
+                            });
+                        });
+                    }
+                }, 0.3f);
+            }
+        });
+        // a click anywhere but on the box (or in the field) closes it
+        stage.addCaptureListener(new com.badlogic.gdx.scenes.scene2d.InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float px, float py, int pointer, int button) {
+                Actor hit = event.getTarget();
+                if (suggestBox != null && suggestBox.hasParent() && hit != null && !hit.isDescendantOf(suggestBox) && hit != field) {
+                    hideSuggest();
+                }
+                return false;
+            }
+        });
+    }
+
+    private void hideSuggest() {
+        if (suggestBox != null) {
+            suggestBox.remove();
+        }
+    }
+
+    private <T> void showSuggest(TextField field, List<Suggestion<T>> items, float x, float yFromTop, float w,
+            java.util.function.Function<T, String> pickedText, Consumer<T> onPick) {
+        hideSuggest();
+        if (items.isEmpty() || stage.getKeyboardFocus() != field) {
+            return;
+        }
+        if (suggestBox == null) {
+            suggestBox = new Group();
+        }
+        float rowH = 60f;
+        fill(suggestBox, () -> {
+            rect(x - 3, yFromTop - 3, w + 6, items.size() * rowH + 6, new Color(0.45f, 0.62f, 0.95f, 1f));
+            for (int i = 0; i < items.size(); i++) {
+                Suggestion<T> s = items.get(i);
+                float y = yFromTop + i * rowH;
+                rect(x, y, w, rowH - 2, s.taken() ? new Color(0.07f, 0.08f, 0.13f, 1f) : new Color(0.09f, 0.12f, 0.24f, 1f));
+                Color main = s.taken() ? new Color(0.5f, 0.52f, 0.6f, 1f) : Color.WHITE;
+                text(s.title(), x + 16, y + 4, w * 0.5f, rowH - 8, 1.5f, main, Align.left, PixelFonts.Face.SANS).setEllipsis(true);
+                text(s.taken() ? "already added" : s.detail(), x + w * 0.5f, y + 4, w * 0.5f - 16, rowH - 8, 1.2f,
+                        new Color(0.62f, 0.7f, 0.9f, 1f), Align.right, PixelFonts.Face.SANS).setEllipsis(true);
+                if (!s.taken()) {
+                    Image hover = rect(x, y, w, rowH - 2, Color.WHITE);
+                    hover.getColor().a = 0f;
+                    hover.addListener(new ClickListener() {
+                        @Override
+                        public void enter(InputEvent event, float px, float py, int pointer, Actor fromActor) {
+                            hover.getColor().a = 0.14f;
+                        }
+
+                        @Override
+                        public void exit(InputEvent event, float px, float py, int pointer, Actor toActor) {
+                            hover.getColor().a = 0f;
+                        }
+
+                        @Override
+                        public void clicked(InputEvent event, float px, float py) {
+                            suggestMute = true;
+                            field.setText(pickedText.apply(s.value()));
+                            field.setCursorPosition(field.getText().length());
+                            suggestMute = false;
+                            hideSuggest();
+                            onPick.accept(s.value());
+                        }
+                    });
+                }
+            }
+        });
+        stage.addActor(suggestBox); // last on the stage: above everything drawn so far
+    }
+
     /** Same, for work whose result is not needed. */
     protected void run(String message, Runnable work, Runnable done) {
         load(message, () -> {

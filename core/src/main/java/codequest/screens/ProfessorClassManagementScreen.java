@@ -46,8 +46,12 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         this.cls = box[0];
 
         card(60, 140, 1800, 880);
-        addField = textField("Student username to add", false, 90, 165, 700, 64);
+        addField = textField("Search name, username or student no.", false, 90, 165, 700, 64);
         solidButton("Add student", 810, 165, 280, 64, GOOD, this::add);
+        attachSuggest(addField, 90, 233, 700,
+                typed -> data.searchStudents(typed).stream().map(h -> new Suggestion<>(h.title(), h.detail(),
+                        inClass.contains(h.username().toLowerCase()), h)).toList(),
+                ProfessorData.StudentHit::username, hit -> { });
 
         // class details and the danger zone sit at the bottom
         rect(90, 800, 1740, 3, new Color(1f, 1f, 1f, 0.12f));
@@ -123,7 +127,11 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         }, this::rebuild);
     }
 
+    /** Usernames already in the class (lower case): the search shows them as added. */
+    private volatile java.util.Set<String> inClass = java.util.Set.of();
+
     private void rebuild(List<ProfessorData.Student> students) {
+        inClass = students.stream().map(st -> st.username().toLowerCase()).collect(java.util.stream.Collectors.toSet());
         clearFrom(base);
         drawJoinCode();
         text(students.size() + (students.size() == 1 ? " student" : " students") + " in this class", 90, 250, 400, 40, 1.8f,
@@ -141,14 +149,14 @@ public class ProfessorClassManagementScreen extends ProfessorScreen {
         solidButton(cls.manual() ? "Lessons: manual unlock" : "Lessons: self-paced", 1560, 245, 270, 46,
                 cls.manual() ? new Color(0.5f, 0.33f, 0.1f, 1f) : BUTTON, this::togglePacing);
         if (students.isEmpty()) {
-            text("Nobody is enrolled yet. Add students by their username.", 90, 305, 1700, 40, 1.6f, MUTED, Align.left);
+            text("Nobody is enrolled yet. Search a student above by name, username or student number.", 90, 305, 1700, 40, 1.6f, MUTED, Align.left);
         }
         for (int i = 0; i < Math.min(students.size(), MAX_ROWS); i++) {
             ProfessorData.Student s = students.get(i);
             float y = 295 + i * 62;
             rect(90, y, 1740, 54, ROW);
             text(s.username(), 110, y, 500, 54, 1.7f, Color.WHITE, Align.left);
-            text(s.fullName() == null ? "" : s.fullName(), 640, y, 620, 54, 1.5f, MUTED, Align.left).setEllipsis(true);
+            text(s.label(), 640, y, 620, 54, 1.5f, MUTED, Align.left, PixelFonts.Face.SANS).setEllipsis(true);
             solidButton("Analysis", 1290, y + 4, 170, 46, new Color(0.2f, 0.42f, 0.78f, 1f),
                     () -> game.setScreen(new ProfessorStudentAnalysisScreen(game, username, cls, s,
                             () -> game.setScreen(new ProfessorClassManagementScreen(game, username, cls)))));
