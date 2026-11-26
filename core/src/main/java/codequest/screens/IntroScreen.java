@@ -85,12 +85,6 @@ public class IntroScreen extends BaseScreen {
         prompt.getColor().a = 0f;
         stage.addActor(prompt);
 
-        Label note = new Label("work in progress - more art coming soon",
-                new Label.LabelStyle(PixelFonts.forScale(1.6f, true), new Color(1f, 1f, 1f, 0.9f)));
-        note.pack();
-        placeTopLeft(note, (VIRTUAL_WIDTH - note.getWidth()) / 2f, 1010f, note.getWidth(), note.getHeight());
-        stage.addActor(note);
-
         tasks = Assets.tasks();
 
         stage.addListener(new InputListener() {
