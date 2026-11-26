@@ -1,5 +1,6 @@
 package codequest.session;
 
+import codequest.content.Language;
 import codequest.content.ProgramLayout;
 
 import java.util.ArrayList;
@@ -8,7 +9,7 @@ import java.util.List;
 /**
  * What the terminal shows for a finished program: the compiler's messages when the student's answers broke the code,
  * otherwise what the program prints. The messages and the sample output are written ahead of time with the lesson;
- * nothing is compiled or run, and no C is executed.
+ * nothing is compiled or run, and no code is executed.
  */
 public final class Terminal {
 
@@ -29,10 +30,11 @@ public final class Terminal {
         return message.trim().toLowerCase().startsWith("warning");
     }
 
-    /** The terminal for one program of the lesson, as the student's answers left it. */
-    public static List<Row> run(CodeBlock block, ProgramLayout layout, int program) {
+    /** The terminal for one program of the lesson, as the student's answers left it, with the language's own compiler. */
+    public static List<Row> run(CodeBlock block, ProgramLayout layout, int program, Language language) {
+        String file = language == Language.CPP ? "main.cpp" : "main.c";
         List<Row> rows = new ArrayList<>();
-        rows.add(new Row("$ gcc main.c -o main", Kind.COMMAND));
+        rows.add(new Row("$ " + (language == Language.CPP ? "g++ " : "gcc ") + file + " -o main", Kind.COMMAND));
         boolean failed = false;
         boolean changedSilently = false;
         int shown = 0;
@@ -51,7 +53,7 @@ public final class Terminal {
             int line = t.startLine() + offset;
             boolean warning = isWarning(t.error());
             failed |= !warning;
-            rows.add(new Row("main.c:" + line + ": " + t.error().trim(), warning ? Kind.WARNING : Kind.ERROR));
+            rows.add(new Row(file + ":" + line + ": " + t.error().trim(), warning ? Kind.WARNING : Kind.ERROR));
             List<String> code = new ArrayList<>();
             for (String raw : t.text().split("\n")) {
                 if (!raw.isBlank()) {

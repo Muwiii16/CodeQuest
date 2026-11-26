@@ -104,6 +104,26 @@ class TerminalScopeTest {
     }
 
     @Test
+    void aCppLessonShowsTheCppCompilerAndFile() {
+        Challenge a = new Challenge("a", CTopic.SYNTAX, Difficulty.NORMAL, "int main() {", "x", List.of("y"), null, AnswerKind.TRUE_FALSE,
+                List.of(), "int main() {", null).withErrorText("");
+        Challenge close = new Challenge("c", CTopic.SYNTAX, Difficulty.NORMAL, "}", "x", List.of("y"), null, AnswerKind.TRUE_FALSE,
+                List.of(), "}", null);
+        String program = "int main() {\nprintf(\"A\");\n}";
+        StageRun run = runOf(program, "A", List.of(a.withSlot(1), semicolon().withSlot(2), close.withSlot(3)));
+        run.useLanguage(Language.CPP);
+        run.nextChallenge();
+        run.answer("x", 0f);
+        run.nextChallenge();
+        run.answer(":", 0f);
+        run.nextChallenge();
+        run.answer("x", 0f);
+        List<Terminal.Row> rows = run.terminal();
+        assertEquals("$ g++ main.cpp -o main", rows.get(0).text());
+        assertTrue(rows.stream().anyMatch(r -> r.text().startsWith("main.cpp:2: ")), rows.toString());
+    }
+
+    @Test
     void aFinishedProgramShowsItsOutputAndAWrongAnswerShowsTheCompilerError() {
         Challenge a = new Challenge("a", CTopic.SYNTAX, Difficulty.NORMAL, "int main() {", "x", List.of("y"), null, AnswerKind.TRUE_FALSE,
                 List.of(), "int main() {", null).withErrorText("");

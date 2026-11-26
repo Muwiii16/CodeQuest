@@ -30,6 +30,7 @@ import codequest.game.TowerPlacement;
 import codequest.game.TowerSlots;
 import codequest.screens.PixelFonts.Face;
 import codequest.session.CodeBlock;
+import codequest.content.CodeSnippet;
 import codequest.session.SectionResult;
 import codequest.session.Terminal;
 import codequest.session.StageRun;
@@ -156,6 +157,9 @@ public class PlayScreen extends InputAdapter implements Screen {
     private volatile String aiError;
     private volatile boolean aiLoading;
     private boolean aiOpen;
+    private String snippetProgram;
+    private List<String> snippetChunks;
+    private CodeSnippet snippet;
 
     // class test only: live standings
     private record Live(List<ClassTestData.Participant> participants, String status) {
@@ -316,6 +320,8 @@ public class PlayScreen extends InputAdapter implements Screen {
             List<String> chunks = new ArrayList<>();
             byProgram.slots().forEach(c -> chunks.add(c.codeChunk()));
             programLayout = ProgramLayout.of(programText, outputsText, chunks);
+            snippetProgram = programText;
+            snippetChunks = chunks;
             stage = ProgramChallengeProvider.stageFor(lesson.title(), "map" + layout, byProgram.slots());
         } else {
             stage = DefaultStages.forNumber(layout);
@@ -332,6 +338,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 provider, lesson.adaptive());
         if (programLayout != null) {
             run.useLayout(programLayout);
+            run.useLanguage(language);
         }
         applyLook(data);
 
@@ -621,6 +628,9 @@ public class PlayScreen extends InputAdapter implements Screen {
         flightTime = StageRun.flightSeconds(active, run.difficulty());
         timeLeft = flightTime;
         hintShown = false;
+        // the sidebar with the code slides away during a question, so a true or false statement brings its code along
+        snippet = active.kind() == AnswerKind.TRUE_FALSE
+                ? CodeSnippet.of(snippetProgram, snippetChunks, answers.size(), active.codeChunk(), SNIPPET_LINES) : null;
 
         TowerSpot tower = towers.get(towerIdx);
         Vector2 avatar = pointAt(distance);
@@ -1121,7 +1131,14 @@ public class PlayScreen extends InputAdapter implements Screen {
 
     // find the bug: one tappable row per line of code
     private Rect lineRect(int i) {
-        return new Rect(90, panelTop + 80 + i * 42f, 1040, 38);
+        float top = panelTop + (active.context() != null && !active.context().isBlank() ? 104 : 82);
+        float pitch = Math.min(42f, (bugRowsBottom() - top) / Math.max(1, options.size()));
+        return new Rect(90, top + i * pitch, 1040, pitch - 4f);
+    }
+
+    /** Where the find-the-bug rows must end: higher once a hint needs the line under them. */
+    private float bugRowsBottom() {
+        return panelTop + (!classTest && hintShown && active.hint() != null ? 380 : 432);
     }
 
     private Rect bugCheckButton() {
@@ -1201,8 +1218,14 @@ public class PlayScreen extends InputAdapter implements Screen {
     private List<Rect> chipRects(List<String> chipLabels, float y, float scale) {
         List<Rect> out = new ArrayList<>();
         float x = 90f;
+        float wide = 0f;
         for (String label : chipLabels) {
-            float w = chipWidth(label, scale);
+            wide += chipWidth(label, scale);
+        }
+        float gaps = CHIP_GAP * Math.max(0, chipLabels.size() - 1);
+        float squeeze = wide + gaps > ROW_WIDTH ? (ROW_WIDTH - gaps) / wide : 1f;
+        for (String label : chipLabels) {
+            float w = chipWidth(label, scale) * squeeze;
             out.add(new Rect(x, y, w, CHIP_H));
             x += w + CHIP_GAP;
         }
@@ -1776,6 +1799,9 @@ public class PlayScreen extends InputAdapter implements Screen {
         }
         mouseToPanel();
         Color idle = new Color(0.14f, 0.18f, 0.28f, 1f);
+        if (hasSnippet()) {
+            drawSnippetShapes();
+        }
         switch (active.kind()) {
             case CHOICE, TRUE_FALSE -> {
                 for (int i = 0; i < options.size(); i++) {
@@ -1851,7 +1877,7 @@ public class PlayScreen extends InputAdapter implements Screen {
                 CodeBlock.Line l = lines.get(i);
                 float ly = body + (i - firstLine) * 24f;
                 text(Face.MONO, String.valueOf(l.number()), x, ly, 1.0f, new Color(0.45f, 0.5f, 0.65f, 1f));
-                text(Face.MONO, l.text(), x + 34, ly, 1.1f,
+                fitLine(Face.MONO, l.text(), x + 34, ly, 1.1f, 1.1f, W - x - 34 - 16,
                         l.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
             }
             drawTerminal(x, 694, 960);
@@ -1863,7 +1889,7 @@ public class PlayScreen extends InputAdapter implements Screen {
             int first = Math.max(0, tokens.size() - 14);
             for (int i = first; i < tokens.size(); i++) {
                 CodeBlock.Token t = tokens.get(i);
-                text(Face.MONO, (t.correct() ? "+ " : "x ") + t.text(), x, body + (i - first) * 36f, 1.45f,
+                fitLine(Face.MONO, (t.correct() ? "+ " : "x ") + t.text(), x, body + (i - first) * 36f, 1.45f, 1.1f, W - x - 16,
                         t.correct() ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
             }
         }
@@ -1920,69 +1946,94 @@ public class PlayScreen extends InputAdapter implements Screen {
     }
 
     private void drawEncounterText() {
-        text("Tower: " + active.topic().name().replace('_', ' '), 110, panelTop + 38, 1.8f,
-                topicColor(active.topic()));
         AnswerKind kind = active.kind();
         Color muted = new Color(0.75f, 0.8f, 0.95f, 1f);
+        // the header is one line: the tower, then what to do, in whatever room is left before the Hint button
+        String tower = "Tower: " + active.topic().name().replace('_', ' ');
+        text(tower, 110, panelTop + 38, 1.8f, topicColor(active.topic()));
+        float labelX = 110f + widthOf(Face.PIXEL, tower, 1.8f) + 36f;
+        float labelRoom = (classTest ? 1320f : 1160f) - labelX;
         if (kind == AnswerKind.FIND_BUG) {
             // unmistakable: this is not a multiple choice, one of the lines has a mistake
-            text("FIND THE BUG", 520, panelTop + 18, 1.7f, new Color(1f, 0.6f, 0.2f, 1f));
-            text(Face.SANS, "One line has a mistake. Tap it, then Check.", 735, panelTop + 22, 1.2f,
-                    new Color(1f, 0.82f, 0.55f, 1f));
+            String title = "FIND THE BUG";
+            text(title, labelX, panelTop + 39, 1.6f, new Color(1f, 0.6f, 0.2f, 1f));
+            float after = labelX + widthOf(Face.PIXEL, title, 1.6f) + 24f;
+            String how = "Tap the line with the mistake, then Check.";
+            float room = labelX + labelRoom - after;
+            if (widthOf(Face.SANS, how, 1.2f) <= room) {
+                text(Face.SANS, how, after, panelTop + 43, 1.2f, new Color(1f, 0.82f, 0.55f, 1f));
+            }
         } else {
-            text(Face.SANS, kind.label() + "  -  " + kind.instruction(), 470, panelTop + 42, 1.5f, muted);
+            String both = kind.label() + "  -  " + kind.instruction();
+            fitLine(Face.SANS, widthOf(Face.SANS, both, 1.2f) <= labelRoom ? both : kind.label(), labelX, panelTop + 42,
+                    1.5f, 1.2f, labelRoom, muted);
         }
-        int lines = active.prompt().split("\n", -1).length;
-        if (active.context() != null) {
+        if (active.context() != null && !active.context().isBlank()) {
             // what the code is for, so a blank like  if (age ___ 18)  has exactly one right answer
-            text(Face.SANS, "Goal: " + shorten(active.context(), 80), 90, panelTop + 72, 1.5f, new Color(0.65f, 0.9f, 1f, 1f));
+            fitLine(Face.SANS, "Goal: " + active.context(), 90, panelTop + 74, 1.5f, 1.2f, 1230f, new Color(0.65f, 0.9f, 1f, 1f));
         }
-        if (kind != AnswerKind.FIND_BUG) {
-            drawWrapped(faceFor(active), active.prompt(), 90, panelTop + 112, lines <= 3 ? 2.2f : lines <= 5 ? 1.9f : 1.5f, Color.WHITE, 1160f);
-        }
+
+        // the question, the hint and the clue each get their own band, so none can run into another
         Color gold = new Color(0.95f, 0.85f, 0.45f, 1f);
-        if (classTest) {
-            // no hints in a class test
-        } else if (!hintShown) {
+        boolean showHint = !classTest && hintShown && active.hint() != null;
+        float textWidth = hasSnippet() ? SNIPPET_X - 120f : 1200f;
+        boolean showShape = kind == AnswerKind.FILL_BLANK && run.difficulty() == Difficulty.EASY && !active.correctToken().isEmpty();
+        float promptTop = panelTop + 110;
+        if (kind == AnswerKind.ARRANGE) {
+            fitBlock(faceFor(active), active.prompt(), 90, promptTop, 2.2f, textWidth, showHint ? 32f : 60f, Color.WHITE);
+            if (showHint) {
+                fitBlock(Face.SANS, "Hint: " + active.hint(), 90, panelTop + 148, 1.4f, 1230f, 52f, gold);
+            }
+        } else if (kind != AnswerKind.FIND_BUG) {
+            float bottom = panelTop + (showShape ? 298 : 326);
+            if (showHint && !hasSnippet() && active.prompt().split("\n").length >= 4) {
+                textWidth = 680f;
+                fitBlock(Face.SANS, "Hint: " + active.hint(), 820, promptTop, 1.5f, 490f, bottom - promptTop, gold);
+            } else if (showHint) {
+                float hintTop = bottom - 56;
+                fitBlock(Face.SANS, "Hint: " + active.hint(), 90, hintTop, 1.5f, textWidth, 52f, gold);
+                bottom = hintTop - 8;
+            }
+            fitBlock(faceFor(active), active.prompt(), 90, promptTop, 2.2f, textWidth, bottom - promptTop, Color.WHITE);
+        } else if (showHint) {
+            fitBlock(Face.SANS, "Hint: " + active.hint(), 90, bugRowsBottom() + 6, 1.4f, 1230f, 48f, gold);
+        }
+        if (hasSnippet()) {
+            drawSnippetText();
+        }
+        if (!classTest && !hintShown) {
             Rect h = hintButton();
             drawCentered("Hint", h.x + h.w / 2f, h.y + 11 - lift(h), 2.0f, Color.WHITE);
-        } else if (active.hint() != null) {
-            if (kind == AnswerKind.FIND_BUG || kind == AnswerKind.ARRANGE) {
-                // their rows fill the lower panel: arrange has room under its sentence, find the bug under its code lines
-                float hintY = kind == AnswerKind.ARRANGE ? panelTop + 146 : panelTop + 80 + lines * 42f + 10f;
-                text(Face.SANS, "Hint: " + shorten(active.hint(), 90), 90, hintY, 1.4f, gold);
-            } else {
-                drawWrapped(Face.SANS, "Hint: " + active.hint(), 90, panelTop + 280, 1.6f, gold, 1160f);
-            }
         }
+
         switch (kind) {
             case CHOICE -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect b = tokenButton(i);
                     String tok = options.get(i);
-                    boolean tiny = tok.length() <= 2;
-                    drawCentered(Face.MONO, tok, b.x + b.w / 2f, b.y + (tiny ? 14 : 24) - lift(b), tiny ? 3.0f : 2.2f, Color.WHITE);
+                    drawInBox(Face.MONO, tok, b.x, b.y - lift(b), b.w, b.h, tok.length() <= 2 ? 3.0f : 2.2f, Color.WHITE);
                 }
             }
             case TRUE_FALSE -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect b = tokenButton(i);
-                    drawCentered(Face.SANS, options.get(i), b.x + b.w / 2f, b.y + 22 - lift(b), 2.4f, Color.WHITE);
+                    drawInBox(Face.SANS, options.get(i), b.x, b.y - lift(b), b.w, b.h, 2.4f, Color.WHITE);
                 }
             }
             case FIND_BUG -> {
                 for (int i = 0; i < options.size(); i++) {
                     Rect r = lineRect(i);
                     float up = lift(r, true, ROW_LIFT);
-                    drawCentered(Face.MONO, String.valueOf(i + 1), r.x + 25, r.y + 6 - up, 1.45f, new Color(0.65f, 0.72f, 0.9f, 1f));
-                    text(Face.MONO, active.codeLines().get(i), r.x + 66, r.y + 6 - up, 1.55f, Color.WHITE);
+                    float y = r.y + (r.h - 24f) / 2f - up;
+                    drawCentered(Face.MONO, String.valueOf(i + 1), r.x + 25, y, 1.45f, new Color(0.65f, 0.72f, 0.9f, 1f));
+                    fitLine(Face.MONO, active.codeLines().get(i), r.x + 66, y, 1.55f, 1.1f, r.w - 82f, Color.WHITE);
                 }
                 Rect check = bugCheckButton();
                 float checkUp = lift(check, pickedLine >= 0, LIFT);
                 drawCentered(Face.SANS, pickedLine < 0 ? "Pick a line" : "Check line " + (pickedLine + 1),
                         check.x + check.w / 2f, check.y + 18 - checkUp, 1.5f, pickedLine < 0 ? Color.GRAY : Color.WHITE);
-                drawCentered(Face.SANS, pickedLine < 0 ? "tap the buggy one" : "or press Enter", check.x + check.w / 2f,
-                        check.y + 50 - checkUp, 1.05f, pickedLine < 0 ? Color.DARK_GRAY : new Color(0.75f, 0.95f, 0.75f, 1f));
+                drawCentered(Face.SANS, pickedLine < 0 ? "tap it" : "or press Enter", check.x + check.w / 2f,
+                        check.y + 50 - checkUp, 1.2f, pickedLine < 0 ? Color.GRAY : new Color(0.75f, 0.95f, 0.75f, 1f));
             }
             case FILL_BLANK -> {
                 Rect box = answerBox();
@@ -1991,22 +2042,24 @@ public class PlayScreen extends InputAdapter implements Screen {
                     text(Face.MONO, caret ? "|" : " ", box.x + 24, box.y + 22, 2.2f, Color.WHITE);
                     text(Face.SANS, "   type your answer", box.x + 24, box.y + 26, 1.7f, new Color(0.5f, 0.55f, 0.7f, 1f));
                 } else {
-                    text(Face.MONO, typed + (caret ? "|" : ""), box.x + 24, box.y + 22, 2.2f, Color.WHITE);
+                    fitLine(Face.MONO, typed + (caret ? "|" : ""), box.x + 24, box.y + 22, 2.2f, 1.2f, box.w - 48f, Color.WHITE);
                 }
                 Rect go = submitButton();
                 drawCentered(Face.SANS, "Answer  (Enter)", go.x + go.w / 2f, go.y + 26 - lift(go), 1.8f, Color.WHITE);
-                if (run.difficulty() == Difficulty.EASY && !active.correctToken().isEmpty()) {
+                if (showShape) {
                     // an easy typed answer shows its shape: how it starts and how long it is
                     String shape = "Starts with \"" + active.correctToken().charAt(0) + "\"  -  " + active.correctToken().length()
                             + (active.correctToken().length() == 1 ? " character" : " characters");
-                    text(Face.SANS, shape, box.x, box.y - 30, 1.45f, new Color(0.65f, 0.9f, 1f, 1f));
+                    fitLine(Face.SANS, shape, box.x, panelTop + 304, 1.45f, 1.2f, box.w, new Color(0.65f, 0.9f, 1f, 1f));
                 }
             }
             case ARRANGE -> {
                 float scale = chipScale();
-                text(Face.SANS, "Your line  (tap a token to take it back)", 90, panelTop + 176, 1.4f,
-                        new Color(0.65f, 0.72f, 0.9f, 1f));
-                text(Face.SANS, "Tokens", 90, panelTop + 288, 1.4f, new Color(0.65f, 0.72f, 0.9f, 1f));
+                if (!showHint) {
+                    text(Face.SANS, "Your line  (tap a token to take it back)", 90, panelTop + 180, 1.3f,
+                            new Color(0.65f, 0.72f, 0.9f, 1f));
+                }
+                text(Face.SANS, "Tokens", 90, panelTop + 286, 1.3f, new Color(0.65f, 0.72f, 0.9f, 1f));
                 drawChips(chipRects(labels(placed), builtY(), scale), labels(placed), scale);
                 List<String> left = labels(remaining());
                 drawChips(chipRects(left, bankY(), scale), left, scale);
@@ -2021,8 +2074,135 @@ public class PlayScreen extends InputAdapter implements Screen {
     private void drawChips(List<Rect> rects, List<String> chipLabels, float scale) {
         for (int i = 0; i < rects.size(); i++) {
             Rect r = rects.get(i);
-            drawCentered(Face.MONO, chipLabels.get(i), r.x + r.w / 2f,
-                    r.y + (CHIP_H - PixelFonts.BASE * scale) / 2f - 2f - lift(r, true, ROW_LIFT), scale, Color.WHITE);
+            String label = chipLabels.get(i);
+            float size = scale;
+            while (size > 1.1f && widthOf(Face.MONO, label, size) > r.w - 10f) {
+                size -= 0.1f;
+            }
+            label = clipToWidth(Face.MONO, label, size, r.w - 6f);
+            drawCentered(Face.MONO, label, r.x + r.w / 2f,
+                    r.y + (CHIP_H - PixelFonts.BASE * size) / 2f - 2f - lift(r, true, ROW_LIFT), size, Color.WHITE);
+        }
+    }
+
+    // ── text that always stays inside its space ──
+
+    private float widthOf(Face face, String s, float scale) {
+        layout.setText(font(face, scale), s);
+        return layout.width;
+    }
+
+    /** The text, cut short with "..." if it is wider than {@code width} at this scale. */
+    private String clipToWidth(Face face, String s, float scale, float width) {
+        if (widthOf(face, s, scale) <= width) {
+            return s;
+        }
+        int end = s.length();
+        while (end > 1 && widthOf(face, s.substring(0, end) + "...", scale) > width) {
+            end--;
+        }
+        return s.substring(0, end) + "...";
+    }
+
+    /** One line: smaller (down to {@code min}) until it fits the width, and cut short only if that is not enough. */
+    private void fitLine(Face face, String s, float x, float yTop, float max, float min, float width, Color c) {
+        String line = s.replace('\n', ' ').stripTrailing();
+        float scale = max;
+        while (scale - 0.1f >= min - 0.001f && widthOf(face, line, scale) > width) {
+            scale -= 0.1f;
+        }
+        text(face, clipToWidth(face, line, scale, width), x, yTop, scale, c);
+    }
+
+    private float wrappedHeight(Face face, String s, float scale, float width) {
+        layout.setText(font(face, scale), s, Color.WHITE, width, com.badlogic.gdx.utils.Align.left, true);
+        return layout.height;
+    }
+
+    /**
+     * Wrapped text inside a box: as large as fits (from {@code max} down to 1.2), and if even the smallest size is too
+     * tall, cut short with "..." so it never runs into what is below it.
+     */
+    private void fitBlock(Face face, String s, float x, float yTop, float max, float width, float height, Color c) {
+        float scale = max;
+        while (scale - 0.1f >= 1.199f && wrappedHeight(face, s, scale, width) > height) {
+            scale -= 0.1f;
+        }
+        String shown = s;
+        if (wrappedHeight(face, shown, scale, width) > height) {
+            int end = s.length();
+            while (end > 1 && wrappedHeight(face, s.substring(0, end).stripTrailing() + "...", scale, width) > height) {
+                end--;
+            }
+            shown = s.substring(0, end).stripTrailing() + "...";
+        }
+        drawWrapped(face, shown, x, yTop, scale, c, width);
+    }
+
+    /** A button's label, centred in it: on one line if it can be, else wrapped onto two. */
+    private void drawInBox(Face face, String s, float x, float yTop, float w, float h, float max, Color c) {
+        float room = w - 36f;
+        float scale = max;
+        while (scale - 0.1f >= 1.499f && widthOf(face, s, scale) > room) {
+            scale -= 0.1f;
+        }
+        if (widthOf(face, s, scale) <= room) {
+            layout.setText(font(face, scale), s);
+            drawCentered(face, s, x + w / 2f, yTop + (h - layout.height) / 2f - 1f, scale, c);
+            return;
+        }
+        float small = 1.2f;
+        BitmapFont f = font(face, small);
+        String shown = s;
+        layout.setText(f, shown, c, room, com.badlogic.gdx.utils.Align.center, true);
+        while (layout.height > h - 14f && shown.length() > 4) {
+            shown = shown.substring(0, shown.length() - 4) + "...";
+            layout.setText(f, shown, c, room, com.badlogic.gdx.utils.Align.center, true);
+        }
+        f.setColor(c);
+        f.draw(batch, shown, x + 18f, H - (yTop + (h - layout.height) / 2f), room, com.badlogic.gdx.utils.Align.center, true);
+    }
+
+    // ── the code beside a true or false statement ──
+
+    private static final int SNIPPET_LINES = 6;
+    private static final float SNIPPET_X = 700f;
+    private static final float SNIPPET_W = 620f;
+    private static final float SNIPPET_ROW = 30f;
+
+    private boolean hasSnippet() {
+        return snippet != null && !snippet.isEmpty() && active != null && active.kind() == AnswerKind.TRUE_FALSE;
+    }
+
+    private float snippetRowTop(int row) {
+        return panelTop + 140 + row * SNIPPET_ROW;
+    }
+
+    private void drawSnippetShapes() {
+        float height = 44f + snippet.lines().size() * SNIPPET_ROW;
+        fill(SNIPPET_X, panelTop + 102, SNIPPET_W, height, new Color(0.02f, 0.04f, 0.1f, 1f));
+        fill(SNIPPET_X, panelTop + 102, SNIPPET_W, 3, new Color(0.25f, 0.75f, 1f, 1f));
+        for (int i = 0; i < snippet.lines().size(); i++) {
+            if (snippet.lines().get(i).asked()) {
+                fill(SNIPPET_X + 4, snippetRowTop(i) - 3, SNIPPET_W - 8, SNIPPET_ROW, new Color(0.32f, 0.24f, 0.05f, 1f));
+                fill(SNIPPET_X + 4, snippetRowTop(i) - 3, 5, SNIPPET_ROW, new Color(1f, 0.8f, 0.25f, 1f));
+            }
+        }
+    }
+
+    private void drawSnippetText() {
+        boolean one = snippet.lines().stream().filter(CodeSnippet.Line::asked).count() == 1;
+        text(Face.SANS, one ? "Code  -  the highlighted line" : "Code  -  the highlighted lines", SNIPPET_X + 16, panelTop + 111, 1.2f,
+                new Color(0.65f, 0.9f, 1f, 1f));
+        float room = SNIPPET_W - 74f;
+        for (int i = 0; i < snippet.lines().size(); i++) {
+            CodeSnippet.Line line = snippet.lines().get(i);
+            float y = snippetRowTop(i) + 2;
+            if (line.number() > 0) {
+                text(Face.MONO, String.valueOf(line.number()), SNIPPET_X + 20, y, 1.1f, new Color(0.55f, 0.62f, 0.82f, 1f));
+            }
+            fitLine(Face.MONO, line.text(), SNIPPET_X + 58, y, 1.35f, 1.1f, room,
+                    line.asked() ? Color.WHITE : new Color(0.75f, 0.82f, 0.95f, 1f));
         }
     }
 
@@ -2033,7 +2213,7 @@ public class PlayScreen extends InputAdapter implements Screen {
         mouseToExplain();
         boolean timedOut = explainToken == null;
         Color verdict = explainCorrect ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.55f, 0.5f, 1f);
-        text(Face.SANS, explainCorrect ? "Correct!" : timedOut ? "Time ran out" : "Not quite", 90, y + 22, 2.7f, verdict);
+        text(Face.SANS, explainCorrect ? "Correct!" : timedOut ? "Time ran out" : "Not quite", 96, y + 36, 2.6f, verdict);
 
         String right = switch (c.kind()) {
             case FIND_BUG -> {
@@ -2048,18 +2228,19 @@ public class PlayScreen extends InputAdapter implements Screen {
             case ARRANGE -> c.codeChunk() != null ? c.codeChunk() : c.correctToken();
             default -> c.correctToken();
         };
-        text(Face.SANS, "Right answer", 90, y + 84, 1.5f, new Color(0.65f, 0.72f, 0.9f, 1f));
-        text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, right, 90, y + 112, 2.2f, Color.WHITE);
+        text(Face.SANS, "Right answer", 96, y + 94, 1.4f, new Color(0.65f, 0.72f, 0.9f, 1f));
+        fitLine(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, right, 96, y + 124, 2.1f, 1.2f, 1190f, Color.WHITE);
 
-        float next = y + 176;
+        float next = y + 182;
         if (!explainCorrect && !timedOut) {
             String yours = c.kind() == AnswerKind.FIND_BUG ? "line " + explainToken : explainToken;
-            text(Face.SANS, "You answered", 90, next, 1.5f, new Color(0.65f, 0.72f, 0.9f, 1f));
-            text(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, shorten(yours, 60), 90, next + 28, 1.9f, verdict);
-            next += 76;
+            text(Face.SANS, "You answered", 96, next, 1.4f, new Color(0.65f, 0.72f, 0.9f, 1f));
+            fitLine(c.kind() == AnswerKind.TRUE_FALSE ? Face.SANS : Face.MONO, yours, 96, next + 30, 1.8f, 1.2f, 1190f, verdict);
+            next += 74;
         }
-        text(Face.SANS, "Why", 90, next, 1.5f, GOLD_TEXT);
-        drawWrapped(Face.SANS, c.explanationText(), 90, next + 32, 1.8f, Color.WHITE, 1160f);
+        text(Face.SANS, "Why", 96, next, 1.4f, GOLD_TEXT);
+        // narrower than the panel: the Continue button sits in the bottom right corner
+        fitBlock(Face.SANS, c.explanationText(), 96, next + 32, 1.8f, 910f, y + 394 - (next + 32), Color.WHITE);
 
         if (explainAge <= 0.4f) {
             Rect go = explainContinueButton();
@@ -2277,10 +2458,10 @@ public class PlayScreen extends InputAdapter implements Screen {
             }
         }
         if (certificateEligible()) {
-            drawCentered(subjectDone.certificate() != null
+            String earned = subjectDone.certificate() != null
                     ? "You finished every lesson of " + subjectDone.name() + ": you earned the subject certificate!"
-                    : "You finished the " + lesson.periodEnum().label() + " period: you earned its certificate!", W / 2f, 780, 1.5f,
-                    new Color(0.6f, 0.95f, 0.6f, 1f));
+                    : "You finished the " + lesson.periodEnum().label() + " period: you earned its certificate!";
+            drawCentered(clipToWidth(Face.PIXEL, earned, 1.5f, W - 120f), W / 2f, 780, 1.5f, new Color(0.6f, 0.95f, 0.6f, 1f));
             Rect cert = certButton();
             drawCentered("Get certificate", cert.x + cert.w / 2f, cert.y + 28 - lift(cert), 1.8f, Color.WHITE);
         }

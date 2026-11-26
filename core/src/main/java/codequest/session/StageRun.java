@@ -52,6 +52,8 @@ public class StageRun {
     private final boolean adaptive;
     private final CodeBlock codeBlock = new CodeBlock();
     private ProgramLayout layout;
+    /** Which compiler the terminal shows. */
+    private codequest.content.Language language = codequest.content.Language.C;
     private final List<SectionResult> sectionResults = new ArrayList<>();
 
     private Difficulty difficulty;
@@ -250,10 +252,15 @@ public class StageRun {
                 answeredIn += t.block() == program ? 1 : 0;
             }
             if (layout.slotsIn(program) > 0 && answeredIn >= layout.slotsIn(program)) {
-                return Terminal.run(codeBlock, layout, program);
+                return Terminal.run(codeBlock, layout, program, language);
             }
         }
         return List.of();
+    }
+
+    /** The language of the lesson (C unless said otherwise): the terminal names its file and compiler after it. */
+    public void useLanguage(codequest.content.Language lessonLanguage) {
+        language = lessonLanguage;
     }
 
     public void useHint() {
