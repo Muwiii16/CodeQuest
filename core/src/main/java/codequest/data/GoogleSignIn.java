@@ -105,9 +105,9 @@ final class GoogleSignIn {
                     if (query.containsKey("code") || query.containsKey("error")) {
                         reply(socket, query.containsKey("code")
                                 ? "You are signed in. You can close this tab and go back to CodeQuest."
-                                : "Sign-in was cancelled. You can close this tab and go back to CodeQuest.");
+                                : "Sign-in was cancelled. You can close this tab and go back to CodeQuest.", true);
                     } else {
-                        reply(socket, "Waiting for the sign-in...");
+                        reply(socket, "Waiting for the sign-in...", false);
                         continue; // a favicon request or similar
                     }
                 } catch (java.net.SocketTimeoutException timeout) {
@@ -176,9 +176,11 @@ final class GoogleSignIn {
         return out;
     }
 
-    private static void reply(Socket socket, String message) throws IOException {
+    private static void reply(Socket socket, String message, boolean close) throws IOException {
         byte[] body = ("<!doctype html><meta charset=utf-8><title>CodeQuest</title>"
-                + "<body style=\"font-family:sans-serif;text-align:center;margin-top:20vh\"><h2>" + message + "</h2></body>")
+                + "<body style=\"font-family:sans-serif;text-align:center;margin-top:20vh\"><h2>" + message + "</h2>"
+                // closes this tab only, where the browser allows a page to close itself; otherwise the message stays
+                + (close ? "<script>setTimeout(function(){window.close()},600)</script>" : "") + "</body>")
                 .getBytes(StandardCharsets.UTF_8);
         OutputStream out = socket.getOutputStream();
         out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: " + body.length

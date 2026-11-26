@@ -2,6 +2,10 @@ package codequest.lwjgl3;
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Graphics;
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Window;
+import com.badlogic.gdx.Gdx;
+import org.lwjgl.glfw.GLFW;
 import codequest.Main;
 
 /** Launches the desktop (LWJGL3) application. */
@@ -12,7 +16,20 @@ public class Lwjgl3Launcher {
     }
 
     private static Lwjgl3Application createApplication() {
-        return new Lwjgl3Application(new Main(), getDefaultConfiguration());
+        return new Lwjgl3Application(new Main(Lwjgl3Launcher::raiseWindow), getDefaultConfiguration());
+    }
+
+    /**
+     * Puts the game in front of the browser. Windows does not let a background program simply take the focus, but a window
+     * that restores itself from the taskbar is shown in front, so it is minimised first if it is not already.
+     */
+    private static void raiseWindow() {
+        Lwjgl3Window window = ((Lwjgl3Graphics) Gdx.graphics).getWindow();
+        if (GLFW.glfwGetWindowAttrib(window.getWindowHandle(), GLFW.GLFW_ICONIFIED) == GLFW.GLFW_FALSE) {
+            window.iconifyWindow();
+        }
+        window.restoreWindow();
+        window.focusWindow();
     }
 
     private static Lwjgl3ApplicationConfiguration getDefaultConfiguration() {

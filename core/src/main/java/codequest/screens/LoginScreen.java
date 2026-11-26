@@ -71,7 +71,8 @@ public class LoginScreen extends BaseScreen {
         outlinedText("The forest is crawling with enemy towers. Learn C++, and take them down.", 110, 700, 640, 90, 2.1f,
                 new Color(0.88f, 0.94f, 0.85f, 1f), Align.topLeft).setWrap(true);
 
-        outlinedText("*  ALL SYSTEMS OPERATIONAL      v1.0.0", 110, 1030, 700, 30, 1.5f, new Color(0.85f, 0.95f, 0.65f, 1f),
+        // the packaged game knows its own version; a run from source has none
+        outlinedText("*  ALL SYSTEMS OPERATIONAL      v" + System.getProperty("jpackage.app-version", "dev"), 110, 1030, 700, 30, 1.5f, new Color(0.85f, 0.95f, 0.65f, 1f),
                 Align.left);
         outlinedText("(c) 2026 CodeQuest", 0, 1030, VIRTUAL_WIDTH, 30, 1.5f, new Color(1f, 1f, 1f, 0.85f), Align.center);
 
@@ -314,6 +315,7 @@ public class LoginScreen extends BaseScreen {
                 if (attempt.cancelled()) {
                     return;
                 }
+                game.bringToFront(); // the browser is in front: come back, whether it worked or not
                 if (result.error() != null) {
                     setStatus(result.error(), false);
                     return;

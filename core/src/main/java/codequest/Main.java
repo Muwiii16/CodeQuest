@@ -13,6 +13,21 @@ public class Main extends Game {
     private static final int WINDOW_WIDTH = 1280;
     private static final int WINDOW_HEIGHT = 720;
 
+    /** How this platform puts the game's window in front of other programs; set by the launcher. */
+    private Runnable windowRaiser = () -> { };
+
+    public Main() {
+    }
+
+    public Main(Runnable windowRaiser) {
+        this.windowRaiser = windowRaiser;
+    }
+
+    /** Brings the game back in front, for example after signing in through the browser. Call on the render thread. */
+    public void bringToFront() {
+        windowRaiser.run();
+    }
+
     @Override
     public void create() {
         setScreen(new IntroScreen(this));
