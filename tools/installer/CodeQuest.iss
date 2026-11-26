@@ -1,7 +1,15 @@
 ; Inno Setup script for the CodeQuest installer.
 ; Build: see tools/installer/build-installer.ps1 (it builds the jar, makes the app folder with jpackage, then runs this).
-#define AppName "CodeQuest"
-#define AppVersion "1.0.0"
+#ifndef AppName
+  #define AppName "CodeQuest"
+#endif
+#ifndef AppGuid
+  #define AppGuid "6B1B0E52-7C3A-4C58-9E0D-C0DE9E57A11D"
+#endif
+; build-installer.ps1 passes the version from gradle.properties
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
 #define Publisher "The Wolves"
 #ifndef SourceDir
   #define SourceDir "..\..\build\installer\image\CodeQuest"
@@ -11,7 +19,7 @@
 #endif
 
 [Setup]
-AppId={{6B1B0E52-7C3A-4C58-9E0D-C0DE9E57A11D}
+AppId={{{#AppGuid}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#Publisher}
@@ -36,6 +44,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
 
+[InstallDelete]
+; earlier versions named the jar after the version: do not leave the old ones behind
+Type: files; Name: "{app}\app\*.jar"
+
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
@@ -45,3 +57,16 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\CodeQuest.exe"; Tasks: deskto
 
 [Run]
 Filename: "{app}\CodeQuest.exe"; Description: "Start CodeQuest"; Flags: nowait postinstall skipifsilent
+; the game's own updater runs the installer silently with /UPDATE: open the new version again
+Filename: "{app}\CodeQuest.exe"; Flags: nowait; Check: IsUpdate
+
+[Code]
+function IsUpdate: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/UPDATE') = 0 then
+      Result := True;
+end;

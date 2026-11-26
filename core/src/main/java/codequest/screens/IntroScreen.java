@@ -1,6 +1,7 @@
 package codequest.screens;
 
 import codequest.Main;
+import codequest.update.Updater;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
@@ -14,15 +15,20 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * First screen of the game: the logo fades in over the intro background while every picture and font is loaded into
  * the shared cache ({@link Assets}) behind a loading bar, so nothing has to be read from disk later and moving between
  * screens is smooth. When loading is done it waits for a click or key press (or moves on by itself after a few seconds).
+ * Meanwhile an installed game asks whether a newer version was released; if so it goes straight to updating.
  */
 public class IntroScreen extends BaseScreen {
 
     private static final float AUTO_ADVANCE_SECONDS = 7f;
+    /** The longest the player waits for the update check after asking to start. */
+    private static final float UPDATE_WAIT_SECONDS = 6f;
     /** How long one frame may spend loading before it draws again (so the bar keeps moving). */
     private static final long BUDGET_NANOS = 12_000_000L;
 
@@ -37,6 +43,13 @@ public class IntroScreen extends BaseScreen {
     private boolean ready;
     private float sinceReady;
     private boolean leaving;
+    private boolean wantsToStart;
+    private float waitedForCheck;
+    /** Empty when this copy cannot update itself (run from source, or not Windows). */
+    private final Optional<Updater> updater = Updater.installed();
+    private final CompletableFuture<Optional<Updater.Release>> newer = updater
+            .map(u -> CompletableFuture.supplyAsync(u::check))
+            .orElseGet(() -> CompletableFuture.completedFuture(Optional.empty()));
 
     private final Image barFill;
     private final Image barTrack;
@@ -110,6 +123,7 @@ public class IntroScreen extends BaseScreen {
             if (sinceReady > AUTO_ADVANCE_SECONDS || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
                 advance();
             }
+            leaveWhenPossible(delta);
         }
         if (leaving) {
             return; // the next screen has taken over and this one is disposed: do not draw it
@@ -144,7 +158,28 @@ public class IntroScreen extends BaseScreen {
         if (!ready || leaving || sinceReady < 0.4f) {
             return;
         }
-        leaving = true;
-        game.setScreen(new LoginScreen(game));
+        wantsToStart = true;
+    }
+
+    /** Updates as soon as a newer version is known; otherwise starts the game when the player asked to. */
+    private void leaveWhenPossible(float delta) {
+        if (leaving) {
+            return;
+        }
+        // a check that failed unexpectedly counts as "nothing new"
+        Optional<Updater.Release> release = newer.isDone() && !newer.isCompletedExceptionally()
+                ? newer.getNow(Optional.empty()) : Optional.empty();
+        if (release.isPresent() && updater.isPresent()) {
+            leaving = true;
+            game.setScreen(new UpdateScreen(game, updater.get(), release.get()));
+            return;
+        }
+        if (wantsToStart) {
+            waitedForCheck += delta;
+            if (newer.isDone() || waitedForCheck > UPDATE_WAIT_SECONDS) {
+                leaving = true;
+                game.setScreen(new LoginScreen(game));
+            }
+        }
     }
 }
